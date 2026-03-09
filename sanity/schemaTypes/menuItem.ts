@@ -47,5 +47,11 @@ export const menuItem = defineType({
       type: 'boolean',
       initialValue: true,
     }),
+    defineField({
+      name: 'featured',
+      title: 'Featured on Homepage',
+      type: 'boolean',
+      initialValue: false,
+    }),
   ],
 })
