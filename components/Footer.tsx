@@ -14,7 +14,7 @@ const SOCIAL = [
   },
   {
     label: 'TikTok',
-    href: 'https://tiktok.com/@unwnd.cafe',
+    href: 'https://www.tiktok.com/@unwnd.cafe.bacoor',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
         <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.79 1.53V6.77a4.85 4.85 0 01-1.02-.08z" />
@@ -23,7 +23,7 @@ const SOCIAL = [
   },
   {
     label: 'Facebook',
-    href: 'https://facebook.com/unwndcafe',
+    href: 'https://www.facebook.com/profile.php?id=100094207740752',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
         <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" />
@@ -35,12 +35,13 @@ const SOCIAL = [
 const FOOTER_NAV = [
   { href: '/', label: 'Home' },
   { href: '/menu', label: 'Menu' },
-  { href: '/about', label: 'About' },
+  { href: '/#about', label: 'About' },
+  { href: '/#contact', label: 'Contact' },
 ]
 
 export default function Footer() {
   return (
-    <footer className="border-t border-border bg-white px-8 md:px-16 py-12">
+    <footer className="border-t border-border bg-background px-8 md:px-16 py-12">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-10">
         {/* Brand */}
         <Link href="/" className="font-serif text-2xl lowercase tracking-tighter shrink-0">

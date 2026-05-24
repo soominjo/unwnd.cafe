@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 
-interface CartItem {
+export interface CartItem {
   id: string
   name: string
   price: number
   quantity: number
+  drinkType?: string
+  ounce?: string
 }
 
 interface CartStore {
@@ -13,9 +15,13 @@ interface CartStore {
   openTray: () => void
   closeTray: () => void
   addItem: (item: Omit<CartItem, 'quantity'>) => void
-  removeItem: (id: string) => void
+  removeItem: (item: Pick<CartItem, 'id' | 'drinkType' | 'ounce'>) => void
   clearCart: () => void
   totalPrice: () => number
+}
+
+function isSameItem(a: CartItem, b: Omit<CartItem, 'quantity'>) {
+  return a.id === b.id && a.drinkType === b.drinkType && a.ounce === b.ounce
 }
 
 export const useCartStore = create<CartStore>((set, get) => ({
@@ -27,11 +33,11 @@ export const useCartStore = create<CartStore>((set, get) => ({
 
   addItem: (item) => {
     set((state) => {
-      const existing = state.items.find((i) => i.id === item.id)
+      const existing = state.items.find((i) => isSameItem(i, item))
       if (existing) {
         return {
           items: state.items.map((i) =>
-            i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+            isSameItem(i, item) ? { ...i, quantity: i.quantity + 1 } : i
           ),
         }
       }
@@ -39,8 +45,12 @@ export const useCartStore = create<CartStore>((set, get) => ({
     })
   },
 
-  removeItem: (id) => {
-    set((state) => ({ items: state.items.filter((i) => i.id !== id) }))
+  removeItem: ({ id, drinkType, ounce }) => {
+    set((state) => ({
+      items: state.items.filter(
+        (i) => !(i.id === id && i.drinkType === drinkType && i.ounce === ounce)
+      ),
+    }))
   },
 
   clearCart: () => set({ items: [] }),

@@ -8,12 +8,15 @@ interface MenuItem {
   category: string
   description?: string
   image?: { asset: { _ref: string } }
+  drinkType?: 'hot' | 'iced' | 'both'
+  sizes?: string[]
+  ingredients?: string[]
 }
 
 async function getMenuItems(): Promise<MenuItem[]> {
   return client.fetch(
     `*[_type == "menuItem" && available == true] | order(category asc, name asc) {
-      _id, name, price, category, description, image
+      _id, name, price, category, description, image, drinkType, sizes, ingredients
     }`
   )
 }
@@ -22,7 +25,7 @@ export default async function MenuPage() {
   const items = await getMenuItems()
 
   return (
-    <main className="min-h-screen bg-white text-foreground pt-32 pb-24 px-8 md:px-16">
+    <main className="min-h-screen bg-cream text-foreground pt-32 pb-24 px-8 md:px-16">
       {/* Header */}
       <header className="mb-20">
         <h1

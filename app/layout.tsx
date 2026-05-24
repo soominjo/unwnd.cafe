@@ -18,7 +18,7 @@ const cormorant = Cormorant_Garamond({
 })
 
 export const metadata: Metadata = {
-  title: 'unwnd. — a place to unwind',
+  title: 'unwnd', 
   description: 'A specialty café crafted for the aesthetic soul.',
 }
 
