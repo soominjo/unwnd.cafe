@@ -126,99 +126,94 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
                 return (
                   <motion.div
                     key={item._id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.3, delay: index * 0.05 }}
-                    className="group bg-background border border-border hover:border-foreground/20 hover:bg-foreground/2.5 transition-all duration-300 p-5 md:p-6 flex flex-col gap-3"
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: index * 0.06, ease: [0.25, 0.1, 0.25, 1] }}
+                    className="group bg-background border border-foreground/10 border-l-2 border-l-foreground/30 hover:border-foreground/20 hover:border-l-foreground/70 hover:bg-foreground/3 transition-all duration-300 p-6 md:p-7 flex flex-col gap-3"
                   >
-                    {/* Index + Name + Price */}
-                    <div>
-                      <div className="flex items-start justify-between gap-3 mb-1.5">
-                        <span className="text-[9px] text-foreground/20 tabular-nums">
-                          {String(index + 1).padStart(2, '0')}
-                        </span>
-                        <div className="text-right shrink-0">
-                          <motion.span
-                            key={`${item._id}-${sel.temp}`}
-                            initial={{ opacity: 0, y: -3 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="font-serif text-xl md:text-2xl tracking-tight leading-none block"
-                          >
-                            ₱{getPrice(item, sel.temp)}
-                          </motion.span>
-                          {item.priceHot != null && item.priceIce != null && item.priceHot !== item.priceIce && (
-                            <span className="text-[9px] text-muted/50 tabular-nums mt-0.5 block">
-                              {item.priceHot} · {item.priceIce}
-                            </span>
+                    {/* Name + Price */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h3
+                          className="font-serif font-medium tracking-tight leading-tight cursor-pointer hover:opacity-60 transition-opacity duration-200"
+                          style={{ fontSize: 'clamp(1.05rem, 1.6vw, 1.25rem)' }}
+                          onClick={() => item.image && setSelectedItem(item)}
+                        >
+                          {item.name}
+                          {item.image && (
+                            <span className="ml-2 text-[8px] uppercase tracking-[0.2em] text-muted align-middle">↗</span>
                           )}
-                        </div>
-                      </div>
-                      <h3
-                        className="font-serif tracking-tight leading-tight cursor-pointer hover:opacity-60 transition-opacity duration-200"
-                        style={{ fontSize: 'clamp(1.05rem, 1.6vw, 1.2rem)' }}
-                        onClick={() => item.image && setSelectedItem(item)}
-                      >
-                        {item.name}
-                        {item.image && (
-                          <span className="ml-2 text-[8px] uppercase tracking-[0.2em] text-muted align-middle">↗</span>
+                        </h3>
+                        {item.description && (
+                          <p className="text-xs text-foreground/55 leading-relaxed line-clamp-2 mt-1.5">
+                            {item.description}
+                          </p>
                         )}
-                      </h3>
-                      {item.description && (
-                        <p className="text-[11px] text-muted font-light leading-relaxed line-clamp-2 mt-1">
-                          {item.description}
-                        </p>
-                      )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <motion.span
+                          key={`${item._id}-${sel.temp}`}
+                          initial={{ opacity: 0, y: -3 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="font-serif text-2xl md:text-3xl tracking-tight leading-none block"
+                        >
+                          ₱{getPrice(item, sel.temp)}
+                        </motion.span>
+                        {item.priceHot != null && item.priceIce != null && item.priceHot !== item.priceIce && (
+                          <span className="text-[9px] text-muted/70 tabular-nums mt-0.5 block">
+                            {item.priceHot} · {item.priceIce}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Selectors */}
-                    <div className="flex gap-1 flex-wrap">
-                      {item.drinkType === 'both' && (
-                        <div className="flex">
-                          {['Hot', 'Iced'].map((t) => (
-                            <button
-                              key={t}
-                              onClick={() => setTemp(item._id, t)}
-                              className={`px-2.5 py-1 text-[9px] uppercase tracking-[0.15em] border-t border-b border-r first:border-l transition-all duration-200 ${
-                                sel.temp === t
-                                  ? 'bg-foreground text-cream border-foreground'
-                                  : 'text-muted border-border hover:border-foreground/50 hover:text-foreground'
-                              }`}
-                            >
-                              {t}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {item.drinkType && item.drinkType !== 'both' && (
-                        <span className="text-[9px] uppercase tracking-[0.15em] text-muted/60 self-center">
-                          {item.drinkType === 'hot' ? 'Hot' : 'Iced'}
-                        </span>
-                      )}
-                      {item.sizes && item.sizes.length > 0 && (
-                        <div className="flex">
-                          {item.sizes.map((s) => (
-                            <button
-                              key={s}
-                              onClick={() => setSize(item._id, s)}
-                              className={`px-2.5 py-1 text-[9px] uppercase tracking-[0.15em] border-t border-b border-r first:border-l transition-all duration-200 ${
-                                sel.size === s
-                                  ? 'bg-foreground text-cream border-foreground'
-                                  : 'text-muted border-border hover:border-foreground/50 hover:text-foreground'
-                              }`}
-                            >
-                              {s}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Add */}
-                    <div className="pt-3 border-t border-border mt-auto">
+                    {/* Selectors + Add to Tray */}
+                    <div className="flex items-center justify-between gap-2 mt-auto pt-3">
+                      <div className="flex gap-1 flex-wrap">
+                        {item.drinkType === 'both' && (
+                          <div className="flex">
+                            {['Hot', 'Iced'].map((t) => (
+                              <button
+                                key={t}
+                                onClick={() => setTemp(item._id, t)}
+                                className={`px-2.5 py-1 text-[10px] uppercase tracking-[0.15em] border-t border-b border-r first:border-l transition-all duration-200 ${
+                                  sel.temp === t
+                                    ? 'bg-foreground text-cream border-foreground'
+                                    : 'text-foreground/50 border-border hover:border-foreground/50 hover:text-foreground'
+                                }`}
+                              >
+                                {t}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {item.drinkType && item.drinkType !== 'both' && (
+                          <span className="text-[10px] uppercase tracking-[0.15em] text-foreground/45 self-center">
+                            {item.drinkType === 'hot' ? 'Hot' : 'Iced'}
+                          </span>
+                        )}
+                        {item.sizes && item.sizes.length > 0 && (
+                          <div className="flex">
+                            {item.sizes.map((s) => (
+                              <button
+                                key={s}
+                                onClick={() => setSize(item._id, s)}
+                                className={`px-2.5 py-1 text-[10px] uppercase tracking-[0.15em] border-t border-b border-r first:border-l transition-all duration-200 ${
+                                  sel.size === s
+                                    ? 'bg-foreground text-cream border-foreground'
+                                    : 'text-foreground/50 border-border hover:border-foreground/50 hover:text-foreground'
+                                }`}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <button
                         onClick={() => handleAdd(item)}
-                        className="w-full text-[9px] uppercase tracking-[0.2em] px-3 py-2 border border-foreground/30 hover:bg-foreground hover:text-cream hover:border-foreground transition-all duration-200"
+                        className="shrink-0 text-[9px] uppercase tracking-[0.15em] px-2.5 py-1 border border-foreground/25 text-foreground/60 hover:bg-foreground hover:text-cream hover:border-foreground transition-all duration-200"
                       >
                         Add to Tray
                       </button>
