@@ -256,9 +256,9 @@ export default function HomePage() {
                 width="100%"
                 height="100%"
                 style={{ border: 0 }}
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                 loading="lazy"
-                referrerPolicy="no-referrer"
+                referrerPolicy="no-referrer-when-downgrade"
               />
             </div>
 
