@@ -17,28 +17,58 @@ export const menuItem = defineType({
       type: 'text',
     }),
     defineField({
-      name: 'price',
-      title: 'Price',
-      type: 'number',
-      validation: (rule) => rule.required().min(0),
-    }),
-    defineField({
       name: 'category',
       title: 'Category',
       type: 'string',
       options: {
         list: [
+          { title: 'Signature Drink', value: 'signature drink' },
           { title: 'Coffee', value: 'coffee' },
+          { title: 'Non-Coffee', value: 'non-coffee' },
           { title: 'Tea', value: 'tea' },
           { title: 'Frappe', value: 'frappe' },
-          { title: 'Non-Coffee', value: 'non-coffee' },
           { title: 'Soda Fizz', value: 'soda fizz' },
-          { title: 'Signature Drink', value: 'signature drink' },
           { title: 'Waffle', value: 'waffle' },
           { title: 'Nachos', value: 'nachos' },
         ],
       },
     }),
+    defineField({
+      name: 'drinkType',
+      title: 'Drink Type',
+      type: 'string',
+      options: {
+        list: [
+          { title: 'Hot only', value: 'hot' },
+          { title: 'Iced only', value: 'iced' },
+          { title: 'Both (Hot & Iced)', value: 'both' },
+        ],
+        layout: 'radio',
+      },
+    }),
+    // ── Pricing ──────────────────────────────────────────────────
+    defineField({
+      name: 'priceHot',
+      title: 'Price — Hot (₱)',
+      type: 'number',
+      description: 'Leave empty if this item has no hot option.',
+      validation: (rule) => rule.min(0),
+    }),
+    defineField({
+      name: 'priceIce',
+      title: 'Price — Iced/Cold (₱)',
+      type: 'number',
+      description: 'Leave empty if this item has no iced option.',
+      validation: (rule) => rule.min(0),
+    }),
+    defineField({
+      name: 'price',
+      title: 'Price — Fixed (₱, food / single-price items)',
+      type: 'number',
+      description: 'Use this for food or any item that has one price regardless of temperature.',
+      validation: (rule) => rule.min(0),
+    }),
+    // ─────────────────────────────────────────────────────────────
     defineField({
       name: 'image',
       title: 'Image',
@@ -51,19 +81,6 @@ export const menuItem = defineType({
       type: 'array' as const,
       of: [{ type: 'string' as const }],
     },
-    defineField({
-      name: 'drinkType',
-      title: 'Drink Type',
-      type: 'string',
-      options: {
-        list: [
-          { title: 'Hot', value: 'hot' },
-          { title: 'Iced', value: 'iced' },
-          { title: 'Both', value: 'both' },
-        ],
-        layout: 'radio',
-      },
-    }),
     {
       name: 'sizes',
       title: 'Available Sizes',

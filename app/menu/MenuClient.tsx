@@ -5,40 +5,59 @@ import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCartStore } from '@/store/useCartStore'
 import { urlFor } from '@/sanity/lib/image'
+import type { SanityMenuItem as MenuItem } from '@/types/sanity'
 
-interface MenuItem {
-  _id: string
-  name: string
-  price: number
-  category: string
-  description?: string
-  image?: { asset: { _ref: string } }
-  drinkType?: 'hot' | 'iced' | 'both'
-  sizes?: string[]
-  ingredients?: string[]
+function getPrice(item: MenuItem, temp: string): number {
+  if (temp === 'Hot' && item.priceHot != null) return item.priceHot
+  if (temp === 'Iced' && item.priceIce != null) return item.priceIce
+  return item.price
 }
 
 type Selections = Record<string, { temp: string; size: string }>
 
 const EASE: [number, number, number, number] = [0.76, 0, 0.24, 1]
 
+const CATEGORY_ORDER = [
+  'signature drink', 'coffee', 'non-coffee', 'tea', 'frappe', 'soda fizz', 'nachos', 'waffle',
+]
+
+const CATEGORY_LABELS: Record<string, string> = {
+  'signature drink': 'Signature',
+  'coffee':          'Espresso',
+  'non-coffee':      'Non-Coffee',
+  'tea':             'Tea',
+  'frappe':          'Frappe',
+  'soda fizz':       'Soda & Fizz',
+  'nachos':          'Food',
+  'waffle':          'Waffles',
+}
+
 export default function MenuClient({ items }: { items: MenuItem[] }) {
-  const addItem = useCartStore((s) => s.addItem)
+  const addItem  = useCartStore((s) => s.addItem)
   const openTray = useCartStore((s) => s.openTray)
-  const [selections, setSelections] = useState<Selections>({})
+  const [selections, setSelections]     = useState<Selections>({})
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null)
+
+  // Group + order categories
+  const grouped = items.reduce<Record<string, MenuItem[]>>((acc, item) => {
+    const key = item.category ?? 'Other'
+    return { ...acc, [key]: [...(acc[key] ?? []), item] }
+  }, {})
+
+  const categories = [
+    ...CATEGORY_ORDER.filter((c) => grouped[c]),
+    ...Object.keys(grouped).filter((c) => !CATEGORY_ORDER.includes(c)),
+  ]
+
+  const [activeTab, setActiveTab] = useState(categories[0] ?? '')
+  const activeItems = grouped[activeTab] ?? []
 
   function getSelection(id: string, item: MenuItem) {
     const sel = selections[id]
     const defaultTemp =
-      item.drinkType === 'hot' ? 'Hot'
-      : item.drinkType === 'iced' ? 'Iced'
-      : sel?.temp ?? 'Hot'
-    const defaultSize = item.sizes?.[0] ?? ''
-    return {
-      temp: sel?.temp ?? defaultTemp,
-      size: sel?.size ?? defaultSize,
-    }
+      item.drinkType === 'hot' ? 'Hot' : 'Iced'
+    const defaultSize = item.sizes?.[item.sizes.length - 1] ?? ''
+    return { temp: sel?.temp ?? defaultTemp, size: sel?.size ?? defaultSize }
   }
 
   function setTemp(id: string, temp: string) {
@@ -54,7 +73,7 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
     addItem({
       id: item._id,
       name: item.name,
-      price: item.price,
+      price: getPrice(item, temp),
       drinkType: item.drinkType ? temp : undefined,
       ounce: size || undefined,
     })
@@ -62,129 +81,168 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
     setSelectedItem(null)
   }
 
-  // Group by category
-  const grouped = items.reduce<Record<string, MenuItem[]>>((acc, item) => {
-    const key = item.category ?? 'Other'
-    acc[key] = [...(acc[key] ?? []), item]
-    return acc
-  }, {})
-
   return (
     <>
-      <div className="space-y-20">
-        {Object.entries(grouped).map(([category, categoryItems]) => (
-          <section key={category}>
-            <h2 className="text-[10px] uppercase tracking-[0.3em] text-muted mb-8 pb-4 border-b border-border">
-              {category}
-            </h2>
+      {/* ── Category tabs ── */}
+      <div className="sticky top-14.25 z-30 bg-foreground shrink-0">
+        <div className="flex overflow-x-auto">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setActiveTab(cat)}
+              className={`relative shrink-0 flex-1 min-w-fit px-6 py-5 text-xs font-bold uppercase tracking-[0.2em] transition-all duration-200 ${
+                activeTab === cat
+                  ? 'text-foreground bg-cream'
+                  : 'text-cream/55 hover:text-cream'
+              }`}
+            >
+              {CATEGORY_LABELS[cat] ?? cat}
+              {activeTab === cat && (
+                <motion.span
+                  layoutId="tab-bar"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground"
+                />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
-              {categoryItems.map((item) => {
+      {/* ── Tab content ── */}
+      <div className="flex-1 relative overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: EASE }}
+            className="absolute inset-0 overflow-y-auto"
+          >
+            {/* Item grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 p-3 md:p-5 min-h-full content-start">
+              {activeItems.map((item, index) => {
                 const sel = getSelection(item._id, item)
                 return (
-                  <motion.article
+                  <motion.div
                     key={item._id}
-                    whileHover={{ y: -8, boxShadow: '0px 15px 35px rgba(37, 79, 34, 0.08)' }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-                    className="flex flex-col group"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                    className="group bg-background border border-border hover:border-foreground/20 hover:bg-foreground/2.5 transition-all duration-300 p-5 md:p-6 flex flex-col gap-3"
                   >
-                    {item.image && (
-                      <div
-                        className="relative aspect-4/3 overflow-hidden mb-5 cursor-pointer"
-                        onClick={() => setSelectedItem(item)}
+                    {/* Index + Name + Price */}
+                    <div>
+                      <div className="flex items-start justify-between gap-3 mb-1.5">
+                        <span className="text-[9px] text-foreground/20 tabular-nums">
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
+                        <div className="text-right shrink-0">
+                          <motion.span
+                            key={`${item._id}-${sel.temp}`}
+                            initial={{ opacity: 0, y: -3 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="font-serif text-xl md:text-2xl tracking-tight leading-none block"
+                          >
+                            ₱{getPrice(item, sel.temp)}
+                          </motion.span>
+                          {item.priceHot != null && item.priceIce != null && item.priceHot !== item.priceIce && (
+                            <span className="text-[9px] text-muted/50 tabular-nums mt-0.5 block">
+                              {item.priceHot} · {item.priceIce}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <h3
+                        className="font-serif tracking-tight leading-tight cursor-pointer hover:opacity-60 transition-opacity duration-200"
+                        style={{ fontSize: 'clamp(1.05rem, 1.6vw, 1.2rem)' }}
+                        onClick={() => item.image && setSelectedItem(item)}
                       >
-                        <Image
-                          src={urlFor(item.image).width(600).url()}
-                          alt={item.name}
-                          fill
-                          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                          className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
-                        />
-                      </div>
-                    )}
-
-                    <div className="flex-1 flex flex-col justify-between border-b border-border pb-6">
-                      <div>
-                        <h3
-                          className="text-xl font-serif tracking-tight cursor-pointer hover:opacity-70 transition-opacity"
-                          onClick={() => setSelectedItem(item)}
-                        >
-                          {item.name}
-                        </h3>
-                        {item.description && (
-                          <p className="text-sm text-muted font-light mt-1 leading-relaxed">
-                            {item.description}
-                          </p>
+                        {item.name}
+                        {item.image && (
+                          <span className="ml-2 text-[8px] uppercase tracking-[0.2em] text-muted align-middle">↗</span>
                         )}
-                        <p className="text-base font-light mt-2">₱{item.price.toFixed(2)}</p>
+                      </h3>
+                      {item.description && (
+                        <p className="text-[11px] text-muted font-light leading-relaxed line-clamp-2 mt-1">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
 
-                        {/* ── Drink type selector ── */}
-                        {item.drinkType === 'both' && (
-                          <div className="flex gap-2 mt-3">
-                            {['Hot', 'Iced'].map((t) => (
-                              <button
-                                key={t}
-                                onClick={() => setTemp(item._id, t)}
-                                className={`px-3 py-1 text-[10px] uppercase tracking-[0.15em] border transition-all duration-200 ${
-                                  sel.temp === t
-                                    ? 'bg-foreground text-cream border-foreground'
-                                    : 'border-border text-muted hover:border-foreground hover:text-foreground'
-                                }`}
-                              >
-                                {t}
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                    {/* Selectors */}
+                    <div className="flex gap-1 flex-wrap">
+                      {item.drinkType === 'both' && (
+                        <div className="flex">
+                          {['Hot', 'Iced'].map((t) => (
+                            <button
+                              key={t}
+                              onClick={() => setTemp(item._id, t)}
+                              className={`px-2.5 py-1 text-[9px] uppercase tracking-[0.15em] border-t border-b border-r first:border-l transition-all duration-200 ${
+                                sel.temp === t
+                                  ? 'bg-foreground text-cream border-foreground'
+                                  : 'text-muted border-border hover:border-foreground/50 hover:text-foreground'
+                              }`}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {item.drinkType && item.drinkType !== 'both' && (
+                        <span className="text-[9px] uppercase tracking-[0.15em] text-muted/60 self-center">
+                          {item.drinkType === 'hot' ? 'Hot' : 'Iced'}
+                        </span>
+                      )}
+                      {item.sizes && item.sizes.length > 0 && (
+                        <div className="flex">
+                          {item.sizes.map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => setSize(item._id, s)}
+                              className={`px-2.5 py-1 text-[9px] uppercase tracking-[0.15em] border-t border-b border-r first:border-l transition-all duration-200 ${
+                                sel.size === s
+                                  ? 'bg-foreground text-cream border-foreground'
+                                  : 'text-muted border-border hover:border-foreground/50 hover:text-foreground'
+                              }`}
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
-                        {item.drinkType && item.drinkType !== 'both' && (
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted mt-3">
-                            {item.drinkType === 'hot' ? 'Hot' : 'Iced'}
-                          </p>
-                        )}
-
-                        {/* ── Size selector ── */}
-                        {item.sizes && item.sizes.length > 0 && (
-                          <div className="flex gap-2 mt-2">
-                            {item.sizes.map((s) => (
-                              <button
-                                key={s}
-                                onClick={() => setSize(item._id, s)}
-                                className={`px-3 py-1 text-[10px] uppercase tracking-[0.15em] border transition-all duration-200 ${
-                                  sel.size === s
-                                    ? 'bg-foreground text-cream border-foreground'
-                                    : 'border-border text-muted hover:border-foreground hover:text-foreground'
-                                }`}
-                              >
-                                {s}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
+                    {/* Add */}
+                    <div className="pt-3 border-t border-border mt-auto">
                       <button
                         onClick={() => handleAdd(item)}
-                        className="mt-5 self-start border border-foreground px-5 py-2 text-[10px] uppercase tracking-[0.2em] hover:bg-foreground hover:text-cream opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 focus:opacity-100 focus:translate-y-0 transition-all duration-300"
+                        className="w-full text-[9px] uppercase tracking-[0.2em] px-3 py-2 border border-foreground/30 hover:bg-foreground hover:text-cream hover:border-foreground transition-all duration-200"
                       >
                         Add to Tray
                       </button>
                     </div>
-                  </motion.article>
+                  </motion.div>
                 )
               })}
+
+              {/* Fill empty cells to maintain grid alignment */}
+              {activeItems.length % 3 !== 0 &&
+                Array.from({ length: 3 - (activeItems.length % 3) }).map((_, i) => (
+                  <div key={`fill-${i}`} className="bg-background hidden lg:block" />
+                ))}
             </div>
-          </section>
-        ))}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      {/* ── Product Modal ── */}
+      {/* ── Product modal ── */}
       <AnimatePresence>
         {selectedItem && (
           <>
-            {/* Backdrop */}
             <motion.div
-              key="modal-backdrop"
+              key="backdrop"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -193,9 +251,8 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
               className="fixed inset-0 z-50 bg-black/60"
             />
 
-            {/* Modal content */}
             <motion.div
-              key="modal-content"
+              key="modal"
               initial={{ opacity: 0, y: 24, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.97 }}
@@ -203,16 +260,14 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
               className="fixed inset-0 z-50 flex items-center justify-center px-4 pointer-events-none"
             >
               <div className="relative w-full max-w-2xl bg-cream text-foreground shadow-2xl pointer-events-auto max-h-[90vh] flex flex-col">
-                {/* Close button */}
                 <button
                   onClick={() => setSelectedItem(null)}
                   aria-label="Close modal"
-                  className="absolute top-5 right-5 z-10 w-8 h-8 flex items-center justify-center text-muted hover:text-foreground transition-colors text-lg leading-none"
+                  className="absolute top-5 right-5 z-10 w-8 h-8 flex items-center justify-center text-muted hover:text-foreground transition-colors"
                 >
                   ✕
                 </button>
 
-                {/* Image */}
                 {selectedItem.image && (
                   <div className="relative aspect-video w-full overflow-hidden shrink-0">
                     <Image
@@ -225,26 +280,22 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
                   </div>
                 )}
 
-                {/* Body */}
-                <div className="flex-1 overflow-y-auto px-8 py-7 space-y-6">
-                  {/* Name + price */}
+                <div className="flex-1 overflow-y-auto px-8 py-7 space-y-5">
                   <div className="flex items-baseline justify-between gap-4">
                     <h2 className="font-serif text-3xl tracking-tight leading-tight">
                       {selectedItem.name}
                     </h2>
-                    <span className="text-xl font-light shrink-0">
-                      ₱{selectedItem.price.toFixed(2)}
+                    <span className="font-serif text-2xl shrink-0">
+                      ₱{getPrice(selectedItem, getSelection(selectedItem._id, selectedItem).temp)}
                     </span>
                   </div>
 
-                  {/* Description */}
                   {selectedItem.description && (
                     <p className="text-sm font-light leading-relaxed text-muted">
                       {selectedItem.description}
                     </p>
                   )}
 
-                  {/* Ingredients */}
                   {selectedItem.ingredients && selectedItem.ingredients.length > 0 && (
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.3em] text-muted mb-3">
@@ -263,18 +314,18 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
                     </div>
                   )}
 
-                  {/* Temp + size selectors in modal */}
-                  {(selectedItem.drinkType === 'both' || (selectedItem.sizes && selectedItem.sizes.length > 0)) && (
+                  {(selectedItem.drinkType === 'both' ||
+                    (selectedItem.sizes && selectedItem.sizes.length > 0)) && (
                     <div className="space-y-3">
                       {selectedItem.drinkType === 'both' && (
-                        <div className="flex gap-2">
+                        <div className="flex">
                           {['Hot', 'Iced'].map((t) => {
                             const sel = getSelection(selectedItem._id, selectedItem)
                             return (
                               <button
                                 key={t}
                                 onClick={() => setTemp(selectedItem._id, t)}
-                                className={`px-4 py-2 text-[10px] uppercase tracking-[0.15em] border transition-all duration-200 ${
+                                className={`px-5 py-2.5 text-[10px] uppercase tracking-[0.15em] border-t border-b border-r first:border-l transition-all duration-200 ${
                                   sel.temp === t
                                     ? 'bg-foreground text-cream border-foreground'
                                     : 'border-border text-muted hover:border-foreground hover:text-foreground'
@@ -286,16 +337,15 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
                           })}
                         </div>
                       )}
-
                       {selectedItem.sizes && selectedItem.sizes.length > 0 && (
-                        <div className="flex gap-2">
+                        <div className="flex">
                           {selectedItem.sizes.map((s) => {
                             const sel = getSelection(selectedItem._id, selectedItem)
                             return (
                               <button
                                 key={s}
                                 onClick={() => setSize(selectedItem._id, s)}
-                                className={`px-4 py-2 text-[10px] uppercase tracking-[0.15em] border transition-all duration-200 ${
+                                className={`px-5 py-2.5 text-[10px] uppercase tracking-[0.15em] border-t border-b border-r first:border-l transition-all duration-200 ${
                                   sel.size === s
                                     ? 'bg-foreground text-cream border-foreground'
                                     : 'border-border text-muted hover:border-foreground hover:text-foreground'
@@ -311,8 +361,7 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
                   )}
                 </div>
 
-                {/* Add to Tray footer */}
-                <div className="px-8 py-6 border-t border-border">
+                <div className="px-8 py-6 border-t border-border shrink-0">
                   <button
                     onClick={() => handleAdd(selectedItem)}
                     className="w-full border border-foreground py-3 text-[11px] uppercase tracking-[0.25em] hover:bg-foreground hover:text-cream transition-all duration-300"

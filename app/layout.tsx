@@ -2,9 +2,7 @@ import type { Metadata } from 'next'
 import { Geist } from 'next/font/google'
 import { Cormorant_Garamond } from 'next/font/google'
 import './globals.css'
-import Nav from '@/components/Nav'
-import Tray from '@/components/Tray'
-import Footer from '@/components/Footer'
+import ChromeWrapper from '@/components/ChromeWrapper'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -30,10 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${cormorant.variable} antialiased`}>
-        <Nav />
-        {children}
-        <Footer />
-        <Tray />
+        <ChromeWrapper>{children}</ChromeWrapper>
       </body>
     </html>
   )
