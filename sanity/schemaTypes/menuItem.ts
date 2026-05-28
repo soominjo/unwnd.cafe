@@ -81,18 +81,6 @@ export const menuItem = defineType({
       type: 'array' as const,
       of: [{ type: 'string' as const }],
     },
-    {
-      name: 'sizes',
-      title: 'Available Sizes',
-      type: 'array' as const,
-      of: [{ type: 'string' as const }],
-      options: {
-        list: [
-          { title: '16oz', value: '16oz' },
-          { title: '22oz', value: '22oz' },
-        ],
-      },
-    },
     defineField({
       name: 'available',
       title: 'Available',

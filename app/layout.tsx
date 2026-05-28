@@ -7,12 +7,14 @@ import ChromeWrapper from '@/components/ChromeWrapper'
 const geistSans = Geist({
   variable: '--font-geist-sans',
   subsets: ['latin'],
+  display: 'swap',
 })
 
 const cormorant = Cormorant_Garamond({
   variable: '--font-cormorant',
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600'],
+  weight: ['400', '500'],
+  display: 'swap',
 })
 
 export const metadata: Metadata = {

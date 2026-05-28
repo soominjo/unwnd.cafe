@@ -22,3 +22,34 @@ export interface OrderItem {
   price: number
   qty: number
 }
+
+export interface SaleItem {
+  lineId: string
+  name: string
+  variant: string | null
+  price: number
+  qty: number
+}
+
+export interface Sale {
+  _id: string
+  _createdAt: string
+  total: number
+  paymentAmount: number
+  change: number
+  items: SaleItem[]
+}
+
+export interface TopItem {
+  name: string
+  variant: string | null
+  qtySold: number
+  revenue: number
+}
+
+export interface SalesSummary {
+  totalRevenue: number
+  orderCount: number
+  avgOrderValue: number
+  topItems: TopItem[]
+}

@@ -13,7 +13,7 @@ function getPrice(item: MenuItem, temp: string): number {
   return item.price
 }
 
-type Selections = Record<string, { temp: string; size: string }>
+type Selections = Record<string, { temp: string }>
 
 const EASE: [number, number, number, number] = [0.76, 0, 0.24, 1]
 
@@ -54,28 +54,21 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
 
   function getSelection(id: string, item: MenuItem) {
     const sel = selections[id]
-    const defaultTemp =
-      item.drinkType === 'hot' ? 'Hot' : 'Iced'
-    const defaultSize = item.sizes?.[item.sizes.length - 1] ?? ''
-    return { temp: sel?.temp ?? defaultTemp, size: sel?.size ?? defaultSize }
+    const defaultTemp = item.drinkType === 'hot' ? 'Hot' : 'Iced'
+    return { temp: sel?.temp ?? defaultTemp }
   }
 
   function setTemp(id: string, temp: string) {
     setSelections((prev) => ({ ...prev, [id]: { ...prev[id], temp } }))
   }
 
-  function setSize(id: string, size: string) {
-    setSelections((prev) => ({ ...prev, [id]: { ...prev[id], size } }))
-  }
-
   function handleAdd(item: MenuItem) {
-    const { temp, size } = getSelection(item._id, item)
+    const { temp } = getSelection(item._id, item)
     addItem({
       id: item._id,
       name: item.name,
       price: getPrice(item, temp),
       drinkType: item.drinkType ? temp : undefined,
-      ounce: size || undefined,
     })
     openTray()
     setSelectedItem(null)
@@ -90,6 +83,7 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
             <button
               key={cat}
               onClick={() => setActiveTab(cat)}
+              onMouseEnter={() => setActiveTab(cat)}
               className={`relative shrink-0 flex-1 min-w-fit px-6 py-5 text-xs font-bold uppercase tracking-[0.2em] transition-all duration-200 ${
                 activeTab === cat
                   ? 'text-foreground bg-cream'
@@ -193,23 +187,6 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
                             {item.drinkType === 'hot' ? 'Hot' : 'Iced'}
                           </span>
                         )}
-                        {item.sizes && item.sizes.length > 0 && (
-                          <div className="flex">
-                            {item.sizes.map((s) => (
-                              <button
-                                key={s}
-                                onClick={() => setSize(item._id, s)}
-                                className={`px-2.5 py-1 text-[10px] uppercase tracking-[0.15em] border-t border-b border-r first:border-l transition-all duration-200 ${
-                                  sel.size === s
-                                    ? 'bg-foreground text-cream border-foreground'
-                                    : 'text-foreground/50 border-border hover:border-foreground/50 hover:text-foreground'
-                                }`}
-                              >
-                                {s}
-                              </button>
-                            ))}
-                          </div>
-                        )}
                       </div>
                       <button
                         onClick={() => handleAdd(item)}
@@ -309,8 +286,7 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
                     </div>
                   )}
 
-                  {(selectedItem.drinkType === 'both' ||
-                    (selectedItem.sizes && selectedItem.sizes.length > 0)) && (
+                  {selectedItem.drinkType === 'both' && (
                     <div className="space-y-3">
                       {selectedItem.drinkType === 'both' && (
                         <div className="flex">
@@ -327,26 +303,6 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
                                 }`}
                               >
                                 {t}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                      {selectedItem.sizes && selectedItem.sizes.length > 0 && (
-                        <div className="flex">
-                          {selectedItem.sizes.map((s) => {
-                            const sel = getSelection(selectedItem._id, selectedItem)
-                            return (
-                              <button
-                                key={s}
-                                onClick={() => setSize(selectedItem._id, s)}
-                                className={`px-5 py-2.5 text-[10px] uppercase tracking-[0.15em] border-t border-b border-r first:border-l transition-all duration-200 ${
-                                  sel.size === s
-                                    ? 'bg-foreground text-cream border-foreground'
-                                    : 'border-border text-muted hover:border-foreground hover:text-foreground'
-                                }`}
-                              >
-                                {s}
                               </button>
                             )
                           })}
