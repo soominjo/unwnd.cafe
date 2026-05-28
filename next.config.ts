@@ -21,10 +21,12 @@ const nextConfig: NextConfig = {
       { key: 'Permissions-Policy',        value: 'camera=(), microphone=(), geolocation=(), payment=()' },
     ]
 
-    // Restrictive CSP for all app routes — no unsafe-eval
+    const isDev = process.env.NODE_ENV === 'development'
+
+    // Restrictive CSP for all app routes — unsafe-eval only in dev (React dev mode needs it)
     const appCsp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob: https://cdn.sanity.io",

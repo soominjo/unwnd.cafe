@@ -18,7 +18,7 @@ export async function requirePosAuth(): Promise<NextResponse | null> {
   const posPin = process.env.POS_PIN
   if (!posPin) {
     return NextResponse.json(
-      { success: false, error: 'Server misconfiguration: POS_PIN not set' },
+      { success: false, error: 'Server misconfiguration' },
       { status: 503 },
     )
   }

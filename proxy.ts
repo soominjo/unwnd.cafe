@@ -20,9 +20,8 @@ export async function proxy(request: NextRequest) {
 
   const posPin = process.env.POS_PIN
   if (!posPin) {
-    if (isApiRoute) {
-      return NextResponse.json({ success: false, error: 'Server misconfiguration' }, { status: 503 })
-    }
+    // POS_PIN is a Node.js-only env var; Edge runtime can't read it.
+    // Fall through — requirePosAuth() in each route handler enforces auth.
     return NextResponse.next()
   }
 
