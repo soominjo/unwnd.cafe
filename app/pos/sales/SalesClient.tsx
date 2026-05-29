@@ -634,7 +634,7 @@ function OrderGroup({
     <div className="divide-y divide-border">
 
       {/* Order header row */}
-      <div className="flex items-center justify-between gap-4 px-4 py-2.5 bg-foreground/[0.035]">
+      <div className="flex items-center gap-4 px-4 py-2.5 bg-foreground/[0.035]">
         {isConfirming ? (
           <>
             <span className="text-xs font-semibold text-foreground/70">Delete this order?</span>
@@ -651,9 +651,16 @@ function OrderGroup({
           <span className="text-xs text-foreground/30 uppercase tracking-widest animate-pulse">Deleting…</span>
         ) : (
           <>
-            <span className="text-xs font-semibold text-foreground/60 tracking-wide">
+            <span className="text-xs font-semibold text-foreground/60 tracking-wide shrink-0 whitespace-nowrap">
               {formatPHTime(order._createdAt)}
             </span>
+            <div className="flex-1 flex items-center min-w-0">
+              {order.notes && (
+                <span className="inline-block bg-[#d4ede1] text-[#1f5c3c] text-[11px] px-2.5 py-1 rounded-lg rounded-tl-none leading-snug max-w-full truncate" title={order.notes}>
+                  {order.notes}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-3 shrink-0">
               <span className="font-sans font-extrabold text-sm tracking-tight text-foreground tabular-nums">
                 ₱{order.total.toLocaleString()}

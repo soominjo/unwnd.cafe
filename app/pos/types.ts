@@ -38,6 +38,7 @@ export interface Sale {
   paymentAmount: number
   change: number
   items: SaleItem[]
+  notes?: string
 }
 
 export interface TopItem {

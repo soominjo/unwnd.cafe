@@ -19,6 +19,7 @@ interface SaleInput {
   total:         number
   paymentAmount: number
   items:         SaleItemInput[]
+  notes?:        string
 }
 
 function isValidIso(s: string): boolean {
@@ -34,6 +35,11 @@ function isValidSaleInput(body: unknown): body is SaleInput {
   if (typeof b.total !== 'number' || !Number.isFinite(b.total) || b.total < 0 || b.total > MAX_PRICE) return false
   if (typeof b.paymentAmount !== 'number' || !Number.isFinite(b.paymentAmount) || b.paymentAmount < 0 || b.paymentAmount > MAX_PRICE) return false
   if (!Array.isArray(b.items) || b.items.length === 0 || b.items.length > 50) return false
+  if (b.notes !== undefined) {
+    const n = b.notes
+    if (typeof n !== 'string') return false
+    if (n.length > 100) return false
+  }
   return b.items.every((item: unknown) => {
     if (!item || typeof item !== 'object') return false
     const i = item as Record<string, unknown>
@@ -65,7 +71,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid sale data' }, { status: 400 })
   }
 
-  const { total, paymentAmount, items } = body
+  const { total, paymentAmount, items, notes } = body
   const change = paymentAmount - total
 
   try {
@@ -75,6 +81,7 @@ export async function POST(request: NextRequest) {
       total,
       paymentAmount,
       change,
+      ...(notes ? { notes: notes.trim() } : {}),
       items: items.map((item) => ({
         _type:   'saleItem',
         _key:    item.lineId,

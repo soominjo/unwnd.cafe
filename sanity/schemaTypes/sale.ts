@@ -29,6 +29,11 @@ export const sale = defineType({
       of: [{ type: 'saleItem' }],
       validation: (rule) => rule.required().min(1),
     }),
+    defineField({
+      name: 'notes',
+      title: 'Notes',
+      type: 'string',
+    }),
   ],
   preview: {
     select: { total: 'total' },

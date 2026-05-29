@@ -9,13 +9,14 @@ import type { MenuItem, OrderItem, Variant } from './types'
 interface Addon {
   id:    string
   name:  string
+  label: string
   price: number
 }
 
 const ADDONS: Addon[] = [
-  { id: 'addon__syrup',     name: 'Syrup',               price: 20 },
-  { id: 'addon__whitechoc', name: 'White Choc Pump',     price: 20 },
-  { id: 'addon__espresso',  name: 'Espresso Shot',       price: 30 },
+  { id: 'addon__syrup',     name: 'Syrup',           label: '+20 Syrup',    price: 20 },
+  { id: 'addon__whitechoc', name: 'White Choc Pump',  label: '+20 WCP',     price: 20 },
+  { id: 'addon__espresso',  name: 'Espresso Shot',    label: '+30 Espresso', price: 30 },
 ]
 
 export default function POSClient() {
@@ -27,6 +28,7 @@ export default function POSClient() {
   const [customInput, setCustomInput]       = useState('')
   const [isSubmitting, setIsSubmitting]     = useState(false)
   const [submitError, setSubmitError]       = useState<string | null>(null)
+  const [notes, setNotes]                   = useState('')
 
   const total = useMemo(
     () => orderItems.reduce((sum, i) => sum + i.price * i.qty, 0),
@@ -78,6 +80,7 @@ export default function POSClient() {
     setPayment(null)
     setCustomInput('')
     setSubmitError(null)
+    setNotes('')
   }
 
   async function completeSale() {
@@ -92,6 +95,7 @@ export default function POSClient() {
           total,
           paymentAmount: payment ?? total,
           items: orderItems,
+          ...(notes.trim() ? { notes: notes.trim() } : {}),
         }),
       })
       const data = await res.json()
@@ -182,11 +186,13 @@ export default function POSClient() {
             total={total}
             payment={payment}
             customInput={customInput}
+            notes={notes}
             onAdjust={adjustQty}
             onClear={clearOrder}
             onCharge={() => setShowConfirm(true)}
             onSetPayment={handleSetPayment}
             onAddAddon={addAddon}
+            onNotesChange={setNotes}
           />
         </aside>
       </div>
@@ -225,11 +231,13 @@ export default function POSClient() {
               total={total}
               payment={payment}
               customInput={customInput}
+              notes={notes}
               onAdjust={adjustQty}
               onClear={clearOrder}
               onCharge={() => { setMobileDrawer(false); setShowConfirm(true) }}
               onSetPayment={handleSetPayment}
               onAddAddon={addAddon}
+              onNotesChange={setNotes}
             />
           </div>
         </div>
@@ -285,6 +293,15 @@ export default function POSClient() {
                     Short ₱{(total - payment).toFixed(0)}
                   </p>
                 )}
+              </div>
+            )}
+
+            {notes.trim() && (
+              <div className="border-t border-foreground/10 pt-4 mb-4">
+                <p className="text-[10px] uppercase tracking-[0.3em] text-foreground/55 mb-2">Notes</p>
+                <span className="inline-block bg-[#d4ede1] text-[#1f5c3c] text-xs px-2.5 py-1.5 rounded-lg rounded-tl-none leading-snug max-w-full wrap-break-word">
+                  {notes.trim()}
+                </span>
               </div>
             )}
 
@@ -385,34 +402,38 @@ function OrderPanel({
   total,
   payment,
   customInput,
+  notes,
   onAdjust,
   onClear,
   onCharge,
   onSetPayment,
   onAddAddon,
+  onNotesChange,
 }: {
   items: OrderItem[]
   total: number
   payment: number | null
   customInput: string
+  notes: string
   onAdjust: (lineId: string, delta: number) => void
   onClear: () => void
   onCharge: () => void
   onSetPayment: (amount: number | null, raw: string) => void
   onAddAddon: (addon: Addon) => void
+  onNotesChange: (value: string) => void
 }) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
       {/* Panel header */}
-      <div className="px-6 py-5 border-b border-foreground/10 shrink-0">
+      <div className="px-6 py-3 border-b border-foreground/10 shrink-0">
         <p className="text-[10px] uppercase tracking-[0.28em] text-foreground/60 font-semibold">Current Order</p>
       </div>
 
       {/* Order items */}
-      <div className="flex-1 overflow-y-auto px-6 py-3 space-y-0.5">
+      <div className="flex-1 overflow-y-auto px-6 py-2 space-y-0.5">
         {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center pt-16 gap-2">
+          <div className="flex flex-col items-center justify-center pt-12 gap-2">
             <p className="text-foreground/20 text-4xl font-light">—</p>
             <p className="text-foreground/40 text-sm">No items added yet</p>
           </div>
@@ -422,7 +443,7 @@ function OrderPanel({
             return (
               <div
                 key={item.lineId}
-                className="flex items-center gap-3 py-3.5 border-b border-foreground/[0.07] last:border-0"
+                className="flex items-center gap-3 py-2.5 border-b border-foreground/[0.07] last:border-0"
               >
                 <div className="flex-1 min-w-0">
                   {isAddon ? (
@@ -466,41 +487,41 @@ function OrderPanel({
       </div>
 
       {/* Add-ons */}
-      <div className="px-6 py-3 border-t border-foreground/10 shrink-0">
-        <p className="text-[10px] uppercase tracking-[0.25em] text-foreground/45 font-semibold mb-2.5">Add-ons</p>
-        <div className="flex flex-wrap gap-2">
+      <div className="px-6 py-2 border-t border-foreground/10 shrink-0">
+        <p className="text-[10px] uppercase tracking-[0.25em] text-foreground/45 font-semibold mb-2">Add-ons</p>
+        <div className="flex gap-2">
           {ADDONS.map(addon => (
             <button
               key={addon.id}
               onClick={() => onAddAddon(addon)}
               disabled={items.length === 0}
-              className="px-3 py-1.5 text-[11px] font-semibold border border-foreground/20 text-foreground/65 hover:border-foreground/45 hover:text-foreground hover:bg-foreground/4 rounded-sm transition-all disabled:opacity-25 disabled:cursor-not-allowed"
+              className="flex-1 px-2 py-1.5 text-[11px] font-semibold border border-foreground/20 text-foreground/65 hover:border-foreground/45 hover:text-foreground hover:bg-foreground/4 rounded-sm transition-all disabled:opacity-25 disabled:cursor-not-allowed whitespace-nowrap text-center"
             >
-              + ₱{addon.price} {addon.name}
+              {addon.label}
             </button>
           ))}
         </div>
       </div>
 
       {/* Footer: total + payment + actions */}
-      <div className="px-6 pt-5 pb-5 border-t border-foreground/10 shrink-0 space-y-4">
+      <div className="px-6 pt-3 pb-3 border-t border-foreground/10 shrink-0 space-y-2.5">
 
         {/* Total */}
         <div className="flex justify-between items-center">
           <span className="text-xs uppercase tracking-widest text-foreground/60 font-semibold">Total</span>
-          <span className="font-serif text-5xl tabular-nums text-foreground">₱{total.toFixed(0)}</span>
+          <span className="font-serif text-4xl tabular-nums text-foreground">₱{total.toFixed(0)}</span>
         </div>
 
-        {/* Payment presets */}
-        <div className="space-y-2.5">
+        {/* Payment presets — full width */}
+        <div className="space-y-1.5">
           <p className="text-[10px] uppercase tracking-[0.25em] text-foreground/60 font-semibold">Payment</p>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             {[500, 1000, 2000].map(amt => (
               <button
                 key={amt}
                 onClick={() => onSetPayment(amt, String(amt))}
                 disabled={items.length === 0}
-                className={`flex-1 py-2.5 text-sm font-bold tabular-nums rounded-sm border transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed ${
+                className={`flex-1 py-2 text-xs font-bold tabular-nums rounded-sm border transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed ${
                   payment === amt
                     ? 'bg-foreground text-cream border-foreground'
                     : 'border-foreground/15 text-foreground hover:border-foreground/35 hover:bg-foreground/4'
@@ -510,6 +531,10 @@ function OrderPanel({
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Custom amount + Notes side by side */}
+        <div className="flex gap-2">
           <input
             type="number"
             inputMode="numeric"
@@ -521,39 +546,59 @@ function OrderPanel({
               const val = parseFloat(raw)
               onSetPayment(isNaN(val) ? null : val, raw)
             }}
-            className="w-full border border-foreground/13 rounded-sm px-3 py-2.5 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/40 disabled:opacity-30 bg-transparent"
+            className="flex-1 border border-foreground/13 rounded-sm px-2.5 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/40 disabled:opacity-30 bg-transparent"
           />
-          {payment !== null && items.length > 0 && (
-            payment >= total ? (
-              <div className="flex items-baseline justify-between pt-1">
-                <span className="text-[10px] uppercase tracking-[0.25em] text-foreground/60 font-semibold">Change</span>
-                <span className="font-serif text-3xl tracking-tight text-foreground tabular-nums">
-                  ₱{(payment - total).toFixed(0)}
-                </span>
-              </div>
-            ) : (
-              <p className="text-xs text-red-500 uppercase tracking-widest pt-1 font-semibold">
-                Short ₱{(total - payment).toFixed(0)}
-              </p>
-            )
-          )}
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              placeholder="Notes / name…"
+              value={notes}
+              disabled={items.length === 0}
+              maxLength={100}
+              onChange={e => onNotesChange(e.target.value)}
+              className={`w-full border border-foreground/13 rounded-sm px-2.5 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/40 disabled:opacity-30 bg-transparent ${notes.length > 70 ? 'pr-7' : ''}`}
+            />
+            {notes.length > 70 && (
+              <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums pointer-events-none ${notes.length >= 95 ? 'text-red-400' : 'text-foreground/30'}`}>
+                {100 - notes.length}
+              </span>
+            )}
+          </div>
         </div>
 
+        {/* Change / Short indicator */}
+        {payment !== null && items.length > 0 && (
+          payment >= total ? (
+            <div className="flex items-baseline justify-between">
+              <span className="text-[10px] uppercase tracking-[0.25em] text-foreground/60 font-semibold">Change</span>
+              <span className="font-serif text-2xl tracking-tight text-foreground tabular-nums">
+                ₱{(payment - total).toFixed(0)}
+              </span>
+            </div>
+          ) : (
+            <p className="text-xs text-red-500 uppercase tracking-widest font-semibold">
+              Short ₱{(total - payment).toFixed(0)}
+            </p>
+          )
+        )}
+
         {/* Action buttons */}
-        <button
-          onClick={onClear}
-          disabled={items.length === 0}
-          className="w-full border border-foreground/13 text-foreground/55 text-xs uppercase tracking-widest py-3 hover:border-foreground/25 hover:text-foreground/75 transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded-sm font-semibold"
-        >
-          Clear Order
-        </button>
-        <button
-          onClick={onCharge}
-          disabled={items.length === 0}
-          className="w-full bg-foreground text-cream text-sm uppercase tracking-widest py-5 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all disabled:opacity-30 disabled:cursor-not-allowed rounded-sm"
-        >
-          Charge ₱{total.toFixed(0)}
-        </button>
+        <div className="flex gap-2 pt-0.5">
+          <button
+            onClick={onClear}
+            disabled={items.length === 0}
+            className="flex-none border border-foreground/13 text-foreground/55 text-xs uppercase tracking-widest py-3 px-4 hover:border-foreground/25 hover:text-foreground/75 transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded-sm font-semibold"
+          >
+            Clear
+          </button>
+          <button
+            onClick={onCharge}
+            disabled={items.length === 0}
+            className="flex-1 bg-foreground text-cream text-sm uppercase tracking-widest py-3.5 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all disabled:opacity-30 disabled:cursor-not-allowed rounded-sm"
+          >
+            Charge ₱{total.toFixed(0)}
+          </button>
+        </div>
       </div>
     </div>
   )
