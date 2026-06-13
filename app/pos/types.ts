@@ -21,6 +21,8 @@ export interface OrderItem {
   variant: Variant | null
   price: number
   qty: number
+  pwdDiscounted?: boolean
+  parentLineId?: string
 }
 
 export interface SaleItem {
@@ -39,6 +41,7 @@ export interface Sale {
   change: number
   items: SaleItem[]
   notes?: string
+  isCompleted?: boolean
 }
 
 export interface TopItem {
