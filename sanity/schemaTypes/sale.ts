@@ -34,6 +34,12 @@ export const sale = defineType({
       title: 'Notes',
       type: 'string',
     }),
+    defineField({
+      name: 'isCompleted',
+      title: 'Completed',
+      type: 'boolean',
+      initialValue: false,
+    }),
   ],
   preview: {
     select: { total: 'total' },

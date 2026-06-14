@@ -10,7 +10,7 @@ const PH_OFFSET_MS = 8 * 60 * 60 * 1000
 const VALID_PERIODS = ['today', 'week', 'month', 'year', 'custom'] as const
 
 type Period = typeof VALID_PERIODS[number]
-type View   = 'orders' | 'summary'
+type View   = 'recent' | 'completed' | 'summary'
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -87,24 +87,27 @@ export default function SalesClient() {
   const customTo   = searchParams.get('customTo')   ?? ''
 
   // ── Local UI state ─────────────────────────────────────────────────────────
-  const [view, setView]     = useState<View>('orders')
-  const [summary, setSummary]   = useState<SalesSummary | null>(null)
-  const [orders, setOrders]     = useState<Sale[]>([])
-  const [total, setTotal]       = useState(0)
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState<string | null>(null)
+  const [view, setView]       = useState<View>('recent')
+  const [summary, setSummary] = useState<SalesSummary | null>(null)
+  const [orders, setOrders]   = useState<Sale[]>([])
+  const [total, setTotal]     = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState<string | null>(null)
 
   // Order-level delete
   const [confirmId, setConfirmId]   = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // Item-level delete  (key = `${orderId}:${lineId}`)
+  // Item-level delete (key = `${orderId}:${lineId}`)
   const [confirmItemKey, setConfirmItemKey]   = useState<string | null>(null)
   const [deletingItemKey, setDeletingItemKey] = useState<string | null>(null)
 
   // Delete all
   const [confirmAll, setConfirmAll]   = useState(false)
   const [deletingAll, setDeletingAll] = useState(false)
+
+  // Complete order
+  const [completingId, setCompletingId] = useState<string | null>(null)
 
   // ── URL navigation helper ──────────────────────────────────────────────────
   function navigate(updates: {
@@ -113,12 +116,12 @@ export default function SalesClient() {
     customFrom?: string
     customTo?: string
   }) {
-    const params   = new URLSearchParams(searchParams.toString())
+    const params    = new URLSearchParams(searchParams.toString())
     const newPeriod = updates.period ?? period
 
     if (updates.period !== undefined) {
       params.set('period', updates.period)
-      params.delete('page') // reset page on filter change
+      params.delete('page')
     }
     if (updates.page !== undefined) {
       if (updates.page <= 1) params.delete('page')
@@ -176,7 +179,7 @@ export default function SalesClient() {
   // Re-fetch when URL filter params change
   useEffect(() => {
     const range = computeDateRange(period, customFrom, customTo)
-    if (!range) return // wait until custom dates are both filled
+    if (!range) return
     const controller = new AbortController()
     fetchData(range.from, range.to, page, controller.signal)
     return () => controller.abort()
@@ -255,13 +258,13 @@ export default function SalesClient() {
     }
   }
 
-  // ── Delete all (current page) ──────────────────────────────────────────────
-  async function deleteAllOrders() {
+  // ── Delete a specific list of orders (used for tab-aware "Delete All") ─────
+  async function deleteOrderList(ordersToDelete: Sale[]) {
     setDeletingAll(true)
     setConfirmAll(false)
     try {
       const results = await Promise.allSettled(
-        orders.map(async (o) => {
+        ordersToDelete.map(async (o) => {
           const res  = await fetch(`/api/sales/${o._id}`, { method: 'DELETE' })
           const data = await res.json()
           if (!res.ok || !data.success) throw new Error(o._id)
@@ -282,6 +285,29 @@ export default function SalesClient() {
     }
   }
 
+  // ── Complete order ─────────────────────────────────────────────────────────
+  async function completeOrder(id: string) {
+    setCompletingId(id)
+    try {
+      const res = await fetch(`/api/sales/${id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ markCompleted: true }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) { setError(data.error ?? 'Failed to complete order.'); return }
+      setOrders(prev => prev.map(o => o._id === id ? { ...o, isCompleted: true } : o))
+    } catch {
+      setError('Network error. Could not complete order.')
+    } finally {
+      setCompletingId(null)
+    }
+  }
+
+  // ── Derived lists ──────────────────────────────────────────────────────────
+  const pendingOrders   = orders.filter(o => !o.isCompleted)
+  const completedOrders = orders.filter(o => o.isCompleted === true)
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const PERIODS: { key: Period; label: string }[] = [
@@ -293,8 +319,9 @@ export default function SalesClient() {
   ]
 
   const VIEWS: { key: View; label: string }[] = [
-    { key: 'orders',  label: 'Recent Orders' },
-    { key: 'summary', label: 'Summary' },
+    { key: 'recent',    label: 'Recent Orders' },
+    { key: 'completed', label: 'Completed Orders' },
+    { key: 'summary',   label: 'Summary' },
   ]
 
   // Today in PH time as YYYY-MM-DD for date input max
@@ -302,6 +329,28 @@ export default function SalesClient() {
     const ph = new Date(Date.now() + PH_OFFSET_MS)
     return `${ph.getUTCFullYear()}-${String(ph.getUTCMonth() + 1).padStart(2, '0')}-${String(ph.getUTCDate()).padStart(2, '0')}`
   })()
+
+  // Shared props for both order tab views
+  const sharedOrdersProps = {
+    loading,
+    total,
+    page,
+    totalPages,
+    onPageChange:         (pg: number) => navigate({ page: pg }),
+    confirmId,
+    deletingId,
+    confirmItemKey,
+    deletingItemKey,
+    confirmAll,
+    deletingAll,
+    onRequestDeleteOrder: (id: string) => { setConfirmAll(false); setConfirmItemKey(null); setConfirmId(id) },
+    onCancelDeleteOrder:  () => setConfirmId(null),
+    onConfirmDeleteOrder: deleteOrder,
+    onRequestDeleteItem:  (k: string)  => { setConfirmId(null); setConfirmAll(false); setConfirmItemKey(k) },
+    onCancelDeleteItem:   () => setConfirmItemKey(null),
+    onConfirmDeleteItem:  (orderId: string, lineId: string) => removeItem(orderId, lineId),
+    onCancelDeleteAll:    () => setConfirmAll(false),
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -369,13 +418,23 @@ export default function SalesClient() {
             <button
               key={key}
               onClick={() => setView(key)}
-              className={`pb-3 text-xs font-bold uppercase tracking-widest transition-all border-b-2 -mb-px ${
+              className={`pb-3 text-xs font-bold uppercase tracking-widest transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
                 view === key
                   ? 'text-foreground border-foreground'
                   : 'text-foreground/35 border-transparent hover:text-foreground/60'
               }`}
             >
               {label}
+              {key === 'recent' && !loading && pendingOrders.length > 0 && (
+                <span className="text-[9px] bg-foreground/10 text-foreground/50 px-1.5 py-0.5 rounded-full tabular-nums">
+                  {pendingOrders.length}
+                </span>
+              )}
+              {key === 'completed' && !loading && completedOrders.length > 0 && (
+                <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full tabular-nums">
+                  {completedOrders.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -386,32 +445,26 @@ export default function SalesClient() {
 
         {view === 'summary' ? (
           <SummaryView summary={summary} loading={loading} />
+        ) : view === 'recent' ? (
+          <OrdersView
+            {...sharedOrdersProps}
+            mode="recent"
+            orders={pendingOrders}
+            onRequestDeleteAll={() => { setConfirmId(null); setConfirmItemKey(null); setConfirmAll(true) }}
+            onConfirmDeleteAll={() => deleteOrderList(pendingOrders)}
+            completingId={completingId}
+            onCompleteOrder={completeOrder}
+          />
         ) : (
-          <>
-            <OrdersView
-              orders={orders}
-              loading={loading}
-              total={total}
-              page={page}
-              totalPages={totalPages}
-              onPageChange={(pg) => navigate({ page: pg })}
-              confirmId={confirmId}
-              deletingId={deletingId}
-              confirmItemKey={confirmItemKey}
-              deletingItemKey={deletingItemKey}
-              confirmAll={confirmAll}
-              deletingAll={deletingAll}
-              onRequestDeleteOrder={(id) => { setConfirmAll(false); setConfirmItemKey(null); setConfirmId(id) }}
-              onCancelDeleteOrder={() => setConfirmId(null)}
-              onConfirmDeleteOrder={deleteOrder}
-              onRequestDeleteItem={(k) => { setConfirmId(null); setConfirmAll(false); setConfirmItemKey(k) }}
-              onCancelDeleteItem={() => setConfirmItemKey(null)}
-              onConfirmDeleteItem={(orderId, lineId) => removeItem(orderId, lineId)}
-              onRequestDeleteAll={() => { setConfirmId(null); setConfirmItemKey(null); setConfirmAll(true) }}
-              onCancelDeleteAll={() => setConfirmAll(false)}
-              onConfirmDeleteAll={deleteAllOrders}
-            />
-          </>
+          <OrdersView
+            {...sharedOrdersProps}
+            mode="completed"
+            orders={completedOrders}
+            onRequestDeleteAll={() => { setConfirmId(null); setConfirmItemKey(null); setConfirmAll(true) }}
+            onConfirmDeleteAll={() => deleteOrderList(completedOrders)}
+            completingId={null}
+            onCompleteOrder={() => {}}
+          />
         )}
       </div>
     </div>
@@ -467,6 +520,7 @@ function SummaryView({ summary, loading }: { summary: SalesSummary | null; loadi
 // ─── Orders View ──────────────────────────────────────────────────────────────
 
 interface OrdersViewProps {
+  mode: 'recent' | 'completed'
   orders: Sale[]
   loading: boolean
   total: number
@@ -479,6 +533,7 @@ interface OrdersViewProps {
   deletingItemKey: string | null
   confirmAll: boolean
   deletingAll: boolean
+  completingId: string | null
   onRequestDeleteOrder: (id: string) => void
   onCancelDeleteOrder: () => void
   onConfirmDeleteOrder: (id: string) => void
@@ -488,31 +543,42 @@ interface OrdersViewProps {
   onRequestDeleteAll: () => void
   onCancelDeleteAll: () => void
   onConfirmDeleteAll: () => void
+  onCompleteOrder: (id: string) => void
 }
 
 function OrdersView(props: OrdersViewProps) {
   const {
-    orders, loading, total, page, totalPages, onPageChange,
+    mode, orders, loading, total, page, totalPages, onPageChange,
     confirmAll, deletingAll, onRequestDeleteAll, onCancelDeleteAll, onConfirmDeleteAll,
+    completingId, onCompleteOrder,
   } = props
 
   if (loading) return <Skeleton rows={8} />
-  if (orders.length === 0 && total === 0) return <p className="text-foreground/25 text-sm">No orders yet.</p>
+
+  if (orders.length === 0) {
+    if (mode === 'completed') {
+      return <p className="text-foreground/25 text-sm">No completed orders yet.</p>
+    }
+    if (total === 0) {
+      return <p className="text-foreground/25 text-sm">No orders yet.</p>
+    }
+    return <p className="text-foreground/25 text-sm">No pending orders.</p>
+  }
 
   return (
     <div className="space-y-3">
 
-      {/* Delete-all bar */}
+      {/* Bar: count + delete-all */}
       <div className="flex items-center justify-between">
         <span className="text-[10px] uppercase tracking-[0.2em] text-foreground/35">
-          {total} order{total !== 1 ? 's' : ''}
+          {orders.length} {mode === 'completed' ? 'completed' : 'pending'}
           {totalPages > 1 && ` · page ${page} of ${totalPages}`}
         </span>
         {deletingAll ? (
           <span className="text-[10px] uppercase tracking-widest text-foreground/30 animate-pulse">Deleting…</span>
         ) : confirmAll ? (
           <div className="flex items-center gap-3">
-            <span className="text-xs text-foreground/55">Delete {orders.length} order{orders.length !== 1 ? 's' : ''} on this page?</span>
+            <span className="text-xs text-foreground/55">Delete {orders.length} order{orders.length !== 1 ? 's' : ''}?</span>
             <button onClick={onCancelDeleteAll} className="text-[10px] uppercase tracking-widest font-bold text-foreground/40 hover:text-foreground/70 transition-colors px-2 py-1">
               Cancel
             </button>
@@ -528,33 +594,34 @@ function OrdersView(props: OrdersViewProps) {
       </div>
 
       {/* Table */}
-      {orders.length > 0 && (
-        <div className="border border-border divide-y divide-border">
-          <div className="grid grid-cols-12 px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-foreground/55">
-            <span className="col-span-5">Item</span>
-            <span className="col-span-2 text-center">Variant</span>
-            <span className="col-span-2 text-right">Qty</span>
-            <span className="col-span-3 text-right">Revenue</span>
-          </div>
-          {orders.map((order) => (
-            <OrderGroup
-              key={order._id}
-              order={order}
-              isConfirming={props.confirmId === order._id}
-              isDeleting={props.deletingId === order._id}
-              confirmItemKey={props.confirmItemKey}
-              deletingItemKey={props.deletingItemKey}
-              onRequestDelete={() => props.onRequestDeleteOrder(order._id)}
-              onCancelDelete={props.onCancelDeleteOrder}
-              onConfirmDelete={() => props.onConfirmDeleteOrder(order._id)}
-              onRequestDeleteItem={(lineId) => props.onRequestDeleteItem(`${order._id}:${lineId}`)}
-              onCancelDeleteItem={props.onCancelDeleteItem}
-              onConfirmDeleteItem={(lineId) => props.onConfirmDeleteItem(order._id, lineId)}
-              orderId={order._id}
-            />
-          ))}
+      <div className="border border-border divide-y divide-border">
+        <div className="grid grid-cols-12 px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-foreground/55">
+          <span className="col-span-5">Item</span>
+          <span className="col-span-2 text-center">Variant</span>
+          <span className="col-span-2 text-right">Qty</span>
+          <span className="col-span-3 text-right">Revenue</span>
         </div>
-      )}
+        {orders.map((order) => (
+          <OrderGroup
+            key={order._id}
+            order={order}
+            orderId={order._id}
+            mode={mode}
+            isConfirming={props.confirmId === order._id}
+            isDeleting={props.deletingId === order._id}
+            isCompleting={completingId === order._id}
+            confirmItemKey={props.confirmItemKey}
+            deletingItemKey={props.deletingItemKey}
+            onRequestDelete={() => props.onRequestDeleteOrder(order._id)}
+            onCancelDelete={props.onCancelDeleteOrder}
+            onConfirmDelete={() => props.onConfirmDeleteOrder(order._id)}
+            onRequestDeleteItem={(lineId) => props.onRequestDeleteItem(`${order._id}:${lineId}`)}
+            onCancelDeleteItem={props.onCancelDeleteItem}
+            onConfirmDeleteItem={(lineId) => props.onConfirmDeleteItem(order._id, lineId)}
+            onCompleteOrder={() => onCompleteOrder(order._id)}
+          />
+        ))}
+      </div>
 
       {/* Pagination */}
       {totalPages > 1 && (
@@ -612,8 +679,10 @@ function OrdersView(props: OrdersViewProps) {
 interface OrderGroupProps {
   order: Sale
   orderId: string
+  mode: 'recent' | 'completed'
   isConfirming: boolean
   isDeleting: boolean
+  isCompleting: boolean
   confirmItemKey: string | null
   deletingItemKey: string | null
   onRequestDelete: () => void
@@ -622,13 +691,15 @@ interface OrderGroupProps {
   onRequestDeleteItem: (lineId: string) => void
   onCancelDeleteItem: () => void
   onConfirmDeleteItem: (lineId: string) => void
+  onCompleteOrder: () => void
 }
 
 function OrderGroup({
-  order, orderId, isConfirming, isDeleting,
+  order, orderId, mode, isConfirming, isDeleting, isCompleting,
   confirmItemKey, deletingItemKey,
   onRequestDelete, onCancelDelete, onConfirmDelete,
   onRequestDeleteItem, onCancelDeleteItem, onConfirmDeleteItem,
+  onCompleteOrder,
 }: OrderGroupProps) {
   return (
     <div className="divide-y divide-border">
@@ -665,6 +736,29 @@ function OrderGroup({
               <span className="font-sans font-extrabold text-sm tracking-tight text-foreground tabular-nums">
                 ₱{order.total.toLocaleString()}
               </span>
+
+              {/* Complete Order button — only in recent tab */}
+              {mode === 'recent' && (
+                isCompleting ? (
+                  <span className="text-[10px] uppercase tracking-widest text-foreground/30 animate-pulse">Done…</span>
+                ) : (
+                  <button
+                    onClick={onCompleteOrder}
+                    className="text-[10px] uppercase tracking-widest font-bold text-emerald-600 hover:text-emerald-700 transition-colors px-2 py-1 border border-emerald-400/40 hover:border-emerald-500/60 rounded-sm"
+                    aria-label="Mark order as complete"
+                  >
+                    Complete
+                  </button>
+                )
+              )}
+
+              {/* Completed badge — only in completed tab */}
+              {mode === 'completed' && (
+                <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-600">
+                  ✓ Done
+                </span>
+              )}
+
               <button
                 onClick={onRequestDelete}
                 className="text-red-400 hover:text-red-600 transition-colors w-5 h-5 flex items-center justify-center text-base"

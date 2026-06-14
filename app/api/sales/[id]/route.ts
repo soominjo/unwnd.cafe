@@ -33,6 +33,7 @@ export async function DELETE(
 
 interface PatchBody {
   removeLineId?: string
+  markCompleted?: boolean
 }
 
 export async function PATCH(
@@ -58,6 +59,18 @@ export async function PATCH(
     return NextResponse.json({ success: false, error: 'Invalid JSON' }, { status: 400 })
   }
 
+  // ── Mark order as completed ────────────────────────────────────────────────
+  if (body.markCompleted === true) {
+    try {
+      const writeClient = getWriteClient()
+      await writeClient.patch(id).set({ isCompleted: true }).commit()
+      return NextResponse.json({ success: true })
+    } catch {
+      return NextResponse.json({ success: false, error: 'Failed to complete order.' }, { status: 500 })
+    }
+  }
+
+  // ── Remove single item from order ──────────────────────────────────────────
   const { removeLineId } = body
   if (!removeLineId || typeof removeLineId !== 'string' || !isValidId(removeLineId)) {
     return NextResponse.json({ success: false, error: 'Invalid removeLineId' }, { status: 400 })
