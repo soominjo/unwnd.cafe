@@ -6,6 +6,7 @@ export interface SanityMenuItem {
   priceIce?: number
   category: string
   description?: string
+  subtitle?: string
   image?: { asset: { _ref: string } }
   drinkType?: 'hot' | 'iced' | 'both'
   sizes?: string[]

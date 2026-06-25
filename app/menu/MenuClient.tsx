@@ -18,18 +18,16 @@ type Selections = Record<string, { temp: string }>
 const EASE: [number, number, number, number] = [0.76, 0, 0.24, 1]
 
 const CATEGORY_ORDER = [
-  'signature drink', 'coffee', 'non-coffee', 'tea', 'frappe', 'soda fizz', 'nachos', 'waffle',
+  'signature', 'espresso', 'non-coffee', 'meal', 'waffle', 'snack',
 ]
 
 const CATEGORY_LABELS: Record<string, string> = {
-  'signature drink': 'Signature',
-  'coffee':          'Espresso',
-  'non-coffee':      'Non-Coffee',
-  'tea':             'Tea',
-  'frappe':          'Frappe',
-  'soda fizz':       'Soda & Fizz',
-  'nachos':          'Food',
-  'waffle':          'Waffles',
+  'signature':  'Signature',
+  'espresso':   'Espresso',
+  'non-coffee': 'Non-Coffee',
+  'meal':       'Meal',
+  'waffle':     'Waffle',
+  'snack':      'Snack',
 }
 
 export default function MenuClient({ items }: { items: MenuItem[] }) {

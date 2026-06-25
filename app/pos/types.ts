@@ -2,6 +2,7 @@ export type Variant = 'hot' | 'ice'
 
 export interface MenuItem {
   id: string
+  _sanityId?: string
   name: string
   subtitle: string
   priceHot: number | null

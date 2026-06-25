@@ -17,33 +17,26 @@ export const menuItem = defineType({
       type: 'text',
     }),
     defineField({
+      name: 'subtitle',
+      title: 'Subtitle / Short Description',
+      type: 'string',
+      description: 'Shown under the item name in the POS grid (ingredients, tagline, etc.)',
+      validation: (rule) => rule.max(200),
+    }),
+    defineField({
       name: 'category',
       title: 'Category',
       type: 'string',
+      description: 'Must match a category id: signature, espresso, non-coffee, meal, waffle, snack, or a custom one.',
       options: {
         list: [
-          { title: 'Signature Drink', value: 'signature drink' },
-          { title: 'Coffee', value: 'coffee' },
+          { title: 'Signature', value: 'signature' },
+          { title: 'Espresso', value: 'espresso' },
           { title: 'Non-Coffee', value: 'non-coffee' },
-          { title: 'Tea', value: 'tea' },
-          { title: 'Frappe', value: 'frappe' },
-          { title: 'Soda Fizz', value: 'soda fizz' },
+          { title: 'Meal', value: 'meal' },
           { title: 'Waffle', value: 'waffle' },
-          { title: 'Nachos', value: 'nachos' },
+          { title: 'Snack', value: 'snack' },
         ],
-      },
-    }),
-    defineField({
-      name: 'drinkType',
-      title: 'Drink Type',
-      type: 'string',
-      options: {
-        list: [
-          { title: 'Hot only', value: 'hot' },
-          { title: 'Iced only', value: 'iced' },
-          { title: 'Both (Hot & Iced)', value: 'both' },
-        ],
-        layout: 'radio',
       },
     }),
     // ── Pricing ──────────────────────────────────────────────────
@@ -63,9 +56,9 @@ export const menuItem = defineType({
     }),
     defineField({
       name: 'price',
-      title: 'Price — Fixed (₱, food / single-price items)',
+      title: 'Price — Fixed (₱)',
       type: 'number',
-      description: 'Use this for food or any item that has one price regardless of temperature.',
+      description: 'Use for food or any item with a single price (no hot/iced split).',
       validation: (rule) => rule.min(0),
     }),
     // ─────────────────────────────────────────────────────────────

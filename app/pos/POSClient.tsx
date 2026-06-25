@@ -1,10 +1,21 @@
 'use client'
 
-import { useState, useMemo, useCallback, memo, Fragment } from 'react'
+import { useState, useMemo, useCallback, memo, Fragment, useEffect } from 'react'
 import Link from 'next/link'
 import { MENU } from './menuData'
 import { variantClass } from './utils'
-import type { MenuItem, OrderItem, Variant } from './types'
+import type { MenuItem, MenuCategory, OrderItem, Variant } from './types'
+import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
+
+interface DynamicMenuItem {
+  _id: string
+  name: string
+  subtitle: string | null
+  category: string
+  priceHot: number | null
+  priceIce: number | null
+  priceFixed: number | null
+}
 
 interface Addon {
   id:    string
@@ -20,16 +31,63 @@ const ADDONS: Addon[] = [
 ]
 
 export default function POSClient() {
-  const [activeCategory, setActiveCategory] = useState(0)
-  const [orderItems, setOrderItems]         = useState<OrderItem[]>([])
-  const [showConfirm, setShowConfirm]       = useState(false)
-  const [mobileDrawer, setMobileDrawer]     = useState(false)
-  const [payment, setPayment]               = useState<number | null>(null)
-  const [customInput, setCustomInput]       = useState('')
-  const [isSubmitting, setIsSubmitting]     = useState(false)
-  const [submitError, setSubmitError]       = useState<string | null>(null)
-  const [notes, setNotes]                   = useState('')
-  const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
+  const [activeCategory, setActiveCategory]     = useState(0)
+  const [orderItems, setOrderItems]             = useState<OrderItem[]>([])
+  const [showConfirm, setShowConfirm]           = useState(false)
+  const [mobileDrawer, setMobileDrawer]         = useState(false)
+  const [payment, setPayment]                   = useState<number | null>(null)
+  const [customInput, setCustomInput]           = useState('')
+  const [isSubmitting, setIsSubmitting]         = useState(false)
+  const [submitError, setSubmitError]           = useState<string | null>(null)
+  const [notes, setNotes]                       = useState('')
+  const [selectedLineId, setSelectedLineId]     = useState<string | null>(null)
+  const [showManageMenu, setShowManageMenu]     = useState(false)
+  const [dynamicCategories, setDynamicCategories] = useState<DynamicCategory[]>([])
+  const [dynamicItems, setDynamicItems]         = useState<DynamicMenuItem[]>([])
+  const [hiddenBuiltInIds, setHiddenBuiltInIds] = useState<string[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadMenu() {
+      try {
+        const [catsRes, itemsRes, settingsRes] = await Promise.all([
+          fetch('/api/menu/categories'),
+          fetch('/api/menu'),
+          fetch('/api/menu/settings'),
+        ])
+        if (cancelled) return
+        if (catsRes.ok && itemsRes.ok) {
+          const [catsData, itemsData] = await Promise.all([catsRes.json(), itemsRes.json()])
+          if (!cancelled) {
+            if (catsData.success) setDynamicCategories(catsData.categories ?? [])
+            if (itemsData.success) setDynamicItems(itemsData.items ?? [])
+          }
+        }
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json()
+          if (!cancelled && settingsData.success) setHiddenBuiltInIds(settingsData.hiddenItemIds ?? [])
+        }
+      } catch {
+        // fall back to hardcoded MENU silently
+      }
+    }
+    loadMenu()
+    return () => { cancelled = true }
+  }, [])
+
+  // Close all modals when the page is restored from the browser's back-forward cache.
+  // Without this, any overlay that was open before navigating away blocks all clicks.
+  useEffect(() => {
+    function onPageShow(e: PageTransitionEvent) {
+      if (e.persisted) {
+        setShowConfirm(false)
+        setShowManageMenu(false)
+        setMobileDrawer(false)
+      }
+    }
+    window.addEventListener('pageshow', onPageShow)
+    return () => window.removeEventListener('pageshow', onPageShow)
+  }, [])
 
   const total = useMemo(
     () => orderItems.reduce((sum, i) => sum + i.price * i.qty, 0),
@@ -175,7 +233,93 @@ export default function POSClient() {
     setCustomInput(raw)
   }
 
-  const category = MENU[activeCategory]
+  function handleItemAdded(item: MenuItem & { category: string }) {
+    setDynamicItems((prev) => [
+      ...prev,
+      {
+        _id: item._sanityId!,
+        name: item.name,
+        subtitle: item.subtitle ?? null,
+        category: item.category,
+        priceHot: item.priceHot,
+        priceIce: item.priceIce,
+        priceFixed: item.priceFixed,
+      },
+    ])
+    const catIndex = mergedMenu.findIndex((c) => c.id === item.category)
+    if (catIndex !== -1) setActiveCategory(catIndex)
+  }
+
+  function handleItemDeleted(sanityId: string) {
+    setDynamicItems((prev) => prev.filter((i) => i._id !== sanityId))
+  }
+
+  function handleCategoryAdded(cat: DynamicCategory) {
+    setDynamicCategories((prev) => [...prev, cat].sort((a, b) => a.order - b.order))
+  }
+
+  function handleCategoryDeleted(sanityId: string) {
+    setDynamicCategories((prev) => prev.filter((c) => c._sanityId !== sanityId))
+    setActiveCategory(0)
+  }
+
+  function handleHiddenItemsChanged(ids: string[]) {
+    setHiddenBuiltInIds(ids)
+  }
+
+  const mergedMenu = useMemo<MenuCategory[]>(() => {
+    if (dynamicCategories.length === 0) {
+      return MENU.map((cat) => ({
+        ...cat,
+        items: cat.items.filter((item) => !hiddenBuiltInIds.includes(item.id)),
+      }))
+    }
+    // Discard Sanity items that share a name with a hardcoded item but sit in a
+    // different category — stale duplicates saved under the wrong tab.
+    // A Sanity entry only replaces a hardcoded item when name AND category match.
+    const hardcodedCategoryByName = new Map<string, string>()
+    MENU.forEach((cat) => {
+      cat.items.forEach((item) => {
+        hardcodedCategoryByName.set(item.name.toLowerCase().trim(), cat.id)
+      })
+    })
+    const validDynamicItems = dynamicItems.filter((i) => {
+      const canonical = hardcodedCategoryByName.get(i.name.toLowerCase().trim())
+      return canonical === undefined || i.category === canonical
+    })
+    const validSanityNames = new Set(validDynamicItems.map((i) => i.name.toLowerCase().trim()))
+
+    return dynamicCategories.map((cat) => {
+      const hardcoded = (MENU.find((m) => m.id === cat.id)?.items ?? [])
+        .filter((item) => !hiddenBuiltInIds.includes(item.id))
+      const sanityItems: MenuItem[] = validDynamicItems
+        .filter((i) => i.category === cat.id)
+        .map((i) => ({
+          id: i._id,
+          _sanityId: i._id,
+          name: i.name,
+          subtitle: i.subtitle ?? '',
+          priceHot: i.priceHot,
+          priceIce: i.priceIce,
+          priceFixed: i.priceFixed,
+        }))
+      const uniqueHardcoded = hardcoded.filter(
+        (item) => !validSanityNames.has(item.name.toLowerCase().trim())
+      )
+      return { id: cat.id, label: cat.label, items: [...uniqueHardcoded, ...sanityItems] }
+    })
+  }, [dynamicCategories, dynamicItems, hiddenBuiltInIds])
+
+  // Derived from mergedMenu so AllItemsList sees the same deduped items as the POS grid.
+  // Annotates each category with its Sanity _id for the custom-category delete button.
+  const mergedMenuWithSanityId = useMemo<(MenuCategory & { _sanityId?: string })[]>(() => {
+    return mergedMenu.map((cat) => {
+      const dynCat = dynamicCategories.find((c) => c.id === cat.id)
+      return { ...cat, _sanityId: dynCat?._sanityId }
+    })
+  }, [mergedMenu, dynamicCategories])
+
+  const category = mergedMenu[activeCategory] ?? mergedMenu[0]
 
   return (
     <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
@@ -212,7 +356,7 @@ export default function POSClient() {
 
           {/* Category tabs */}
           <div className="flex gap-2 px-6 py-4 border-b border-foreground/10 shrink-0 overflow-x-auto scrollbar-none">
-            {MENU.map((cat, i) => (
+            {mergedMenu.map((cat, i) => (
               <button
                 key={cat.id}
                 onClick={() => setActiveCategory(i)}
@@ -225,12 +369,24 @@ export default function POSClient() {
                 {cat.label}
               </button>
             ))}
+            <button
+              onClick={() => setShowManageMenu(true)}
+              title="Manage menu"
+              className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap rounded-sm border border-dashed border-foreground/25 text-foreground/35 hover:border-foreground/55 hover:text-foreground/55 transition-all duration-200 shrink-0"
+            >
+              +
+            </button>
           </div>
 
           {/* Product grid */}
           <div className="flex-1 overflow-y-auto p-5 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 content-start">
-            {category.items.map(item => (
-              <ItemCard key={item.id} item={item} onAdd={addItem} />
+            {(category?.items ?? []).map(item => (
+              <ItemCard
+                key={item.id}
+                item={item}
+                onAdd={addItem}
+                onDelete={item._sanityId ? () => handleItemDeleted(item._sanityId!) : undefined}
+              />
             ))}
           </div>
         </div>
@@ -313,6 +469,21 @@ export default function POSClient() {
             />
           </div>
         </div>
+      )}
+
+      {/* ── Manage menu modal ── */}
+      {showManageMenu && (
+        <ManageMenuModal
+          categories={dynamicCategories.length > 0 ? dynamicCategories : MENU.map((m, i) => ({ id: m.id, label: m.label, type: (i < 3 ? 'drink' : 'food') as 'drink' | 'food', order: i + 1, isBuiltIn: true }))}
+          mergedMenu={mergedMenuWithSanityId}
+          hiddenBuiltInIds={hiddenBuiltInIds}
+          onClose={() => setShowManageMenu(false)}
+          onItemAdded={handleItemAdded}
+          onItemDeleted={handleItemDeleted}
+          onCategoryAdded={handleCategoryAdded}
+          onCategoryDeleted={handleCategoryDeleted}
+          onHiddenItemsChanged={handleHiddenItemsChanged}
+        />
       )}
 
       {/* ── Confirm modal ── */}
@@ -431,16 +602,27 @@ export default function POSClient() {
 const ItemCard = memo(function ItemCard({
   item,
   onAdd,
+  onDelete,
 }: {
   item: MenuItem
   onAdd: (item: MenuItem, variant: Variant | null) => void
+  onDelete?: () => void
 }) {
   const isFood = item.priceFixed !== null
   const hasHot = item.priceHot !== null
   const hasIce = item.priceIce !== null
 
   return (
-    <div className="bg-white text-foreground flex flex-col overflow-hidden border border-foreground/10 hover:border-foreground/22 hover:shadow-md transition-all duration-200 rounded-xl">
+    <div className="relative bg-white text-foreground flex flex-col overflow-hidden border border-foreground/10 hover:border-foreground/22 hover:shadow-md transition-all duration-200 rounded-xl">
+      {onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete() }}
+          title="Delete item"
+          className="absolute top-2 right-2 z-10 w-6 h-6 flex items-center justify-center text-foreground/25 hover:text-red-500 hover:bg-red-50 rounded-full text-sm transition-colors leading-none"
+        >
+          ×
+        </button>
+      )}
 
       {/* Name + subtitle */}
       <div className="flex-1 px-5 pt-5 pb-5">
@@ -617,7 +799,7 @@ function OrderPanel({
                     {childAddons.map(addon => (
                       <div
                         key={addon.lineId}
-                        className={`flex items-center gap-2 py-1.5 ml-3 pl-3 border-b border-foreground/[0.05] ${
+                        className={`flex items-center gap-2 py-1.5 ml-3 pl-3 border-b border-foreground/5 ${
                           isSelected ? 'border-l-2 border-l-emerald-200' : 'border-l border-l-foreground/10'
                         }`}
                       >

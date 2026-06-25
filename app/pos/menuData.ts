@@ -132,8 +132,8 @@ export const MENU: MenuCategory[] = [
     ],
   },
   {
-    id: 'food',
-    label: 'Food',
+    id: 'meal',
+    label: 'Meal',
     items: [
       {
         id: 'hungarian-sausage-meal',
@@ -152,14 +152,6 @@ export const MENU: MenuCategory[] = [
         priceFixed: 150,
       },
       {
-        id: 'cheesy-beef-nachos',
-        name: 'Cheesy Beef Nachos',
-        subtitle: 'Crispy tortilla chips, seasoned beef, melted cheese',
-        priceHot: null,
-        priceIce: null,
-        priceFixed: 180,
-      },
-      {
         id: 'pesto-tuna-fusilli',
         name: 'Pesto Tuna Fusilli',
         subtitle: 'Fusilli, basil pesto, flavorful tuna',
@@ -167,6 +159,12 @@ export const MENU: MenuCategory[] = [
         priceIce: null,
         priceFixed: 160,
       },
+    ],
+  },
+  {
+    id: 'waffle',
+    label: 'Waffle',
+    items: [
       {
         id: 'nutella-waffle',
         name: 'Nutella Waffle',
@@ -182,6 +180,20 @@ export const MENU: MenuCategory[] = [
         priceHot: null,
         priceIce: null,
         priceFixed: 120,
+      },
+    ],
+  },
+  {
+    id: 'snack',
+    label: 'Snack',
+    items: [
+      {
+        id: 'cheesy-beef-nachos',
+        name: 'Cheesy Beef Nachos',
+        subtitle: 'Crispy tortilla chips, seasoned beef, melted cheese',
+        priceHot: null,
+        priceIce: null,
+        priceFixed: 180,
       },
     ],
   },
