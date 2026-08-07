@@ -4,8 +4,13 @@ import { useState, useMemo, useCallback, memo, Fragment, useEffect } from 'react
 import Link from 'next/link'
 import { MENU } from './menuData'
 import { variantClass } from './utils'
-import type { MenuItem, MenuCategory, OrderItem, Variant } from './types'
+import type { MenuItem, MenuCategory, OrderItem, Variant, Addon } from './types'
 import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
+import MenuItemPopup from './MenuItemPopup'
+import CardActions from './CardActions'
+import ReceiptPreviewModal from './ReceiptPreviewModal'
+import { ADDON_CATEGORY_ID } from './constants'
+import { buildReceiptDocument, type ReceiptBlock, type ReceiptDiscountInput } from '@/lib/printer/receiptDocument'
 
 interface DynamicMenuItem {
   _id: string
@@ -15,23 +20,12 @@ interface DynamicMenuItem {
   priceHot: number | null
   priceIce: number | null
   priceFixed: number | null
+  addonType: 'drink' | 'food' | null
+  hiddenFromPos: boolean | null
 }
-
-interface Addon {
-  id:    string
-  name:  string
-  label: string
-  price: number
-}
-
-const ADDONS: Addon[] = [
-  { id: 'addon__syrup',     name: 'Syrup',          label: '+20 Syrup',    price: 20 },
-  { id: 'addon__whitechoc', name: 'White Choc Pump', label: '+20 WCP',     price: 20 },
-  { id: 'addon__espresso',  name: 'Espresso Shot',   label: '+30 Espresso', price: 30 },
-]
 
 export default function POSClient() {
-  const [activeCategory, setActiveCategory]     = useState(0)
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [orderItems, setOrderItems]             = useState<OrderItem[]>([])
   const [showConfirm, setShowConfirm]           = useState(false)
   const [mobileDrawer, setMobileDrawer]         = useState(false)
@@ -42,9 +36,18 @@ export default function POSClient() {
   const [notes, setNotes]                       = useState('')
   const [selectedLineId, setSelectedLineId]     = useState<string | null>(null)
   const [showManageMenu, setShowManageMenu]     = useState(false)
+  const [receiptBlocks, setReceiptBlocks]       = useState<ReceiptBlock[] | null>(null)
+  const [pendingAction, setPendingAction]       = useState<'plain' | 'receipt' | null>(null)
   const [dynamicCategories, setDynamicCategories] = useState<DynamicCategory[]>([])
   const [dynamicItems, setDynamicItems]         = useState<DynamicMenuItem[]>([])
   const [hiddenBuiltInIds, setHiddenBuiltInIds] = useState<string[]>([])
+  const [deletingItemId, setDeletingItemId]     = useState<string | null>(null)
+  const [deleteError, setDeleteError]           = useState<string | null>(null)
+  const [addItemCategory, setAddItemCategory]   = useState<string | null>(null)
+  const [editingItem, setEditingItem]           = useState<{ item: MenuItem & { _sanityId: string }; categoryId: string } | null>(null)
+  const [categoryOrder, setCategoryOrder]       = useState<string[]>([])
+  const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null)
+  const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -65,7 +68,10 @@ export default function POSClient() {
         }
         if (settingsRes.ok) {
           const settingsData = await settingsRes.json()
-          if (!cancelled && settingsData.success) setHiddenBuiltInIds(settingsData.hiddenItemIds ?? [])
+          if (!cancelled && settingsData.success) {
+            setHiddenBuiltInIds(settingsData.hiddenItemIds ?? [])
+            setCategoryOrder(settingsData.categoryOrder ?? [])
+          }
         }
       } catch {
         // fall back to hardcoded MENU silently
@@ -197,9 +203,10 @@ export default function POSClient() {
     setSelectedLineId(null)
   }
 
-  async function completeSale() {
+  async function completeSale(withReceipt: boolean) {
     if (isSubmitting) return
     setIsSubmitting(true)
+    setPendingAction(withReceipt ? 'receipt' : 'plain')
     setSubmitError(null)
     try {
       const res = await fetch('/api/sales', {
@@ -217,6 +224,34 @@ export default function POSClient() {
         setSubmitError(data.error ?? 'Failed to save sale. Try again.')
         return
       }
+
+      if (withReceipt) {
+        const paymentAmount = payment ?? grandTotal
+        const discounts: ReceiptDiscountInput[] = []
+        if (pwdFoodDiscount > 0) {
+          discounts.push({ label: `PWD Food -20% (${discountedFoodItem!.name})`, amount: pwdFoodDiscount })
+        }
+        if (pwdDrinkDiscount > 0) {
+          discounts.push({ label: `PWD Drink -20% (${discountedDrinkItem!.name})`, amount: pwdDrinkDiscount })
+        }
+        setReceiptBlocks(buildReceiptDocument({
+          shopName: 'unwnd. cafe',
+          timestamp: new Date(),
+          items: orderItems.map(item => ({
+            name: item.name,
+            variant: item.variant,
+            qty: item.qty,
+            lineTotal: item.price * item.qty,
+          })),
+          subtotal: total,
+          discounts,
+          total: grandTotal,
+          paymentAmount,
+          change: paymentAmount - grandTotal,
+          notes: notes.trim() || undefined,
+        }))
+      }
+
       clearOrder()
       const bc = new BroadcastChannel('pos-sales-update')
       bc.postMessage({ type: 'sale-completed' })
@@ -225,6 +260,7 @@ export default function POSClient() {
       setSubmitError('Network error. Check connection and try again.')
     } finally {
       setIsSubmitting(false)
+      setPendingAction(null)
     }
   }
 
@@ -244,14 +280,44 @@ export default function POSClient() {
         priceHot: item.priceHot,
         priceIce: item.priceIce,
         priceFixed: item.priceFixed,
+        addonType: item.addonType ?? null,
+        hiddenFromPos: item.hiddenFromPos ?? false,
       },
     ])
-    const catIndex = mergedMenu.findIndex((c) => c.id === item.category)
-    if (catIndex !== -1) setActiveCategory(catIndex)
+    setActiveCategoryId(item.category)
   }
 
   function handleItemDeleted(sanityId: string) {
     setDynamicItems((prev) => prev.filter((i) => i._id !== sanityId))
+  }
+
+  function handleItemUpdated(item: MenuItem & { category: string }) {
+    setDynamicItems((prev) => prev.map((i) => i._id === item._sanityId ? {
+      _id: item._sanityId!,
+      name: item.name,
+      subtitle: item.subtitle ?? null,
+      category: item.category,
+      priceHot: item.priceHot,
+      priceIce: item.priceIce,
+      priceFixed: item.priceFixed,
+      addonType: item.addonType ?? null,
+      hiddenFromPos: item.hiddenFromPos ?? false,
+    } : i))
+  }
+
+  async function handleDeleteItem(sanityId: string) {
+    setDeleteError(null)
+    setDeletingItemId(sanityId)
+    try {
+      const res  = await fetch(`/api/menu/${sanityId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok || !data.success) { setDeleteError(data.error ?? 'Failed to delete item.'); return }
+      handleItemDeleted(sanityId)
+    } catch {
+      setDeleteError('Network error. Try again.')
+    } finally {
+      setDeletingItemId(null)
+    }
   }
 
   function handleCategoryAdded(cat: DynamicCategory) {
@@ -260,11 +326,36 @@ export default function POSClient() {
 
   function handleCategoryDeleted(sanityId: string) {
     setDynamicCategories((prev) => prev.filter((c) => c._sanityId !== sanityId))
-    setActiveCategory(0)
+    setActiveCategoryId(null)
   }
 
-  function handleHiddenItemsChanged(ids: string[]) {
-    setHiddenBuiltInIds(ids)
+  async function persistCategoryOrder(order: string[]) {
+    try {
+      const res  = await fetch('/api/menu/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoryOrder: order }),
+      })
+      const data = await res.json()
+      if (data.success) setCategoryOrder(data.categoryOrder ?? order)
+    } catch {
+      // best-effort — tab order is still applied locally even if this fails
+    }
+  }
+
+  function handleCategoryDrop(targetId: string) {
+    const draggedId = draggedCategoryId
+    setDraggedCategoryId(null)
+    setDragOverCategoryId(null)
+    if (!draggedId || draggedId === targetId) return
+
+    const currentOrder = sortedMenu.map((c) => c.id)
+    const next = currentOrder.filter((id) => id !== draggedId)
+    const targetIndex = next.indexOf(targetId)
+    next.splice(targetIndex, 0, draggedId)
+
+    setCategoryOrder(next)
+    persistCategoryOrder(next)
   }
 
   const mergedMenu = useMemo<MenuCategory[]>(() => {
@@ -302,6 +393,8 @@ export default function POSClient() {
           priceHot: i.priceHot,
           priceIce: i.priceIce,
           priceFixed: i.priceFixed,
+          addonType: i.addonType,
+          hiddenFromPos: i.hiddenFromPos ?? false,
         }))
       const uniqueHardcoded = hardcoded.filter(
         (item) => !validSanityNames.has(item.name.toLowerCase().trim())
@@ -310,16 +403,44 @@ export default function POSClient() {
     })
   }, [dynamicCategories, dynamicItems, hiddenBuiltInIds])
 
-  // Derived from mergedMenu so AllItemsList sees the same deduped items as the POS grid.
-  // Annotates each category with its Sanity _id for the custom-category delete button.
-  const mergedMenuWithSanityId = useMemo<(MenuCategory & { _sanityId?: string })[]>(() => {
-    return mergedMenu.map((cat) => {
-      const dynCat = dynamicCategories.find((c) => c.id === cat.id)
-      return { ...cat, _sanityId: dynCat?._sanityId }
+  // Reflects any saved drag-and-drop reorder of the category tabs. Categories
+  // not yet in categoryOrder (new ones) keep their mergedMenu relative order,
+  // appended at the end.
+  const sortedMenu = useMemo<MenuCategory[]>(() => {
+    if (categoryOrder.length === 0) return mergedMenu
+    const orderIndex = new Map(categoryOrder.map((id, i) => [id, i]))
+    return [...mergedMenu].sort((a, b) => {
+      const ai = orderIndex.has(a.id) ? orderIndex.get(a.id)! : Number.MAX_SAFE_INTEGER
+      const bi = orderIndex.has(b.id) ? orderIndex.get(b.id)! : Number.MAX_SAFE_INTEGER
+      return ai - bi
     })
-  }, [mergedMenu, dynamicCategories])
+  }, [mergedMenu, categoryOrder])
 
-  const category = mergedMenu[activeCategory] ?? mergedMenu[0]
+  const category = sortedMenu.find((c) => c.id === activeCategoryId) ?? sortedMenu[0]
+
+  const categoriesForModal = useMemo<DynamicCategory[]>(() => (
+    dynamicCategories.length > 0
+      ? dynamicCategories
+      : MENU.map((m, i) => ({ id: m.id, label: m.label, type: (i < 3 ? 'drink' : 'food') as 'drink' | 'food', order: i + 1, isBuiltIn: true }))
+  ), [dynamicCategories])
+
+  // Items filed under the "Add ons" category are the attachable add-ons shown
+  // in the order panel — not orderable menu items in their own right.
+  // The 'addon__' id prefix is load-bearing: order-line detection elsewhere
+  // (OrderPanel, toggleItemPwdDiscount) matches lineId.startsWith('addon__').
+  const addonAttachItems = useMemo<Addon[]>(() => {
+    const addonCategory = mergedMenu.find((c) => c.id === ADDON_CATEGORY_ID)
+    return (addonCategory?.items ?? [])
+      .filter((i) => i.priceFixed !== null && !i.hiddenFromPos)
+      .map((i) => ({
+        id:        `addon__${i._sanityId ?? i.id}`,
+        _sanityId: i._sanityId,
+        name:      i.name,
+        label:     `+${i.priceFixed} ${i.name}`,
+        price:     i.priceFixed!,
+        type:      i.addonType ?? null,
+      }))
+  }, [mergedMenu])
 
   return (
     <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
@@ -354,16 +475,24 @@ export default function POSClient() {
         {/* Left: menu */}
         <div className="flex-1 flex flex-col overflow-hidden bg-background">
 
-          {/* Category tabs */}
+          {/* Category tabs — draggable to reorder */}
           <div className="flex gap-2 px-6 py-4 border-b border-foreground/10 shrink-0 overflow-x-auto scrollbar-none">
-            {mergedMenu.map((cat, i) => (
+            {sortedMenu.map((cat) => (
               <button
                 key={cat.id}
-                onClick={() => setActiveCategory(i)}
-                className={`px-5 py-2.5 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap rounded-sm transition-all duration-200 ${
-                  activeCategory === i
+                draggable
+                onClick={() => setActiveCategoryId(cat.id)}
+                onDragStart={() => setDraggedCategoryId(cat.id)}
+                onDragEnter={() => { if (draggedCategoryId && draggedCategoryId !== cat.id) setDragOverCategoryId(cat.id) }}
+                onDragOver={(e) => e.preventDefault()}
+                onDragEnd={() => { setDraggedCategoryId(null); setDragOverCategoryId(null) }}
+                onDrop={(e) => { e.preventDefault(); handleCategoryDrop(cat.id) }}
+                className={`px-5 py-2.5 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap rounded-sm transition-all duration-200 cursor-grab active:cursor-grabbing ${
+                  (activeCategoryId ?? sortedMenu[0]?.id) === cat.id
                     ? 'bg-foreground text-cream border border-foreground'
                     : 'text-foreground border border-foreground/30 hover:border-foreground/60 bg-transparent'
+                } ${draggedCategoryId === cat.id ? 'opacity-40' : ''} ${
+                  dragOverCategoryId === cat.id ? 'border-l-4 border-l-emerald-500' : ''
                 }`}
               >
                 {cat.label}
@@ -378,16 +507,59 @@ export default function POSClient() {
             </button>
           </div>
 
+          {/* Delete error banner */}
+          {deleteError && (
+            <div className="flex items-center justify-between gap-3 px-6 py-2.5 bg-red-50 border-b border-red-200 shrink-0">
+              <span className="text-xs text-red-600 font-medium">{deleteError}</span>
+              <button
+                onClick={() => setDeleteError(null)}
+                className="text-red-400 hover:text-red-600 text-sm leading-none shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Product grid */}
           <div className="flex-1 overflow-y-auto p-5 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 content-start">
-            {(category?.items ?? []).map(item => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                onAdd={addItem}
-                onDelete={item._sanityId ? () => handleItemDeleted(item._sanityId!) : undefined}
-              />
-            ))}
+            {category?.id === ADDON_CATEGORY_ID ? (
+              (category?.items ?? []).map(item => (
+                <AddonTile
+                  key={item.id}
+                  item={item}
+                  onAttach={item.priceFixed !== null && !item.hiddenFromPos ? () => addAddon({
+                    id: `addon__${item._sanityId ?? item.id}`,
+                    name: item.name,
+                    label: `+${item.priceFixed} ${item.name}`,
+                    price: item.priceFixed!,
+                  }) : undefined}
+                  attachDisabled={!selectedLineId || orderItems.length === 0}
+                  onEdit={item._sanityId ? () => setEditingItem({ item: { ...item, _sanityId: item._sanityId! }, categoryId: category.id }) : undefined}
+                  onDelete={item._sanityId ? () => handleDeleteItem(item._sanityId!) : undefined}
+                  isDeleting={deletingItemId === item._sanityId}
+                />
+              ))
+            ) : (
+              (category?.items ?? []).map(item => (
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  onAdd={addItem}
+                  onEdit={item._sanityId ? () => setEditingItem({ item: { ...item, _sanityId: item._sanityId! }, categoryId: category.id }) : undefined}
+                  onDelete={item._sanityId ? () => handleDeleteItem(item._sanityId!) : undefined}
+                  isDeleting={deletingItemId === item._sanityId}
+                />
+              ))
+            )}
+            {category && (
+              <button
+                onClick={() => setAddItemCategory(category.id)}
+                className="flex flex-col items-center justify-center gap-2 min-h-38 border-2 border-dashed border-foreground/15 hover:border-foreground/35 rounded-xl text-foreground/30 hover:text-foreground/55 transition-all duration-200"
+              >
+                <span className="text-3xl leading-none font-light">+</span>
+                <span className="text-[10px] uppercase tracking-widest font-semibold">Add Item</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -395,6 +567,7 @@ export default function POSClient() {
         <aside className="hidden lg:flex w-100 xl:w-110 flex-col border-l border-foreground/10 bg-white shrink-0">
           <OrderPanel
             items={orderItems}
+            addons={addonAttachItems}
             total={total}
             grandTotal={grandTotal}
             pwdFoodDiscount={pwdFoodDiscount}
@@ -448,6 +621,7 @@ export default function POSClient() {
             </div>
             <OrderPanel
               items={orderItems}
+              addons={addonAttachItems}
               total={total}
               grandTotal={grandTotal}
               pwdFoodDiscount={pwdFoodDiscount}
@@ -474,16 +648,28 @@ export default function POSClient() {
       {/* ── Manage menu modal ── */}
       {showManageMenu && (
         <ManageMenuModal
-          categories={dynamicCategories.length > 0 ? dynamicCategories : MENU.map((m, i) => ({ id: m.id, label: m.label, type: (i < 3 ? 'drink' : 'food') as 'drink' | 'food', order: i + 1, isBuiltIn: true }))}
-          mergedMenu={mergedMenuWithSanityId}
-          hiddenBuiltInIds={hiddenBuiltInIds}
+          categories={categoriesForModal}
           onClose={() => setShowManageMenu(false)}
-          onItemAdded={handleItemAdded}
-          onItemDeleted={handleItemDeleted}
           onCategoryAdded={handleCategoryAdded}
           onCategoryDeleted={handleCategoryDeleted}
-          onHiddenItemsChanged={handleHiddenItemsChanged}
         />
+      )}
+
+      {/* ── Add / edit menu item popup ── */}
+      {(addItemCategory || editingItem) && (
+        <MenuItemPopup
+          categoryId={editingItem?.categoryId ?? addItemCategory!}
+          categoryLabel={mergedMenu.find((c) => c.id === (editingItem?.categoryId ?? addItemCategory))?.label ?? ''}
+          categoryType={categoriesForModal.find((c) => c.id === (editingItem?.categoryId ?? addItemCategory))?.type ?? 'drink'}
+          item={editingItem?.item}
+          onSaved={editingItem ? handleItemUpdated : handleItemAdded}
+          onClose={() => { setAddItemCategory(null); setEditingItem(null) }}
+        />
+      )}
+
+      {/* ── Receipt preview modal ── */}
+      {receiptBlocks && (
+        <ReceiptPreviewModal blocks={receiptBlocks} onClose={() => setReceiptBlocks(null)} />
       )}
 
       {/* ── Confirm modal ── */}
@@ -583,12 +769,23 @@ export default function POSClient() {
                 Cancel
               </button>
               <button
-                onClick={completeSale}
+                onClick={() => completeSale(false)}
                 disabled={isSubmitting}
                 className="flex-2 bg-foreground text-cream text-xs uppercase tracking-widest py-4 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Saving…' : 'Order Complete ✓'}
+                {pendingAction === 'plain' ? 'Saving…' : 'Order Complete ✓'}
               </button>
+            </div>
+
+            <div className="border-t border-foreground/10 mt-4 pt-4">
+              <button
+                onClick={() => completeSale(true)}
+                disabled={isSubmitting}
+                className="w-full border border-foreground/20 text-foreground/70 text-[11px] uppercase tracking-widest py-3 font-semibold hover:border-foreground/35 hover:text-foreground hover:bg-foreground/4 active:scale-[0.99] transition-all rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {pendingAction === 'receipt' ? 'Saving…' : '🖨 Complete + Print Receipt'}
+              </button>
+              <p className="text-[10px] text-foreground/35 text-center mt-2">Only if the customer asks for one</p>
             </div>
           </div>
         </div>
@@ -602,27 +799,24 @@ export default function POSClient() {
 const ItemCard = memo(function ItemCard({
   item,
   onAdd,
+  onEdit,
   onDelete,
+  isDeleting,
 }: {
   item: MenuItem
   onAdd: (item: MenuItem, variant: Variant | null) => void
+  onEdit?: () => void
   onDelete?: () => void
+  isDeleting?: boolean
 }) {
   const isFood = item.priceFixed !== null
   const hasHot = item.priceHot !== null
   const hasIce = item.priceIce !== null
+  const isHidden = item.hiddenFromPos ?? false
 
   return (
-    <div className="relative bg-white text-foreground flex flex-col overflow-hidden border border-foreground/10 hover:border-foreground/22 hover:shadow-md transition-all duration-200 rounded-xl">
-      {onDelete && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete() }}
-          title="Delete item"
-          className="absolute top-2 right-2 z-10 w-6 h-6 flex items-center justify-center text-foreground/25 hover:text-red-500 hover:bg-red-50 rounded-full text-sm transition-colors leading-none"
-        >
-          ×
-        </button>
-      )}
+    <div className={`relative bg-white text-foreground flex flex-col overflow-hidden border border-foreground/10 hover:border-foreground/22 hover:shadow-md transition-all duration-200 rounded-xl ${isDeleting ? 'opacity-40 pointer-events-none' : ''} ${isHidden ? 'opacity-55' : ''}`}>
+      <CardActions onEdit={onEdit} onDelete={onDelete} isBusy={isDeleting} />
 
       {/* Name + subtitle */}
       <div className="flex-1 px-5 pt-5 pb-5">
@@ -637,7 +831,15 @@ const ItemCard = memo(function ItemCard({
       </div>
 
       {/* Action row */}
-      {isFood ? (
+      {isHidden ? (
+        <div
+          title="Hidden from POS ordering — still visible on /menu"
+          className="flex items-center justify-between px-5 py-5 bg-foreground/10 text-foreground/50 rounded-b-xl"
+        >
+          <span className="text-[11px] uppercase tracking-widest font-semibold">Hidden from POS</span>
+          <span className="font-bold text-xl tracking-tight">₱{item.priceFixed ?? item.priceHot ?? item.priceIce}</span>
+        </div>
+      ) : isFood ? (
         <button
           onClick={() => onAdd(item, null)}
           className="flex items-center justify-between px-5 py-5 bg-foreground text-cream hover:bg-foreground/85 active:bg-foreground/95 transition-colors rounded-b-xl"
@@ -671,10 +873,72 @@ const ItemCard = memo(function ItemCard({
   )
 })
 
+// ─── Addon Tile ───────────────────────────────────────────────────────────────
+// Items filed under the "Add ons" category aren't orderable on their own —
+// they're only attached to another line via the order panel's Add-ons row —
+// so they render as plain delete-able tiles instead of ItemCard's buy buttons.
+
+const AddonTile = memo(function AddonTile({
+  item,
+  onAttach,
+  attachDisabled,
+  onEdit,
+  onDelete,
+  isDeleting,
+}: {
+  item: MenuItem
+  onAttach?: () => void
+  attachDisabled?: boolean
+  onEdit?: () => void
+  onDelete?: () => void
+  isDeleting?: boolean
+}) {
+  const isFoodAddon = item.addonType === 'food'
+  const isHidden = item.hiddenFromPos ?? false
+
+  return (
+    <div className={`relative bg-white text-foreground flex flex-col overflow-hidden border border-foreground/10 hover:border-foreground/22 hover:shadow-md transition-all duration-200 rounded-xl ${isDeleting ? 'opacity-40 pointer-events-none' : ''} ${isHidden ? 'opacity-55' : ''}`}>
+      <CardActions onEdit={onEdit} onDelete={onDelete} isBusy={isDeleting} />
+
+      <div className="flex-1 px-5 pt-5 pb-5">
+        <p className="font-bold text-[1.05rem] leading-snug tracking-tight text-foreground">{item.name}</p>
+        {item.subtitle && (
+          <p className="text-[11px] text-foreground/55 mt-2.5 leading-relaxed line-clamp-2">{item.subtitle}</p>
+        )}
+      </div>
+
+      {isHidden ? (
+        <div
+          title="Hidden from POS — still visible on /menu"
+          className="flex items-center justify-between px-5 py-5 bg-foreground/10 text-foreground/50 rounded-b-xl"
+        >
+          <span className="text-[11px] uppercase tracking-widest font-semibold">Hidden from POS</span>
+          <span className="font-bold text-xl tracking-tight">+₱{item.priceFixed}</span>
+        </div>
+      ) : onAttach && (
+        <button
+          onClick={onAttach}
+          disabled={attachDisabled}
+          title={attachDisabled ? 'Select an order line first' : 'Attach to selected item'}
+          className={`flex items-center justify-between px-5 py-5 text-cream transition-colors rounded-b-xl disabled:opacity-40 disabled:cursor-not-allowed ${
+            isFoodAddon ? 'bg-[#8b5e3c] hover:bg-[#6f4a2f]' : 'bg-foreground hover:bg-foreground/85'
+          } active:bg-foreground/95`}
+        >
+          <span className="text-[11px] uppercase tracking-widest text-cream/65 font-semibold">
+            {item.addonType ? (isFoodAddon ? 'Food' : 'Drink') : 'Add-on'}
+          </span>
+          <span className="font-bold text-xl tracking-tight">+₱{item.priceFixed}</span>
+        </button>
+      )}
+    </div>
+  )
+})
+
 // ─── Order Panel ──────────────────────────────────────────────────────────────
 
 function OrderPanel({
   items,
+  addons,
   total,
   grandTotal,
   pwdFoodDiscount,
@@ -695,6 +959,7 @@ function OrderPanel({
   onToggleItemDiscount,
 }: {
   items: OrderItem[]
+  addons: Addon[]
   total: number
   grandTotal: number
   pwdFoodDiscount: number
@@ -880,12 +1145,19 @@ function OrderPanel({
           )}
         </div>
         <div className="flex gap-2">
-          {ADDONS.map(addon => (
+          {addons.map(addon => (
             <button
               key={addon.id}
               onClick={() => onAddAddon(addon)}
               disabled={!selectedLineId || items.length === 0}
-              className="flex-1 px-2 py-1.5 text-[11px] font-semibold border border-foreground/20 text-foreground/65 hover:border-foreground/45 hover:text-foreground hover:bg-foreground/4 rounded-sm transition-all disabled:opacity-25 disabled:cursor-not-allowed whitespace-nowrap text-center"
+              title={addon.type ? `${addon.type} add-on` : undefined}
+              className={`flex-1 px-2 py-1.5 text-[11px] font-semibold border-y border-r rounded-sm transition-all disabled:opacity-25 disabled:cursor-not-allowed whitespace-nowrap text-center text-foreground/65 hover:text-foreground hover:bg-foreground/4 ${
+                addon.type === 'food'
+                  ? 'border-l-2 border-l-[#8b5e3c] border-y-foreground/20 border-r-foreground/20 hover:border-y-[#8b5e3c]/45 hover:border-r-[#8b5e3c]/45'
+                  : addon.type === 'drink'
+                  ? 'border-l-2 border-l-foreground border-y-foreground/20 border-r-foreground/20 hover:border-y-foreground/45 hover:border-r-foreground/45'
+                  : 'border-l border-l-foreground/20 border-y-foreground/20 border-r-foreground/20 hover:border-foreground/45'
+              }`}
             >
               {addon.label}
             </button>

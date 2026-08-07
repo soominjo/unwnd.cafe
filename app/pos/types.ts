@@ -1,4 +1,5 @@
 export type Variant = 'hot' | 'ice'
+export type AddonType = 'drink' | 'food'
 
 export interface MenuItem {
   id: string
@@ -8,12 +9,23 @@ export interface MenuItem {
   priceHot: number | null
   priceIce: number | null
   priceFixed: number | null
+  addonType?: AddonType | null
+  hiddenFromPos?: boolean
 }
 
 export interface MenuCategory {
   id: string
   label: string
   items: MenuItem[]
+}
+
+export interface Addon {
+  id: string
+  _sanityId?: string
+  name: string
+  label: string
+  price: number
+  type?: AddonType | null
 }
 
 export interface OrderItem {

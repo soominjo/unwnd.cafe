@@ -8,35 +8,53 @@ export const dynamic = 'force-dynamic'
 const SETTINGS_ID = 'menu-settings'
 const fresh = client.withConfig({ useCdn: false })
 
-async function fetchHiddenIds(): Promise<string[]> {
-  const doc = await fresh.fetch<{ hiddenItemIds?: string[] } | null>(
-    `*[_type == "menuSettings" && _id == $id][0]{ hiddenItemIds }`,
+interface MenuSettings {
+  hiddenItemIds: string[]
+  categoryOrder: string[]
+}
+
+async function fetchSettings(): Promise<MenuSettings> {
+  const doc = await fresh.fetch<{ hiddenItemIds?: string[]; categoryOrder?: string[] } | null>(
+    `*[_type == "menuSettings" && _id == $id][0]{ hiddenItemIds, categoryOrder }`,
     { id: SETTINGS_ID },
     { cache: 'no-store' }
   )
-  return doc?.hiddenItemIds ?? []
+  return { hiddenItemIds: doc?.hiddenItemIds ?? [], categoryOrder: doc?.categoryOrder ?? [] }
 }
 
 export async function GET() {
   try {
-    const hiddenItemIds = await fetchHiddenIds()
-    return NextResponse.json({ success: true, hiddenItemIds })
+    const settings = await fetchSettings()
+    return NextResponse.json({ success: true, ...settings })
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to fetch settings.' }, { status: 500 })
   }
 }
 
-interface SettingsAction {
+interface HideAction {
   itemId: string
   action: 'hide' | 'restore'
 }
 
-function isValidAction(body: unknown): body is SettingsAction {
+interface ReorderAction {
+  categoryOrder: string[]
+}
+
+function isHideAction(body: unknown): body is HideAction {
   if (!body || typeof body !== 'object') return false
   const b = body as Record<string, unknown>
   return (
     typeof b.itemId === 'string' && b.itemId.trim().length > 0 && b.itemId.length <= 100 &&
     (b.action === 'hide' || b.action === 'restore')
+  )
+}
+
+function isReorderAction(body: unknown): body is ReorderAction {
+  if (!body || typeof body !== 'object') return false
+  const b = body as Record<string, unknown>
+  return (
+    Array.isArray(b.categoryOrder) &&
+    b.categoryOrder.every((id) => typeof id === 'string' && id.length <= 60)
   )
 }
 
@@ -55,30 +73,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid JSON' }, { status: 400 })
   }
 
-  if (!isValidAction(body)) {
-    return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 })
-  }
-
-  const { itemId, action } = body
-
   try {
     const writeClient = getWriteClient()
-    const current = await fetchHiddenIds()
+    const current = await fetchSettings()
 
-    let updated: string[]
-    if (action === 'hide') {
-      updated = current.includes(itemId) ? current : [...current, itemId]
-    } else {
-      updated = current.filter((id) => id !== itemId)
+    if (isReorderAction(body)) {
+      const updated: MenuSettings = { ...current, categoryOrder: body.categoryOrder }
+      await writeClient.createOrReplace({ _id: SETTINGS_ID, _type: 'menuSettings', ...updated })
+      return NextResponse.json({ success: true, ...updated })
     }
 
-    await writeClient.createOrReplace({
-      _id: SETTINGS_ID,
-      _type: 'menuSettings',
-      hiddenItemIds: updated,
-    })
+    if (isHideAction(body)) {
+      const { itemId, action } = body
+      const hiddenItemIds = action === 'hide'
+        ? (current.hiddenItemIds.includes(itemId) ? current.hiddenItemIds : [...current.hiddenItemIds, itemId])
+        : current.hiddenItemIds.filter((id) => id !== itemId)
+      const updated: MenuSettings = { ...current, hiddenItemIds }
+      await writeClient.createOrReplace({ _id: SETTINGS_ID, _type: 'menuSettings', ...updated })
+      return NextResponse.json({ success: true, ...updated })
+    }
 
-    return NextResponse.json({ success: true, hiddenItemIds: updated })
+    return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 })
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to update settings.' }, { status: 500 })
   }

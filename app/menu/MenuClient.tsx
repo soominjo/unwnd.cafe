@@ -17,20 +17,12 @@ type Selections = Record<string, { temp: string }>
 
 const EASE: [number, number, number, number] = [0.76, 0, 0.24, 1]
 
-const CATEGORY_ORDER = [
-  'signature', 'espresso', 'non-coffee', 'meal', 'waffle', 'snack',
-]
-
-const CATEGORY_LABELS: Record<string, string> = {
-  'signature':  'Signature',
-  'espresso':   'Espresso',
-  'non-coffee': 'Non-Coffee',
-  'meal':       'Meal',
-  'waffle':     'Waffle',
-  'snack':      'Snack',
+interface MenuCategoryInfo {
+  id: string
+  label: string
 }
 
-export default function MenuClient({ items }: { items: MenuItem[] }) {
+export default function MenuClient({ items, categories }: { items: MenuItem[]; categories: MenuCategoryInfo[] }) {
   const addItem  = useCartStore((s) => s.addItem)
   const openTray = useCartStore((s) => s.openTray)
   const [selections, setSelections]     = useState<Selections>({})
@@ -42,12 +34,15 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
     return { ...acc, [key]: [...(acc[key] ?? []), item] }
   }, {})
 
-  const categories = [
-    ...CATEGORY_ORDER.filter((c) => grouped[c]),
-    ...Object.keys(grouped).filter((c) => !CATEGORY_ORDER.includes(c)),
+  const categoryOrder = categories.map((c) => c.id)
+  const categoryLabels = Object.fromEntries(categories.map((c) => [c.id, c.label]))
+
+  const orderedCategories = [
+    ...categoryOrder.filter((c) => grouped[c]),
+    ...Object.keys(grouped).filter((c) => !categoryOrder.includes(c)),
   ]
 
-  const [activeTab, setActiveTab] = useState(categories[0] ?? '')
+  const [activeTab, setActiveTab] = useState(orderedCategories[0] ?? '')
   const activeItems = grouped[activeTab] ?? []
 
   function getSelection(id: string, item: MenuItem) {
@@ -77,7 +72,7 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
       {/* ── Category tabs ── */}
       <div className="sticky top-14.25 z-30 bg-foreground shrink-0">
         <div className="flex overflow-x-auto">
-          {categories.map((cat) => (
+          {orderedCategories.map((cat) => (
             <button
               key={cat}
               onClick={() => setActiveTab(cat)}
@@ -88,7 +83,7 @@ export default function MenuClient({ items }: { items: MenuItem[] }) {
                   : 'text-cream/55 hover:text-cream'
               }`}
             >
-              {CATEGORY_LABELS[cat] ?? cat}
+              {categoryLabels[cat] ?? cat}
               {activeTab === cat && (
                 <motion.span
                   layoutId="tab-bar"

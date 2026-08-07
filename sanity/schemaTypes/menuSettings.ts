@@ -12,5 +12,12 @@ export const menuSettings = defineType({
       of: [{ type: 'string' }],
       description: 'Built-in menu item IDs hidden via the POS.',
     }),
+    defineField({
+      name: 'categoryOrder',
+      title: 'Category Order',
+      type: 'array',
+      of: [{ type: 'string' }],
+      description: 'Category ids in display order, set by dragging category tabs in the POS.',
+    }),
   ],
 })

@@ -6,14 +6,6 @@ export const MENU: MenuCategory[] = [
     label: 'Signature',
     items: [
       {
-        id: 'spanish-seasalt-latte',
-        name: 'Spanish Seasalt Latte',
-        subtitle: 'Espresso · Milk · Condensed Milk · Sea Salt Cream',
-        priceHot: 140,
-        priceIce: 150,
-        priceFixed: null,
-      },
-      {
         id: 'white-mocha-americano',
         name: 'White Mocha Americano',
         subtitle: 'Espresso · White Chocolate Sauce · Breve',
@@ -44,14 +36,6 @@ export const MENU: MenuCategory[] = [
     label: 'Espresso',
     items: [
       {
-        id: 'americano',
-        name: 'Americano',
-        subtitle: 'Espresso · Water',
-        priceHot: 100,
-        priceIce: 100,
-        priceFixed: null,
-      },
-      {
         id: 'cafe-latte',
         name: 'Cafe Latte',
         subtitle: 'Espresso · Milk',
@@ -76,14 +60,6 @@ export const MENU: MenuCategory[] = [
         priceFixed: null,
       },
       {
-        id: 'caramel-macchiato',
-        name: 'Caramel Macchiato',
-        subtitle: 'Espresso · Caramel · Vanilla Syrup · Milk',
-        priceHot: 130,
-        priceIce: 140,
-        priceFixed: null,
-      },
-      {
         id: 'white-chocolate-mocha',
         name: 'White Chocolate Mocha',
         subtitle: 'Espresso · White Chocolate Sauce · Milk',
@@ -97,22 +73,6 @@ export const MENU: MenuCategory[] = [
     id: 'non-coffee',
     label: 'Non-Coffee',
     items: [
-      {
-        id: 'matcha-latte',
-        name: 'Matcha Latte',
-        subtitle: 'Ceremonial Matcha · Milk',
-        priceHot: 160,
-        priceIce: 170,
-        priceFixed: null,
-      },
-      {
-        id: 'matcha-seasalt-latte',
-        name: 'Matcha Seasalt Latte',
-        subtitle: 'Ceremonial Matcha · Milk · Seasalt Cream',
-        priceHot: 180,
-        priceIce: 190,
-        priceFixed: null,
-      },
       {
         id: 'chocolate-milk',
         name: 'Chocolate Milk',
@@ -134,67 +94,16 @@ export const MENU: MenuCategory[] = [
   {
     id: 'meal',
     label: 'Meal',
-    items: [
-      {
-        id: 'hungarian-sausage-meal',
-        name: 'Hungarian Sausage Meal',
-        subtitle: 'Hungarian sausage served with rice',
-        priceHot: null,
-        priceIce: null,
-        priceFixed: 150,
-      },
-      {
-        id: 'bacon-and-egg-meal',
-        name: 'Bacon and Egg Meal',
-        subtitle: 'Crispy bacon and egg served with rice',
-        priceHot: null,
-        priceIce: null,
-        priceFixed: 150,
-      },
-      {
-        id: 'pesto-tuna-fusilli',
-        name: 'Pesto Tuna Fusilli',
-        subtitle: 'Fusilli, basil pesto, flavorful tuna',
-        priceHot: null,
-        priceIce: null,
-        priceFixed: 160,
-      },
-    ],
+    items: [],
   },
   {
     id: 'waffle',
     label: 'Waffle',
-    items: [
-      {
-        id: 'nutella-waffle',
-        name: 'Nutella Waffle',
-        subtitle: 'Golden waffle, Nutella, sweet toppings',
-        priceHot: null,
-        priceIce: null,
-        priceFixed: 120,
-      },
-      {
-        id: 'cream-cheese-waffle',
-        name: 'Cream Cheese Waffle',
-        subtitle: 'Golden waffle, cream cheese',
-        priceHot: null,
-        priceIce: null,
-        priceFixed: 120,
-      },
-    ],
+    items: [],
   },
   {
     id: 'snack',
     label: 'Snack',
-    items: [
-      {
-        id: 'cheesy-beef-nachos',
-        name: 'Cheesy Beef Nachos',
-        subtitle: 'Crispy tortilla chips, seasoned beef, melted cheese',
-        priceHot: null,
-        priceIce: null,
-        priceFixed: 180,
-      },
-    ],
+    items: [],
   },
 ]

@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@point-of-sale/receipt-printer-encoder": "^3.0.3",
     "@sanity/image-url": "^1.2.0",
     "@sanity/vision": "^3.89.0",
     "framer-motion": "^12.35.1",

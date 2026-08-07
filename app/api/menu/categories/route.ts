@@ -2,42 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { client } from '@/sanity/lib/client'
 import { getWriteClient } from '@/sanity/lib/writeClient'
 import { requirePosAuth } from '@/lib/requirePosAuth'
+import { BUILT_IN_CATEGORIES, getResolvedCategories } from '@/lib/menuCategories'
 
 export const dynamic = 'force-dynamic'
-
-interface BuiltInCategory {
-  id: string
-  label: string
-  type: 'drink' | 'food'
-  order: number
-  isBuiltIn: true
-}
-
-const BUILT_IN_CATEGORIES: BuiltInCategory[] = [
-  { id: 'signature',  label: 'Signature',  type: 'drink', order: 1, isBuiltIn: true },
-  { id: 'espresso',   label: 'Espresso',   type: 'drink', order: 2, isBuiltIn: true },
-  { id: 'non-coffee', label: 'Non-Coffee', type: 'drink', order: 3, isBuiltIn: true },
-  { id: 'meal',       label: 'Meal',       type: 'food',  order: 4, isBuiltIn: true },
-  { id: 'waffle',     label: 'Waffle',     type: 'food',  order: 5, isBuiltIn: true },
-  { id: 'snack',      label: 'Snack',      type: 'food',  order: 6, isBuiltIn: true },
-]
 
 const fresh = client.withConfig({ useCdn: false })
 
 export async function GET() {
   try {
-    const userCategories = await fresh.fetch<{ _id: string; id: string; label: string; type: string; order: number }[]>(
-      `*[_type == "menuCategory"] | order(order asc)`,
-      {},
-      { cache: 'no-store' }
-    )
-
-    const builtInIds = new Set(BUILT_IN_CATEGORIES.map((c) => c.id))
-    const extra = userCategories
-      .filter((c) => !builtInIds.has(c.id))
-      .map((c) => ({ ...c, _sanityId: c._id, type: c.type as 'drink' | 'food', isBuiltIn: false as const }))
-
-    const categories = [...BUILT_IN_CATEGORIES, ...extra].sort((a, b) => a.order - b.order)
+    const categories = await getResolvedCategories()
     return NextResponse.json({ success: true, categories })
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to fetch categories.' }, { status: 500 })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { client } from '@/sanity/lib/client'
 import { getWriteClient } from '@/sanity/lib/writeClient'
 import { requirePosAuth } from '@/lib/requirePosAuth'
+import { isValidMenuItemInput } from '@/lib/validateMenuItemInput'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,8 @@ export async function GET() {
       priceHot: number | null
       priceIce: number | null
       priceFixed: number | null
+      addonType: 'drink' | 'food' | null
+      hiddenFromPos: boolean | null
     }[]>(
       `*[_type == "menuItem" && available != false] {
         _id,
@@ -25,7 +28,9 @@ export async function GET() {
         category,
         priceHot,
         priceIce,
-        "priceFixed": price
+        "priceFixed": price,
+        addonType,
+        hiddenFromPos
       }`,
       {},
       { cache: 'no-store' }
@@ -34,30 +39,6 @@ export async function GET() {
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to fetch menu items.' }, { status: 500 })
   }
-}
-
-const MAX_PRICE = 100_000
-
-interface MenuItemInput {
-  name: string
-  subtitle?: string
-  category: string
-  priceHot?: number | null
-  priceIce?: number | null
-  priceFixed?: number | null
-}
-
-function isValidMenuItemInput(body: unknown): body is MenuItemInput {
-  if (!body || typeof body !== 'object') return false
-  const b = body as Record<string, unknown>
-  if (typeof b.name !== 'string' || b.name.trim().length === 0 || b.name.length > 80) return false
-  if (typeof b.category !== 'string' || b.category.trim().length === 0 || b.category.length > 60) return false
-  if (b.subtitle !== undefined && b.subtitle !== null) {
-    if (typeof b.subtitle !== 'string' || b.subtitle.length > 200) return false
-  }
-  const validatePrice = (v: unknown) =>
-    v === undefined || v === null || (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= MAX_PRICE)
-  return validatePrice(b.priceHot) && validatePrice(b.priceIce) && validatePrice(b.priceFixed)
 }
 
 export async function POST(request: NextRequest) {
@@ -79,7 +60,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid menu item data' }, { status: 400 })
   }
 
-  const { name, subtitle, category, priceHot, priceIce, priceFixed } = body
+  const { name, subtitle, category, priceHot, priceIce, priceFixed, addonType, hiddenFromPos } = body
 
   const hasPrice = (priceHot ?? null) !== null || (priceIce ?? null) !== null || (priceFixed ?? null) !== null
   if (!hasPrice) {
@@ -96,6 +77,8 @@ export async function POST(request: NextRequest) {
       priceHot: priceHot ?? null,
       priceIce: priceIce ?? null,
       price: priceFixed ?? null,
+      addonType: addonType ?? null,
+      hiddenFromPos: hiddenFromPos ?? false,
       available: true,
     })
 
@@ -109,6 +92,8 @@ export async function POST(request: NextRequest) {
         priceHot: priceHot ?? null,
         priceIce: priceIce ?? null,
         priceFixed: priceFixed ?? null,
+        addonType: addonType ?? null,
+        hiddenFromPos: hiddenFromPos ?? false,
       },
     })
   } catch {

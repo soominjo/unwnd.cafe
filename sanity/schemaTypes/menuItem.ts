@@ -63,6 +63,19 @@ export const menuItem = defineType({
     }),
     // ─────────────────────────────────────────────────────────────
     defineField({
+      name: 'addonType',
+      title: 'Add-on Type',
+      type: 'string',
+      description: 'Only used for items in the "Add ons" category — distinguishes drink add-ons from food add-ons.',
+      options: {
+        list: [
+          { title: 'Drink', value: 'drink' },
+          { title: 'Food', value: 'food' },
+        ],
+        layout: 'radio',
+      },
+    }),
+    defineField({
       name: 'image',
       title: 'Image',
       type: 'image',
@@ -79,6 +92,13 @@ export const menuItem = defineType({
       title: 'Available',
       type: 'boolean',
       initialValue: true,
+    }),
+    defineField({
+      name: 'hiddenFromPos',
+      title: 'Hide from POS ordering',
+      type: 'boolean',
+      description: 'When enabled, this item is removed from the POS ordering grid but still appears on the customer-facing /menu page.',
+      initialValue: false,
     }),
     defineField({
       name: 'featured',

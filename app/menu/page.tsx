@@ -2,19 +2,10 @@ import { client } from '@/sanity/lib/client'
 import MenuClient from './MenuClient'
 import type { SanityMenuItem } from '@/types/sanity'
 import { MENU } from '@/app/pos/menuData'
+import { getResolvedCategories } from '@/lib/menuCategories'
+import { ADDON_CATEGORY_ID } from '@/app/pos/constants'
 
 export const revalidate = 3600 // re-fetch menu from Sanity once per hour
-
-// Remap old Sanity category IDs to the unified IDs used by menuData/POS
-const CATEGORY_ID_REMAP: Record<string, string> = {
-  'signature drink': 'signature',
-  'coffee':          'espresso',
-  'nachos':          'snack',
-}
-
-function normalizeCategoryId(cat: string): string {
-  return CATEGORY_ID_REMAP[cat] ?? cat
-}
 
 async function getSanityItems(): Promise<SanityMenuItem[]> {
   return client.fetch(
@@ -24,6 +15,17 @@ async function getSanityItems(): Promise<SanityMenuItem[]> {
   )
 }
 
+// The Sanity item schema has no explicit drinkType field — POS-created drink
+// items only carry priceHot/priceIce, so derive the Hot/Iced toggle from those
+// (mirrors the same derivation already done for the hardcoded fallback items).
+function deriveDrinkType(item: SanityMenuItem): SanityMenuItem['drinkType'] {
+  if (item.drinkType) return item.drinkType
+  if (item.priceHot != null && item.priceIce != null) return 'both'
+  if (item.priceHot != null) return 'hot'
+  if (item.priceIce != null) return 'iced'
+  return undefined
+}
+
 async function getHiddenItemIds(): Promise<string[]> {
   const doc = await client.fetch<{ hiddenItemIds?: string[] } | null>(
     `*[_type == "menuSettings" && _id == "menu-settings"][0]{ hiddenItemIds }`
@@ -31,12 +33,21 @@ async function getHiddenItemIds(): Promise<string[]> {
   return doc?.hiddenItemIds ?? []
 }
 
-function buildMergedItems(sanityItems: SanityMenuItem[], hiddenItemIds: string[]): SanityMenuItem[] {
-  const normalizedSanity = sanityItems.map((item) => ({
-    ...item,
-    category: normalizeCategoryId(item.category),
-    description: item.description ?? item.subtitle ?? undefined,
-  }))
+function buildMergedItems(
+  sanityItems: SanityMenuItem[],
+  hiddenItemIds: string[],
+  validCategoryIds: Set<string>
+): SanityMenuItem[] {
+  // Only mirror items whose category actually exists on the POS — an item
+  // filed under a category the POS doesn't have is not "on /pos", so it
+  // shouldn't surface here either (no silent remapping into a different tab).
+  const normalizedSanity = sanityItems
+    .filter((item) => validCategoryIds.has(item.category))
+    .map((item) => ({
+      ...item,
+      description: item.description ?? item.subtitle ?? undefined,
+      drinkType: deriveDrinkType(item),
+    }))
 
   // Map each hardcoded item name to its canonical category.
   // A Sanity item only replaces its hardcoded counterpart when BOTH name AND
@@ -57,25 +68,27 @@ function buildMergedItems(sanityItems: SanityMenuItem[], hiddenItemIds: string[]
 
   const sanityNames = new Set(validSanityItems.map((i) => i.name.toLowerCase().trim()))
 
-  const hardcodedItems: SanityMenuItem[] = MENU.flatMap((cat) =>
-    cat.items.map((item) => ({
-      _id: item.id,
-      name: item.name,
-      price: item.priceFixed ?? item.priceHot ?? item.priceIce ?? 0,
-      ...(item.priceHot != null && { priceHot: item.priceHot }),
-      ...(item.priceIce != null && { priceIce: item.priceIce }),
-      category: cat.id,
-      description: item.subtitle || undefined,
-      drinkType:
-        item.priceHot != null && item.priceIce != null
-          ? ('both' as const)
-          : item.priceHot != null
-          ? ('hot' as const)
-          : item.priceIce != null
-          ? ('iced' as const)
-          : undefined,
-    }))
-  )
+  const hardcodedItems: SanityMenuItem[] = MENU
+    .filter((cat) => validCategoryIds.has(cat.id))
+    .flatMap((cat) =>
+      cat.items.map((item) => ({
+        _id: item.id,
+        name: item.name,
+        price: item.priceFixed ?? item.priceHot ?? item.priceIce ?? 0,
+        ...(item.priceHot != null && { priceHot: item.priceHot }),
+        ...(item.priceIce != null && { priceIce: item.priceIce }),
+        category: cat.id,
+        description: item.subtitle || undefined,
+        drinkType:
+          item.priceHot != null && item.priceIce != null
+            ? ('both' as const)
+            : item.priceHot != null
+            ? ('hot' as const)
+            : item.priceIce != null
+            ? ('iced' as const)
+            : undefined,
+      }))
+    )
 
   const filteredHardcoded = hardcodedItems.filter(
     (i) =>
@@ -87,8 +100,16 @@ function buildMergedItems(sanityItems: SanityMenuItem[], hiddenItemIds: string[]
 }
 
 export default async function MenuPage() {
-  const [sanityItems, hiddenItemIds] = await Promise.all([getSanityItems(), getHiddenItemIds()])
-  const items = buildMergedItems(sanityItems, hiddenItemIds)
+  const [sanityItems, hiddenItemIds, resolvedCategories] = await Promise.all([
+    getSanityItems(),
+    getHiddenItemIds(),
+    getResolvedCategories({ fresh: false }),
+  ])
+
+  const menuCategories = resolvedCategories.filter((c) => c.id !== ADDON_CATEGORY_ID)
+  const validCategoryIds = new Set(menuCategories.map((c) => c.id))
+  const items = buildMergedItems(sanityItems, hiddenItemIds, validCategoryIds)
+  const categories = menuCategories.map((c) => ({ id: c.id, label: c.label }))
 
   return (
     <main className="min-h-screen bg-background text-foreground flex flex-col">
@@ -120,7 +141,7 @@ export default async function MenuPage() {
           </p>
         </div>
       ) : (
-        <MenuClient items={items as SanityMenuItem[]} />
+        <MenuClient items={items as SanityMenuItem[]} categories={categories} />
       )}
 
     </main>
