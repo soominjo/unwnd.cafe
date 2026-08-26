@@ -38,6 +38,12 @@ export interface OrderItem {
   parentLineId?: string
 }
 
+export interface LineDiscount {
+  lineId: string
+  name: string
+  amount: number
+}
+
 export interface SaleItem {
   lineId: string
   name: string

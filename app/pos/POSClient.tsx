@@ -3,12 +3,13 @@
 import { useState, useMemo, useCallback, memo, Fragment, useEffect } from 'react'
 import Link from 'next/link'
 import { MENU } from './menuData'
-import { variantClass } from './utils'
-import type { MenuItem, MenuCategory, OrderItem, Variant, Addon } from './types'
+import { variantClass, groupOrderItems } from './utils'
+import type { MenuItem, MenuCategory, OrderItem, Variant, Addon, LineDiscount } from './types'
 import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
 import MenuItemPopup from './MenuItemPopup'
 import CardActions from './CardActions'
 import ReceiptPreviewModal from './ReceiptPreviewModal'
+import OrderReviewModal from './OrderReviewModal'
 import { ADDON_CATEGORY_ID } from './constants'
 import { buildReceiptDocument, type ReceiptBlock, type ReceiptDiscountInput } from '@/lib/printer/receiptDocument'
 
@@ -105,32 +106,31 @@ export default function POSClient() {
     [orderItems]
   )
 
-  const discountedFoodItem = useMemo(
-    () => orderItems.find(i => i.pwdDiscounted && !i.lineId.startsWith('addon__') && i.variant === null) ?? null,
+  // Every PWD/Senior-discounted line (not just one food + one drink) contributes
+  // its own -20% line to the transaction, since a single transaction can bundle
+  // several customers' orders, each presenting their own PWD/Senior ID.
+  const discountedFoodItems = useMemo(
+    () => orderItems.filter(i => i.pwdDiscounted && !i.lineId.startsWith('addon__') && i.variant === null),
     [orderItems]
   )
 
-  const discountedDrinkItem = useMemo(
-    () => orderItems.find(i => i.pwdDiscounted && (i.variant === 'hot' || i.variant === 'ice')) ?? null,
+  const discountedDrinkItems = useMemo(
+    () => orderItems.filter(i => i.pwdDiscounted && (i.variant === 'hot' || i.variant === 'ice')),
     [orderItems]
   )
 
-  const foodAddonTotal = useMemo(
-    () => discountedFoodItem
-      ? orderItems.filter(i => i.parentLineId === discountedFoodItem.lineId).reduce((sum, i) => sum + i.price, 0)
-      : 0,
-    [discountedFoodItem, orderItems]
-  )
+  const lineDiscount = useCallback((item: OrderItem): LineDiscount => {
+    const addonTotal = orderItems
+      .filter(i => i.parentLineId === item.lineId)
+      .reduce((sum, i) => sum + i.price * i.qty, 0)
+    return { lineId: item.lineId, name: item.name, amount: Math.round((item.price + addonTotal) * 0.20) }
+  }, [orderItems])
 
-  const drinkAddonTotal = useMemo(
-    () => discountedDrinkItem
-      ? orderItems.filter(i => i.parentLineId === discountedDrinkItem.lineId).reduce((sum, i) => sum + i.price, 0)
-      : 0,
-    [discountedDrinkItem, orderItems]
-  )
+  const foodDiscountLines  = useMemo(() => discountedFoodItems.map(lineDiscount),  [discountedFoodItems, lineDiscount])
+  const drinkDiscountLines = useMemo(() => discountedDrinkItems.map(lineDiscount), [discountedDrinkItems, lineDiscount])
 
-  const pwdFoodDiscount  = useMemo(() => discountedFoodItem  ? Math.round((discountedFoodItem.price  + foodAddonTotal)  * 0.20) : 0, [discountedFoodItem, foodAddonTotal])
-  const pwdDrinkDiscount = useMemo(() => discountedDrinkItem ? Math.round((discountedDrinkItem.price + drinkAddonTotal) * 0.20) : 0, [discountedDrinkItem, drinkAddonTotal])
+  const pwdFoodDiscount  = useMemo(() => foodDiscountLines.reduce((sum, d) => sum + d.amount, 0),  [foodDiscountLines])
+  const pwdDrinkDiscount = useMemo(() => drinkDiscountLines.reduce((sum, d) => sum + d.amount, 0), [drinkDiscountLines])
   const discountAmount   = useMemo(() => pwdFoodDiscount + pwdDrinkDiscount, [pwdFoodDiscount, pwdDrinkDiscount])
   const grandTotal       = useMemo(() => total - discountAmount, [total, discountAmount])
 
@@ -150,15 +150,27 @@ export default function POSClient() {
     setSelectedLineId(lineId)
   }, [])
 
+  // With a line selected, the add-on attaches to it. With nothing selected —
+  // including an empty cart — the add-on becomes its own standalone order line,
+  // rendered by OrderPanel's "orphan add-ons" branch.
   function addAddon(addon: Addon) {
-    if (!selectedLineId) return
-    const addonLineId = `${addon.id}__${selectedLineId}`
+    const addonLineId = selectedLineId ? `${addon.id}__${selectedLineId}` : addon.id
     setOrderItems(prev => {
       const existing = prev.find(i => i.lineId === addonLineId)
       if (existing) {
         return prev.map(i => i.lineId === addonLineId ? { ...i, qty: i.qty + 1 } : i)
       }
-      return [...prev, { lineId: addonLineId, name: addon.name, variant: null, price: addon.price, qty: 1, parentLineId: selectedLineId }]
+      return [
+        ...prev,
+        {
+          lineId: addonLineId,
+          name: addon.name,
+          variant: null,
+          price: addon.price,
+          qty: 1,
+          ...(selectedLineId ? { parentLineId: selectedLineId } : {}),
+        },
+      ]
     })
   }
 
@@ -174,22 +186,10 @@ export default function POSClient() {
     if (willRemove && selectedLineId === lineId) setSelectedLineId(null)
   }
 
+  // Each line's discount toggles independently — a single transaction can carry
+  // several PWD/Senior-discounted food and drink lines at once.
   function toggleItemPwdDiscount(lineId: string) {
-    setOrderItems(prev => {
-      const item = prev.find(i => i.lineId === lineId)
-      if (!item) return prev
-      const isFood  = !item.lineId.startsWith('addon__') && item.variant === null
-      const isDrink = item.variant === 'hot' || item.variant === 'ice'
-      const turningOn = !item.pwdDiscounted
-      return prev.map(i => {
-        if (i.lineId === lineId) return { ...i, pwdDiscounted: turningOn }
-        if (!turningOn) return i
-        const iIsFood  = !i.lineId.startsWith('addon__') && i.variant === null
-        const iIsDrink = i.variant === 'hot' || i.variant === 'ice'
-        if ((isFood && iIsFood) || (isDrink && iIsDrink)) return { ...i, pwdDiscounted: false }
-        return i
-      })
-    })
+    setOrderItems(prev => prev.map(i => i.lineId === lineId ? { ...i, pwdDiscounted: !i.pwdDiscounted } : i))
   }
 
   function clearOrder() {
@@ -227,13 +227,10 @@ export default function POSClient() {
 
       if (withReceipt) {
         const paymentAmount = payment ?? grandTotal
-        const discounts: ReceiptDiscountInput[] = []
-        if (pwdFoodDiscount > 0) {
-          discounts.push({ label: `PWD Food -20% (${discountedFoodItem!.name})`, amount: pwdFoodDiscount })
-        }
-        if (pwdDrinkDiscount > 0) {
-          discounts.push({ label: `PWD Drink -20% (${discountedDrinkItem!.name})`, amount: pwdDrinkDiscount })
-        }
+        const discounts: ReceiptDiscountInput[] = [
+          ...foodDiscountLines.map(d => ({ label: `PWD Food -20% (${d.name})`, amount: d.amount })),
+          ...drinkDiscountLines.map(d => ({ label: `PWD Drink -20% (${d.name})`, amount: d.amount })),
+        ]
         setReceiptBlocks(buildReceiptDocument({
           shopName: 'unwnd. cafe',
           timestamp: new Date(),
@@ -533,7 +530,7 @@ export default function POSClient() {
                     label: `+${item.priceFixed} ${item.name}`,
                     price: item.priceFixed!,
                   }) : undefined}
-                  attachDisabled={!selectedLineId || orderItems.length === 0}
+                  hasSelection={!!selectedLineId}
                   onEdit={item._sanityId ? () => setEditingItem({ item: { ...item, _sanityId: item._sanityId! }, categoryId: category.id }) : undefined}
                   onDelete={item._sanityId ? () => handleDeleteItem(item._sanityId!) : undefined}
                   isDeleting={deletingItemId === item._sanityId}
@@ -570,10 +567,8 @@ export default function POSClient() {
             addons={addonAttachItems}
             total={total}
             grandTotal={grandTotal}
-            pwdFoodDiscount={pwdFoodDiscount}
-            pwdDrinkDiscount={pwdDrinkDiscount}
-            discountedFoodLineId={discountedFoodItem?.lineId ?? null}
-            discountedDrinkLineId={discountedDrinkItem?.lineId ?? null}
+            foodDiscountLines={foodDiscountLines}
+            drinkDiscountLines={drinkDiscountLines}
             selectedLineId={selectedLineId}
             payment={payment}
             customInput={customInput}
@@ -624,10 +619,8 @@ export default function POSClient() {
               addons={addonAttachItems}
               total={total}
               grandTotal={grandTotal}
-              pwdFoodDiscount={pwdFoodDiscount}
-              pwdDrinkDiscount={pwdDrinkDiscount}
-              discountedFoodLineId={discountedFoodItem?.lineId ?? null}
-              discountedDrinkLineId={discountedDrinkItem?.lineId ?? null}
+              foodDiscountLines={foodDiscountLines}
+              drinkDiscountLines={drinkDiscountLines}
               selectedLineId={selectedLineId}
               payment={payment}
               customInput={customInput}
@@ -672,123 +665,25 @@ export default function POSClient() {
         <ReceiptPreviewModal blocks={receiptBlocks} onClose={() => setReceiptBlocks(null)} />
       )}
 
-      {/* ── Confirm modal ── */}
+      {/* ── Order review modal (fullscreen, shown to the customer before charging) ── */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowConfirm(false)} />
-          <div className="relative z-50 bg-white border border-foreground/12 p-8 w-full max-w-md rounded-sm shadow-2xl">
-            <p className="text-[10px] uppercase tracking-[0.3em] text-foreground/55 mb-3">Total Due</p>
-            <p className="font-serif text-7xl tracking-tight text-foreground mb-1">₱{grandTotal.toFixed(0)}</p>
-            <p className="text-foreground/55 text-sm mb-6">
-              {itemCount} item{itemCount !== 1 ? 's' : ''} · {orderItems.length} line{orderItems.length !== 1 ? 's' : ''}
-            </p>
-
-            {/* Order summary */}
-            <div className="border-t border-foreground/10 pt-4 mb-2 space-y-2.5 max-h-48 overflow-y-auto">
-              {orderItems.map(item => (
-                <div key={item.lineId} className="flex justify-between text-sm">
-                  <span className="text-foreground/75">
-                    {item.name}
-                    {item.variant && (
-                      <span className={`ml-1.5 text-[10px] uppercase font-semibold tracking-wider ${variantClass(item.variant)}`}>
-                        ({item.variant})
-                      </span>
-                    )}
-                    {item.qty > 1 && (
-                      <span className="text-foreground/45 ml-1">×{item.qty}</span>
-                    )}
-                  </span>
-                  <span className="tabular-nums font-semibold text-foreground">₱{(item.price * item.qty).toFixed(0)}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Discount lines */}
-            {discountAmount > 0 && (
-              <div className="border-t border-foreground/10 pt-3 mb-4 space-y-1.5">
-                <div className="flex justify-between text-xs text-foreground/50">
-                  <span className="uppercase tracking-widest">Subtotal</span>
-                  <span className="tabular-nums">₱{total.toFixed(0)}</span>
-                </div>
-                {pwdFoodDiscount > 0 && (
-                  <div className="flex justify-between text-xs text-emerald-600 font-semibold">
-                    <span className="uppercase tracking-widest">PWD Food −20% ({discountedFoodItem!.name})</span>
-                    <span className="tabular-nums">−₱{pwdFoodDiscount}</span>
-                  </div>
-                )}
-                {pwdDrinkDiscount > 0 && (
-                  <div className="flex justify-between text-xs text-emerald-600 font-semibold">
-                    <span className="uppercase tracking-widest">PWD Drink −20% ({discountedDrinkItem!.name})</span>
-                    <span className="tabular-nums">−₱{pwdDrinkDiscount}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Change summary */}
-            {payment !== null && (
-              <div className={`border-t border-foreground/10 pt-4 mb-6 flex items-baseline justify-between ${discountAmount > 0 ? '' : 'mt-4'}`}>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.3em] text-foreground/55">Payment</p>
-                  <p className="font-semibold tabular-nums text-foreground mt-1">₱{payment.toFixed(0)}</p>
-                </div>
-                {payment >= grandTotal ? (
-                  <div className="text-right">
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-foreground/55">Change</p>
-                    <p className="font-serif text-4xl tracking-tight text-foreground tabular-nums mt-1">
-                      ₱{(payment - grandTotal).toFixed(0)}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-red-500 uppercase tracking-widest font-semibold">
-                    Short ₱{(grandTotal - payment).toFixed(0)}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {notes.trim() && (
-              <div className="border-t border-foreground/10 pt-4 mb-4">
-                <p className="text-[10px] uppercase tracking-[0.3em] text-foreground/55 mb-2">Notes</p>
-                <span className="inline-block bg-[#d4ede1] text-[#1f5c3c] text-xs px-2.5 py-1.5 rounded-lg rounded-tl-none leading-snug max-w-full wrap-break-word">
-                  {notes.trim()}
-                </span>
-              </div>
-            )}
-
-            {submitError && (
-              <p className="text-xs text-red-500 uppercase tracking-widest mb-4 font-medium">{submitError}</p>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setShowConfirm(false); setSubmitError(null) }}
-                disabled={isSubmitting}
-                className="flex-1 border border-foreground/15 text-foreground/60 text-xs uppercase tracking-widest py-4 hover:border-foreground/30 hover:text-foreground/80 transition-colors rounded-sm disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => completeSale(false)}
-                disabled={isSubmitting}
-                className="flex-2 bg-foreground text-cream text-xs uppercase tracking-widest py-4 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {pendingAction === 'plain' ? 'Saving…' : 'Order Complete ✓'}
-              </button>
-            </div>
-
-            <div className="border-t border-foreground/10 mt-4 pt-4">
-              <button
-                onClick={() => completeSale(true)}
-                disabled={isSubmitting}
-                className="w-full border border-foreground/20 text-foreground/70 text-[11px] uppercase tracking-widest py-3 font-semibold hover:border-foreground/35 hover:text-foreground hover:bg-foreground/4 active:scale-[0.99] transition-all rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {pendingAction === 'receipt' ? 'Saving…' : '🖨 Complete + Print Receipt'}
-              </button>
-              <p className="text-[10px] text-foreground/35 text-center mt-2">Only if the customer asks for one</p>
-            </div>
-          </div>
-        </div>
+        <OrderReviewModal
+          orderItems={orderItems}
+          itemCount={itemCount}
+          total={total}
+          grandTotal={grandTotal}
+          foodDiscountLines={foodDiscountLines}
+          drinkDiscountLines={drinkDiscountLines}
+          discountAmount={discountAmount}
+          payment={payment}
+          notes={notes}
+          isSubmitting={isSubmitting}
+          pendingAction={pendingAction}
+          submitError={submitError}
+          onCancel={() => { setShowConfirm(false); setSubmitError(null) }}
+          onCompletePlain={() => completeSale(false)}
+          onCompleteReceipt={() => completeSale(true)}
+        />
       )}
     </div>
   )
@@ -874,21 +769,22 @@ const ItemCard = memo(function ItemCard({
 })
 
 // ─── Addon Tile ───────────────────────────────────────────────────────────────
-// Items filed under the "Add ons" category aren't orderable on their own —
-// they're only attached to another line via the order panel's Add-ons row —
-// so they render as plain delete-able tiles instead of ItemCard's buy buttons.
+// Items filed under the "Add ons" category attach to whichever order line is
+// selected — or, with nothing selected (including an empty cart), add as their
+// own standalone order line. Either way they render as plain tiles instead of
+// ItemCard's hot/ice/buy buttons.
 
 const AddonTile = memo(function AddonTile({
   item,
   onAttach,
-  attachDisabled,
+  hasSelection,
   onEdit,
   onDelete,
   isDeleting,
 }: {
   item: MenuItem
   onAttach?: () => void
-  attachDisabled?: boolean
+  hasSelection?: boolean
   onEdit?: () => void
   onDelete?: () => void
   isDeleting?: boolean
@@ -918,8 +814,7 @@ const AddonTile = memo(function AddonTile({
       ) : onAttach && (
         <button
           onClick={onAttach}
-          disabled={attachDisabled}
-          title={attachDisabled ? 'Select an order line first' : 'Attach to selected item'}
+          title={hasSelection ? 'Attach to selected item' : 'Add as a new item'}
           className={`flex items-center justify-between px-5 py-5 text-cream transition-colors rounded-b-xl disabled:opacity-40 disabled:cursor-not-allowed ${
             isFoodAddon ? 'bg-[#8b5e3c] hover:bg-[#6f4a2f]' : 'bg-foreground hover:bg-foreground/85'
           } active:bg-foreground/95`}
@@ -941,10 +836,8 @@ function OrderPanel({
   addons,
   total,
   grandTotal,
-  pwdFoodDiscount,
-  pwdDrinkDiscount,
-  discountedFoodLineId,
-  discountedDrinkLineId,
+  foodDiscountLines,
+  drinkDiscountLines,
   selectedLineId,
   payment,
   customInput,
@@ -962,10 +855,8 @@ function OrderPanel({
   addons: Addon[]
   total: number
   grandTotal: number
-  pwdFoodDiscount: number
-  pwdDrinkDiscount: number
-  discountedFoodLineId: string | null
-  discountedDrinkLineId: string | null
+  foodDiscountLines: LineDiscount[]
+  drinkDiscountLines: LineDiscount[]
   selectedLineId: string | null
   payment: number | null
   customInput: string
@@ -995,15 +886,13 @@ function OrderPanel({
             <p className="text-foreground/40 text-sm">No items added yet</p>
           </div>
         ) : (() => {
-          const parentItems  = items.filter(i => !i.lineId.startsWith('addon__'))
-          const addonItems   = items.filter(i =>  i.lineId.startsWith('addon__'))
-          const orphanAddons = addonItems.filter(a => !a.parentLineId)
+          const { parentItems, addonsByParent, orphanAddons } = groupOrderItems(items)
           return (
             <>
               {parentItems.map(item => {
-                const hasDiscount  = item.lineId === discountedFoodLineId || item.lineId === discountedDrinkLineId
+                const hasDiscount  = !!item.pwdDiscounted
                 const isSelected   = item.lineId === selectedLineId
-                const childAddons  = addonItems.filter(a => a.parentLineId === item.lineId)
+                const childAddons  = addonsByParent.get(item.lineId) ?? []
 
                 return (
                   <Fragment key={item.lineId}>
@@ -1149,9 +1038,8 @@ function OrderPanel({
             <button
               key={addon.id}
               onClick={() => onAddAddon(addon)}
-              disabled={!selectedLineId || items.length === 0}
               title={addon.type ? `${addon.type} add-on` : undefined}
-              className={`flex-1 px-2 py-1.5 text-[11px] font-semibold border-y border-r rounded-sm transition-all disabled:opacity-25 disabled:cursor-not-allowed whitespace-nowrap text-center text-foreground/65 hover:text-foreground hover:bg-foreground/4 ${
+              className={`flex-1 px-2 py-1.5 text-[11px] font-semibold border-y border-r rounded-sm transition-all whitespace-nowrap text-center text-foreground/65 hover:text-foreground hover:bg-foreground/4 ${
                 addon.type === 'food'
                   ? 'border-l-2 border-l-[#8b5e3c] border-y-foreground/20 border-r-foreground/20 hover:border-y-[#8b5e3c]/45 hover:border-r-[#8b5e3c]/45'
                   : addon.type === 'drink'
@@ -1168,32 +1056,32 @@ function OrderPanel({
       {/* Footer: discount toggle + total + payment + actions */}
       <div className="px-6 pt-3 pb-3 border-t border-foreground/10 shrink-0 space-y-2.5">
 
-        {/* Discount breakdown — visible only when at least one item is discounted */}
-        {(discountedFoodLineId || discountedDrinkLineId) && (
+        {/* Discount breakdown — one row per discounted line, visible whenever any line is discounted */}
+        {(foodDiscountLines.length > 0 || drinkDiscountLines.length > 0) && (
           <div className="space-y-1 px-0.5">
             <div className="flex justify-between items-center">
               <span className="text-[10px] uppercase tracking-widest text-foreground/50 font-semibold">Subtotal</span>
               <span className="text-xs tabular-nums text-foreground/50">₱{total.toFixed(0)}</span>
             </div>
-            {pwdFoodDiscount > 0 && (
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-semibold">PWD Food −20%</span>
-                <span className="text-xs tabular-nums text-emerald-600 font-bold">−₱{pwdFoodDiscount}</span>
+            {foodDiscountLines.map(d => (
+              <div key={d.lineId} className="flex justify-between items-center gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-semibold truncate">PWD Food −20% ({d.name})</span>
+                <span className="text-xs tabular-nums text-emerald-600 font-bold shrink-0">−₱{d.amount}</span>
               </div>
-            )}
-            {pwdDrinkDiscount > 0 && (
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-semibold">PWD Drink −20%</span>
-                <span className="text-xs tabular-nums text-emerald-600 font-bold">−₱{pwdDrinkDiscount}</span>
+            ))}
+            {drinkDiscountLines.map(d => (
+              <div key={d.lineId} className="flex justify-between items-center gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-semibold truncate">PWD Drink −20% ({d.name})</span>
+                <span className="text-xs tabular-nums text-emerald-600 font-bold shrink-0">−₱{d.amount}</span>
               </div>
-            )}
+            ))}
           </div>
         )}
 
         {/* Total */}
         <div className="flex justify-between items-center">
           <span className="text-xs uppercase tracking-widest text-foreground/60 font-semibold">Total</span>
-          <span className="font-serif text-4xl tabular-nums text-foreground">₱{grandTotal.toFixed(0)}</span>
+          <span className="font-display font-semibold text-4xl tabular-nums text-foreground">₱{grandTotal.toFixed(0)}</span>
         </div>
 
         {/* Payment presets */}
@@ -1237,7 +1125,7 @@ function OrderPanel({
           payment >= grandTotal ? (
             <div className="flex items-baseline justify-between">
               <span className="text-[10px] uppercase tracking-[0.25em] text-foreground/60 font-semibold">Change</span>
-              <span className="font-serif text-2xl tracking-tight text-foreground tabular-nums">
+              <span className="font-display font-semibold text-2xl tracking-tight text-foreground tabular-nums">
                 ₱{(payment - grandTotal).toFixed(0)}
               </span>
             </div>

@@ -17,9 +17,10 @@
   --color-border:     var(--border);
   --color-cream:      var(--cream);
 
-  --font-sans:  var(--font-geist-sans);
-  --font-mono:  var(--font-geist-mono);
-  --font-serif: var(--font-cormorant);
+  --font-sans:    var(--font-geist-sans);
+  --font-mono:    var(--font-geist-mono);
+  --font-serif:   var(--font-cormorant);
+  --font-display: var(--font-poppins);
 }
 
 body {

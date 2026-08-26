@@ -1,6 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import type { ReceiptBlock } from '@/lib/printer/receiptDocument'
+import { downloadReceiptPdf } from '@/lib/printer/buildReceiptPdf'
 import ReceiptPreview from './ReceiptPreview'
 
 interface ReceiptPreviewModalProps {
@@ -8,7 +10,30 @@ interface ReceiptPreviewModalProps {
   onClose: () => void
 }
 
+function buildPdfFilename(): string {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
+  return `unwnd-receipt-${stamp}.pdf`
+}
+
 export default function ReceiptPreviewModal({ blocks, onClose }: ReceiptPreviewModalProps) {
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+
+  async function handleDownloadPdf() {
+    if (isDownloading) return
+    setIsDownloading(true)
+    setDownloadError(null)
+    try {
+      await downloadReceiptPdf(blocks, buildPdfFilename())
+    } catch {
+      setDownloadError('Failed to generate PDF. Try again.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -28,14 +53,24 @@ export default function ReceiptPreviewModal({ blocks, onClose }: ReceiptPreviewM
         </div>
 
         <div className="px-5 py-4 border-t border-foreground/10 shrink-0 space-y-2">
+          {downloadError && (
+            <p className="text-[10px] text-red-500 uppercase tracking-widest font-medium text-center">{downloadError}</p>
+          )}
           <button
             onClick={() => window.print()}
             className="w-full bg-foreground text-cream text-xs uppercase tracking-widest py-3 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm"
           >
-            Print / Save as PDF
+            🖨 Print Receipt
+          </button>
+          <button
+            onClick={handleDownloadPdf}
+            disabled={isDownloading}
+            className="w-full border border-foreground/20 text-foreground/70 text-xs uppercase tracking-widest py-3 font-semibold hover:border-foreground/35 hover:text-foreground hover:bg-foreground/4 active:scale-[0.99] transition-all rounded-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isDownloading ? 'Preparing PDF…' : '⬇ Download PDF'}
           </button>
           <p className="text-[10px] text-foreground/40 text-center">
-            No receipt printer connected yet — this prints via your browser.
+            Print uses your browser · PDF downloads as a full page, handy for emailing.
           </p>
         </div>
       </div>
