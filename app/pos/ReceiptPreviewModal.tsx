@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { ReceiptBlock } from '@/lib/printer/receiptDocument'
 import { downloadReceiptPdf } from '@/lib/printer/buildReceiptPdf'
+import { printViaRawBT } from '@/lib/printer/printViaRawBT'
 import ReceiptPreview from './ReceiptPreview'
 
 interface ReceiptPreviewModalProps {
@@ -57,10 +58,16 @@ export default function ReceiptPreviewModal({ blocks, onClose }: ReceiptPreviewM
             <p className="text-[10px] text-red-500 uppercase tracking-widest font-medium text-center">{downloadError}</p>
           )}
           <button
-            onClick={() => window.print()}
+            onClick={() => printViaRawBT(blocks)}
             className="w-full bg-foreground text-cream text-xs uppercase tracking-widest py-3 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm"
           >
-            🖨 Print Receipt
+            🖶 Print to Thermal Printer
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="w-full border border-foreground/20 text-foreground/70 text-xs uppercase tracking-widest py-3 font-semibold hover:border-foreground/35 hover:text-foreground hover:bg-foreground/4 active:scale-[0.99] transition-all rounded-sm"
+          >
+            🖨 Print via Browser
           </button>
           <button
             onClick={handleDownloadPdf}
@@ -70,7 +77,7 @@ export default function ReceiptPreviewModal({ blocks, onClose }: ReceiptPreviewM
             {isDownloading ? 'Preparing PDF…' : '⬇ Download PDF'}
           </button>
           <p className="text-[10px] text-foreground/40 text-center">
-            Print uses your browser · PDF downloads as a full page, handy for emailing.
+            Thermal print needs the RawBT app on this device · Browser print uses the system dialog · PDF downloads as a full page, handy for emailing.
           </p>
         </div>
       </div>
