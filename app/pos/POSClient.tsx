@@ -665,7 +665,7 @@ export default function POSClient() {
         <ReceiptPreviewModal blocks={receiptBlocks} onClose={() => setReceiptBlocks(null)} />
       )}
 
-      {/* ── Order review modal (fullscreen, shown to the customer before charging) ── */}
+      {/* ── Order review modal (centered card, shown to the customer before charging) ── */}
       {showConfirm && (
         <OrderReviewModal
           orderItems={orderItems}
