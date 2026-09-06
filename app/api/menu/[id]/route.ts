@@ -36,7 +36,7 @@ export async function PATCH(
     return NextResponse.json({ success: false, error: 'Invalid menu item data' }, { status: 400 })
   }
 
-  const { name, subtitle, priceHot, priceIce, priceFixed, addonType, hiddenFromPos } = body
+  const { name, subtitle, priceHot, priceIce, priceFixed, addonType, hiddenFromPos, applicableCategories } = body
 
   const hasPrice = (priceHot ?? null) !== null || (priceIce ?? null) !== null || (priceFixed ?? null) !== null
   if (!hasPrice) {
@@ -65,6 +65,7 @@ export async function PATCH(
         price: priceFixed ?? null,
         addonType: addonType ?? null,
         hiddenFromPos: hiddenFromPos ?? false,
+        applicableCategories: applicableCategories ?? null,
       })
       .commit()
 
@@ -80,6 +81,7 @@ export async function PATCH(
         priceFixed: priceFixed ?? null,
         addonType: addonType ?? null,
         hiddenFromPos: hiddenFromPos ?? false,
+        applicableCategories: applicableCategories ?? null,
       },
     })
   } catch {

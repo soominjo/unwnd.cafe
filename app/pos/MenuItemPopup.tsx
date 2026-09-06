@@ -8,6 +8,7 @@ interface MenuItemPopupProps {
   categoryId: string
   categoryLabel: string
   categoryType: 'drink' | 'food'
+  allCategories: { id: string; label: string }[]
   item?: MenuItem & { _sanityId: string }
   onSaved: (item: MenuItem & { category: string }) => void
   onClose: () => void
@@ -17,6 +18,7 @@ export default function MenuItemPopup({
   categoryId,
   categoryLabel,
   categoryType,
+  allCategories,
   item,
   onSaved,
   onClose,
@@ -31,8 +33,13 @@ export default function MenuItemPopup({
   const [priceFixed, setPriceFixed] = useState(item?.priceFixed != null ? String(item.priceFixed) : '')
   const [addonType, setAddonType] = useState<AddonType>(item?.addonType ?? 'drink')
   const [hiddenFromPos, setHiddenFromPos] = useState(item?.hiddenFromPos ?? false)
+  const [applicableCategories, setApplicableCategories] = useState<string[]>(item?.applicableCategories ?? [])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  function toggleApplicableCategory(id: string) {
+    setApplicableCategories((prev) => prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id])
+  }
 
   const isDrink = categoryType === 'drink'
 
@@ -63,6 +70,7 @@ export default function MenuItemPopup({
           priceFixed: isDrink ? null : pf,
           addonType: isAddon ? addonType : null,
           hiddenFromPos,
+          applicableCategories: isAddon && applicableCategories.length > 0 ? applicableCategories : undefined,
         }),
       })
       const data = await res.json()
@@ -77,6 +85,7 @@ export default function MenuItemPopup({
         priceFixed:    data.item.priceFixed,
         addonType:     data.item.addonType ?? null,
         hiddenFromPos: data.item.hiddenFromPos ?? false,
+        applicableCategories: data.item.applicableCategories ?? null,
         category:      categoryId,
       })
       onClose()
@@ -186,6 +195,26 @@ export default function MenuItemPopup({
                       className="accent-foreground"
                     />
                     <span className="text-sm text-foreground capitalize">{t}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isAddon && (
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest text-foreground/55 font-semibold mb-1.5">Show for categories</label>
+              <p className="text-[11px] text-foreground/40 mb-2">Leave all unchecked to show this add-on everywhere.</p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                {allCategories.map((c) => (
+                  <label key={c.id} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={applicableCategories.includes(c.id)}
+                      onChange={() => toggleApplicableCategory(c.id)}
+                      className="accent-foreground"
+                    />
+                    <span className="text-sm text-foreground">{c.label}</span>
                   </label>
                 ))}
               </div>

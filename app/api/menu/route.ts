@@ -20,6 +20,7 @@ export async function GET() {
       priceFixed: number | null
       addonType: 'drink' | 'food' | null
       hiddenFromPos: boolean | null
+      applicableCategories: string[] | null
     }[]>(
       `*[_type == "menuItem" && available != false] {
         _id,
@@ -30,7 +31,8 @@ export async function GET() {
         priceIce,
         "priceFixed": price,
         addonType,
-        hiddenFromPos
+        hiddenFromPos,
+        applicableCategories
       }`,
       {},
       { cache: 'no-store' }
@@ -60,7 +62,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid menu item data' }, { status: 400 })
   }
 
-  const { name, subtitle, category, priceHot, priceIce, priceFixed, addonType, hiddenFromPos } = body
+  const { name, subtitle, category, priceHot, priceIce, priceFixed, addonType, hiddenFromPos, applicableCategories } = body
 
   const hasPrice = (priceHot ?? null) !== null || (priceIce ?? null) !== null || (priceFixed ?? null) !== null
   if (!hasPrice) {
@@ -79,6 +81,7 @@ export async function POST(request: NextRequest) {
       price: priceFixed ?? null,
       addonType: addonType ?? null,
       hiddenFromPos: hiddenFromPos ?? false,
+      applicableCategories: applicableCategories ?? null,
       available: true,
     })
 
@@ -94,6 +97,7 @@ export async function POST(request: NextRequest) {
         priceFixed: priceFixed ?? null,
         addonType: addonType ?? null,
         hiddenFromPos: hiddenFromPos ?? false,
+        applicableCategories: applicableCategories ?? null,
       },
     })
   } catch {

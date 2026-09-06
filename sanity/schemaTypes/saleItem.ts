@@ -10,5 +10,6 @@ export const saleItem = defineType({
     defineField({ name: 'variant', title: 'Variant',  type: 'string' }),
     defineField({ name: 'price',   title: 'Price',    type: 'number' }),
     defineField({ name: 'qty',     title: 'Qty',      type: 'number' }),
+    defineField({ name: 'note',    title: 'Note',     type: 'string' }),
   ],
 })

@@ -35,12 +35,22 @@ export default function ReceiptPreviewModal({ blocks, onClose }: ReceiptPreviewM
     }
   }
 
+  function handlePrintThermal() {
+    printViaRawBT(blocks)
+    onClose()
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative z-50 bg-white border border-foreground/12 rounded-sm shadow-2xl w-full max-w-sm max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-foreground/10 shrink-0">
-          <p className="text-[10px] uppercase tracking-[0.3em] text-foreground/55 font-semibold">Receipt Preview</p>
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-foreground/55 font-semibold">Receipt Preview</p>
+            <span className="text-[9px] uppercase tracking-widest text-foreground/40 font-semibold bg-foreground/5 border border-foreground/10 rounded-full px-2 py-0.5">
+              58mm · 32 col
+            </span>
+          </div>
           <button
             onClick={onClose}
             className="text-foreground/50 hover:text-foreground text-xl leading-none w-8 h-8 flex items-center justify-center transition-colors"
@@ -49,7 +59,7 @@ export default function ReceiptPreviewModal({ blocks, onClose }: ReceiptPreviewM
           </button>
         </div>
 
-        <div className="overflow-y-auto py-4">
+        <div className="overflow-y-auto py-4 bg-foreground/[0.03]">
           <ReceiptPreview blocks={blocks} />
         </div>
 
@@ -58,7 +68,7 @@ export default function ReceiptPreviewModal({ blocks, onClose }: ReceiptPreviewM
             <p className="text-[10px] text-red-500 uppercase tracking-widest font-medium text-center">{downloadError}</p>
           )}
           <button
-            onClick={() => printViaRawBT(blocks)}
+            onClick={handlePrintThermal}
             className="w-full bg-foreground text-cream text-xs uppercase tracking-widest py-3 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm"
           >
             🖶 Print to Thermal Printer

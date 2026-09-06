@@ -10,6 +10,7 @@ import MenuItemPopup from './MenuItemPopup'
 import CardActions from './CardActions'
 import ReceiptPreviewModal from './ReceiptPreviewModal'
 import OrderReviewModal from './OrderReviewModal'
+import ItemNotePopover from './ItemNotePopover'
 import { ADDON_CATEGORY_ID } from './constants'
 import { buildReceiptDocument, type ReceiptBlock, type ReceiptDiscountInput } from '@/lib/printer/receiptDocument'
 
@@ -23,6 +24,7 @@ interface DynamicMenuItem {
   priceFixed: number | null
   addonType: 'drink' | 'food' | null
   hiddenFromPos: boolean | null
+  applicableCategories: string[] | null
 }
 
 export default function POSClient() {
@@ -134,7 +136,7 @@ export default function POSClient() {
   const discountAmount   = useMemo(() => pwdFoodDiscount + pwdDrinkDiscount, [pwdFoodDiscount, pwdDrinkDiscount])
   const grandTotal       = useMemo(() => total - discountAmount, [total, discountAmount])
 
-  const addItem = useCallback((item: MenuItem, variant: Variant | null) => {
+  const addItem = useCallback((item: MenuItem, variant: Variant | null, categoryId: string) => {
     const price =
       variant === 'ice' ? item.priceIce! :
       variant === 'hot' ? item.priceHot! :
@@ -145,7 +147,7 @@ export default function POSClient() {
       if (existing) {
         return prev.map(i => i.lineId === lineId ? { ...i, qty: i.qty + 1 } : i)
       }
-      return [...prev, { lineId, name: item.name, variant, price, qty: 1 }]
+      return [...prev, { lineId, name: item.name, variant, price, qty: 1, categoryId }]
     })
     setSelectedLineId(lineId)
   }, [])
@@ -192,6 +194,10 @@ export default function POSClient() {
     setOrderItems(prev => prev.map(i => i.lineId === lineId ? { ...i, pwdDiscounted: !i.pwdDiscounted } : i))
   }
 
+  function setItemNote(lineId: string, note: string) {
+    setOrderItems(prev => prev.map(i => i.lineId === lineId ? { ...i, note: note.trim() || undefined } : i))
+  }
+
   function clearOrder() {
     setOrderItems([])
     setShowConfirm(false)
@@ -209,6 +215,12 @@ export default function POSClient() {
     setPendingAction(withReceipt ? 'receipt' : 'plain')
     setSubmitError(null)
     try {
+      // Pre-formatted so the persisted record and the live receipt show the
+      // identical label — reprints later reuse this string verbatim.
+      const discountLines: LineDiscount[] = [
+        ...foodDiscountLines.map(d => ({ lineId: d.lineId, name: `PWD Food -20% (${d.name})`, amount: d.amount })),
+        ...drinkDiscountLines.map(d => ({ lineId: d.lineId, name: `PWD Drink -20% (${d.name})`, amount: d.amount })),
+      ]
       const res = await fetch('/api/sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -216,6 +228,8 @@ export default function POSClient() {
           total: grandTotal,
           paymentAmount: payment ?? grandTotal,
           items: orderItems,
+          subtotal: total,
+          ...(discountLines.length > 0 ? { discounts: discountLines } : {}),
           ...(notes.trim() ? { notes: notes.trim() } : {}),
         }),
       })
@@ -227,10 +241,7 @@ export default function POSClient() {
 
       if (withReceipt) {
         const paymentAmount = payment ?? grandTotal
-        const discounts: ReceiptDiscountInput[] = [
-          ...foodDiscountLines.map(d => ({ label: `PWD Food -20% (${d.name})`, amount: d.amount })),
-          ...drinkDiscountLines.map(d => ({ label: `PWD Drink -20% (${d.name})`, amount: d.amount })),
-        ]
+        const discounts: ReceiptDiscountInput[] = discountLines.map(d => ({ label: d.name, amount: d.amount }))
         setReceiptBlocks(buildReceiptDocument({
           shopName: 'unwnd. cafe',
           timestamp: new Date(),
@@ -239,6 +250,7 @@ export default function POSClient() {
             variant: item.variant,
             qty: item.qty,
             lineTotal: item.price * item.qty,
+            note: item.note,
           })),
           subtotal: total,
           discounts,
@@ -279,6 +291,7 @@ export default function POSClient() {
         priceFixed: item.priceFixed,
         addonType: item.addonType ?? null,
         hiddenFromPos: item.hiddenFromPos ?? false,
+        applicableCategories: item.applicableCategories ?? null,
       },
     ])
     setActiveCategoryId(item.category)
@@ -299,6 +312,7 @@ export default function POSClient() {
       priceFixed: item.priceFixed,
       addonType: item.addonType ?? null,
       hiddenFromPos: item.hiddenFromPos ?? false,
+      applicableCategories: item.applicableCategories ?? null,
     } : i))
   }
 
@@ -392,6 +406,7 @@ export default function POSClient() {
           priceFixed: i.priceFixed,
           addonType: i.addonType,
           hiddenFromPos: i.hiddenFromPos ?? false,
+          applicableCategories: i.applicableCategories ?? null,
         }))
       const uniqueHardcoded = hardcoded.filter(
         (item) => !validSanityNames.has(item.name.toLowerCase().trim())
@@ -425,10 +440,26 @@ export default function POSClient() {
   // in the order panel — not orderable menu items in their own right.
   // The 'addon__' id prefix is load-bearing: order-line detection elsewhere
   // (OrderPanel, toggleItemPwdDiscount) matches lineId.startsWith('addon__').
+  // Smart-filtered: when an order line is selected, only add-ons whose
+  // `applicableCategories` includes that line's source category (or that have
+  // no restriction set at all) are offered — narrows an 11-item add-on list
+  // down to the handful relevant to whatever was just tapped. With nothing
+  // selected (empty cart, or adding a standalone/orphan add-on) the full list
+  // shows, same as before this existed.
+  const selectedCategoryId = useMemo(
+    () => orderItems.find((i) => i.lineId === selectedLineId)?.categoryId,
+    [orderItems, selectedLineId]
+  )
+
   const addonAttachItems = useMemo<Addon[]>(() => {
     const addonCategory = mergedMenu.find((c) => c.id === ADDON_CATEGORY_ID)
     return (addonCategory?.items ?? [])
       .filter((i) => i.priceFixed !== null && !i.hiddenFromPos)
+      .filter((i) => {
+        if (!selectedCategoryId) return true
+        const restrictions = i.applicableCategories
+        return !restrictions || restrictions.length === 0 || restrictions.includes(selectedCategoryId)
+      })
       .map((i) => ({
         id:        `addon__${i._sanityId ?? i.id}`,
         _sanityId: i._sanityId,
@@ -437,7 +468,7 @@ export default function POSClient() {
         price:     i.priceFixed!,
         type:      i.addonType ?? null,
       }))
-  }, [mergedMenu])
+  }, [mergedMenu, selectedCategoryId])
 
   return (
     <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
@@ -541,7 +572,7 @@ export default function POSClient() {
                 <ItemCard
                   key={item.id}
                   item={item}
-                  onAdd={addItem}
+                  onAdd={(item, variant) => addItem(item, variant, category.id)}
                   onEdit={item._sanityId ? () => setEditingItem({ item: { ...item, _sanityId: item._sanityId! }, categoryId: category.id }) : undefined}
                   onDelete={item._sanityId ? () => handleDeleteItem(item._sanityId!) : undefined}
                   isDeleting={deletingItemId === item._sanityId}
@@ -581,6 +612,7 @@ export default function POSClient() {
             onNotesChange={setNotes}
             onSelectItem={setSelectedLineId}
             onToggleItemDiscount={toggleItemPwdDiscount}
+            onSetItemNote={setItemNote}
           />
         </aside>
       </div>
@@ -633,6 +665,7 @@ export default function POSClient() {
               onNotesChange={setNotes}
               onSelectItem={setSelectedLineId}
               onToggleItemDiscount={toggleItemPwdDiscount}
+              onSetItemNote={setItemNote}
             />
           </div>
         </div>
@@ -654,6 +687,7 @@ export default function POSClient() {
           categoryId={editingItem?.categoryId ?? addItemCategory!}
           categoryLabel={mergedMenu.find((c) => c.id === (editingItem?.categoryId ?? addItemCategory))?.label ?? ''}
           categoryType={categoriesForModal.find((c) => c.id === (editingItem?.categoryId ?? addItemCategory))?.type ?? 'drink'}
+          allCategories={categoriesForModal.filter((c) => c.id !== ADDON_CATEGORY_ID)}
           item={editingItem?.item}
           onSaved={editingItem ? handleItemUpdated : handleItemAdded}
           onClose={() => { setAddItemCategory(null); setEditingItem(null) }}
@@ -850,6 +884,7 @@ function OrderPanel({
   onNotesChange,
   onSelectItem,
   onToggleItemDiscount,
+  onSetItemNote,
 }: {
   items: OrderItem[]
   addons: Addon[]
@@ -869,6 +904,7 @@ function OrderPanel({
   onNotesChange: (value: string) => void
   onSelectItem: (lineId: string) => void
   onToggleItemDiscount: (lineId: string) => void
+  onSetItemNote: (lineId: string, note: string) => void
 }) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -915,8 +951,14 @@ function OrderPanel({
                             SC/PWD −20% applied
                           </p>
                         )}
+                        {item.note && (
+                          <p className="text-[10px] text-amber-600 font-semibold mt-0.5 tracking-wide truncate">
+                            📝 {item.note}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
+                        <ItemNotePopover note={item.note} onSave={(text) => onSetItemNote(item.lineId, text)} />
                         <button
                           onClick={e => { e.stopPropagation(); onToggleItemDiscount(item.lineId) }}
                           title="Toggle PWD/Senior 20% discount"

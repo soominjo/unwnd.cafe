@@ -23,6 +23,17 @@ export const sale = defineType({
       type: 'number',
     }),
     defineField({
+      name: 'subtotal',
+      title: 'Subtotal before discounts (₱)',
+      type: 'number',
+    }),
+    defineField({
+      name: 'discounts',
+      title: 'Discounts',
+      type: 'array',
+      of: [{ type: 'saleDiscount' }],
+    }),
+    defineField({
       name: 'items',
       title: 'Items',
       type: 'array',

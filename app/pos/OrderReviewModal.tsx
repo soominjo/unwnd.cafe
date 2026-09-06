@@ -94,6 +94,9 @@ export default function OrderReviewModal({
                         <span className="text-xs text-emerald-600 font-semibold tracking-wide">PWD/Senior −20%</span>
                       )}
                     </div>
+                    {item.note && (
+                      <p className="text-xs text-amber-600 font-semibold tracking-wide mt-1">📝 {item.note}</p>
+                    )}
                   </div>
                   <span className="text-base tabular-nums font-bold text-foreground shrink-0">
                     ₱{(item.price * item.qty).toFixed(0)}

@@ -13,12 +13,21 @@ interface SaleItemInput {
   variant: string | null
   price:   number
   qty:     number
+  note?:   string
+}
+
+interface SaleDiscountInput {
+  lineId: string
+  name:   string
+  amount: number
 }
 
 interface SaleInput {
   total:         number
   paymentAmount: number
   items:         SaleItemInput[]
+  subtotal?:     number
+  discounts?:    SaleDiscountInput[]
   notes?:        string
 }
 
@@ -40,6 +49,20 @@ function isValidSaleInput(body: unknown): body is SaleInput {
     if (typeof n !== 'string') return false
     if (n.length > 100) return false
   }
+  if (b.subtotal !== undefined) {
+    if (typeof b.subtotal !== 'number' || !Number.isFinite(b.subtotal) || b.subtotal < 0 || b.subtotal > MAX_PRICE) return false
+  }
+  if (b.discounts !== undefined) {
+    if (!Array.isArray(b.discounts) || b.discounts.length > 50) return false
+    const discountsValid = b.discounts.every((d: unknown) => {
+      if (!d || typeof d !== 'object') return false
+      const dd = d as Record<string, unknown>
+      if (typeof dd.lineId !== 'string' || dd.lineId.length > 100) return false
+      if (typeof dd.name !== 'string' || dd.name.length === 0 || dd.name.length > 200) return false
+      return typeof dd.amount === 'number' && Number.isFinite(dd.amount) && dd.amount >= 0 && dd.amount <= MAX_PRICE
+    })
+    if (!discountsValid) return false
+  }
   return b.items.every((item: unknown) => {
     if (!item || typeof item !== 'object') return false
     const i = item as Record<string, unknown>
@@ -48,6 +71,7 @@ function isValidSaleInput(body: unknown): body is SaleInput {
     if (typeof i.price !== 'number' || !Number.isFinite(i.price) || i.price < 0 || i.price > MAX_PRICE) return false
     if (typeof i.qty !== 'number' || !Number.isFinite(i.qty) || i.qty < 1 || i.qty > MAX_QTY) return false
     if (typeof i.variant === 'string' && i.variant.length > 100) return false
+    if (i.note !== undefined && (typeof i.note !== 'string' || i.note.length > 200)) return false
     return (typeof i.variant === 'string' || i.variant === null)
   })
 }
@@ -71,7 +95,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid sale data' }, { status: 400 })
   }
 
-  const { total, paymentAmount, items, notes } = body
+  const { total, paymentAmount, items, notes, subtotal, discounts } = body
   const change = paymentAmount - total
 
   try {
@@ -81,7 +105,17 @@ export async function POST(request: NextRequest) {
       total,
       paymentAmount,
       change,
+      ...(subtotal !== undefined ? { subtotal } : {}),
       ...(notes ? { notes: notes.trim() } : {}),
+      ...(discounts && discounts.length > 0 ? {
+        discounts: discounts.map((d) => ({
+          _type:  'saleDiscount',
+          _key:   d.lineId,
+          lineId: d.lineId,
+          name:   d.name,
+          amount: d.amount,
+        })),
+      } : {}),
       items: items.map((item) => ({
         _type:   'saleItem',
         _key:    item.lineId,
@@ -90,6 +124,7 @@ export async function POST(request: NextRequest) {
         variant: item.variant ?? null,
         price:   item.price,
         qty:     item.qty,
+        ...(item.note ? { note: item.note } : {}),
       })),
     })
     return NextResponse.json({ success: true, id: doc._id })

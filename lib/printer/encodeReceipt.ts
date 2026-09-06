@@ -46,6 +46,9 @@ export function encodeReceiptToEscPos(blocks: ReceiptBlock[], options: EncodeRec
         )
         break
       }
+      case 'itemNote':
+        encoder.line(`  » ${block.text}`)
+        break
       case 'total': {
         const value = `${block.isDiscount ? '-' : ''}${money(block.value)}`
         encoder.table(

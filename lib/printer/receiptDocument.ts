@@ -7,6 +7,7 @@ export type ReceiptBlock =
   | { kind: 'meta'; text: string }
   | { kind: 'rule'; style?: 'single' | 'double' }
   | { kind: 'item'; name: string; variant: string | null; qty: number; lineTotal: number }
+  | { kind: 'itemNote'; text: string }
   | { kind: 'total'; label: string; value: number; emphasis?: boolean; isDiscount?: boolean }
   | { kind: 'note'; text: string }
   | { kind: 'footer'; text: string }
@@ -16,6 +17,7 @@ export interface ReceiptItemInput {
   variant: string | null
   qty: number
   lineTotal: number
+  note?: string
 }
 
 export interface ReceiptDiscountInput {
@@ -52,6 +54,9 @@ export function buildReceiptDocument(input: ReceiptInput): ReceiptBlock[] {
 
   for (const item of input.items) {
     blocks.push({ kind: 'item', name: item.name, variant: item.variant, qty: item.qty, lineTotal: item.lineTotal })
+    if (item.note?.trim()) {
+      blocks.push({ kind: 'itemNote', text: item.note.trim() })
+    }
   }
 
   blocks.push({ kind: 'rule' })

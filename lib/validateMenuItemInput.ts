@@ -9,6 +9,7 @@ export interface MenuItemInput {
   priceFixed?: number | null
   addonType?: 'drink' | 'food' | null
   hiddenFromPos?: boolean
+  applicableCategories?: string[] | null
 }
 
 export function isValidMenuItemInput(body: unknown): body is MenuItemInput {
@@ -23,6 +24,10 @@ export function isValidMenuItemInput(body: unknown): body is MenuItemInput {
     if (b.addonType !== 'drink' && b.addonType !== 'food') return false
   }
   if (b.hiddenFromPos !== undefined && typeof b.hiddenFromPos !== 'boolean') return false
+  if (b.applicableCategories !== undefined && b.applicableCategories !== null) {
+    if (!Array.isArray(b.applicableCategories)) return false
+    if (!b.applicableCategories.every((c) => typeof c === 'string' && c.length > 0 && c.length <= 60)) return false
+  }
   const validatePrice = (v: unknown) =>
     v === undefined || v === null || (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= MAX_MENU_ITEM_PRICE)
   return validatePrice(b.priceHot) && validatePrice(b.priceIce) && validatePrice(b.priceFixed)

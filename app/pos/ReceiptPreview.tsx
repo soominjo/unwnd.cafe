@@ -9,15 +9,28 @@ function formatMoney(value: number): string {
   return `₱${value.toFixed(2)}`
 }
 
+const TORN_EDGE =
+  'polygon(0% 0%,4% 100%,8% 0%,12% 100%,16% 0%,20% 100%,24% 0%,28% 100%,32% 0%,36% 100%,40% 0%,44% 100%,48% 0%,52% 100%,56% 0%,60% 100%,64% 0%,68% 100%,72% 0%,76% 100%,80% 0%,84% 100%,88% 0%,92% 100%,96% 0%,100% 100%,100% 0%)'
+
 export default function ReceiptPreview({ blocks, columns = 32 }: ReceiptPreviewProps) {
   return (
-    <div
-      className="receipt-print-area bg-white text-black font-mono text-[11px] leading-relaxed mx-auto px-3 py-4"
-      style={{ width: `${columns}ch` }}
-    >
-      {blocks.map((block, i) => (
-        <ReceiptBlockView key={i} block={block} />
-      ))}
+    <div className="mx-auto" style={{ width: `${columns}ch` }}>
+      <div
+        className="h-2 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+        style={{ clipPath: TORN_EDGE }}
+      />
+      <div className="receipt-print-area bg-white text-black font-mono text-[11px] leading-[1.55] px-3 py-4 shadow-[0_2px_10px_rgba(0,0,0,0.12)]">
+        {blocks.map((block, i) => (
+          <ReceiptBlockView key={i} block={block} />
+        ))}
+        <div className="flex items-center gap-1.5 pt-3 mt-1 border-t border-dotted border-black/25 text-black/30">
+          <span className="text-[9px] tracking-[0.3em] uppercase">✂ cut here</span>
+        </div>
+      </div>
+      <div
+        className="h-2 bg-white shadow-[0_-1px_2px_rgba(0,0,0,0.08)] rotate-180"
+        style={{ clipPath: TORN_EDGE }}
+      />
     </div>
   )
 }
@@ -25,7 +38,7 @@ export default function ReceiptPreview({ blocks, columns = 32 }: ReceiptPreviewP
 function ReceiptBlockView({ block }: { block: ReceiptBlock }) {
   switch (block.kind) {
     case 'heading':
-      return <p className="text-center font-bold text-sm mb-1">{block.text}</p>
+      return <p className="text-center font-bold text-sm tracking-wider mb-1">{block.text}</p>
     case 'meta':
       return <p className="text-center text-black/60 mb-2">{block.text}</p>
     case 'rule':
@@ -46,6 +59,8 @@ function ReceiptBlockView({ block }: { block: ReceiptBlock }) {
           </span>
         </div>
       )
+    case 'itemNote':
+      return <p className="pl-3 text-[10px] text-black/45 italic -mt-0.5">» {block.text}</p>
     case 'total':
       return (
         <div className={`flex justify-between py-0.5 ${block.emphasis ? 'font-bold text-sm' : ''}`}>

@@ -11,6 +11,7 @@ export interface MenuItem {
   priceFixed: number | null
   addonType?: AddonType | null
   hiddenFromPos?: boolean
+  applicableCategories?: string[] | null
 }
 
 export interface MenuCategory {
@@ -36,6 +37,8 @@ export interface OrderItem {
   qty: number
   pwdDiscounted?: boolean
   parentLineId?: string
+  note?: string
+  categoryId?: string
 }
 
 export interface LineDiscount {
@@ -50,6 +53,7 @@ export interface SaleItem {
   variant: string | null
   price: number
   qty: number
+  note?: string
 }
 
 export interface Sale {
@@ -59,6 +63,8 @@ export interface Sale {
   paymentAmount: number
   change: number
   items: SaleItem[]
+  subtotal?: number
+  discounts?: LineDiscount[]
   notes?: string
   isCompleted?: boolean
 }

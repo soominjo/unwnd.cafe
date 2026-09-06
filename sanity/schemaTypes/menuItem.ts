@@ -76,6 +76,24 @@ export const menuItem = defineType({
       },
     }),
     defineField({
+      name: 'applicableCategories',
+      title: 'Show for categories',
+      type: 'array',
+      description: 'Only used for Add-ons items — which menu categories show this add-on in the POS order panel. Leave empty to show for every category.',
+      of: [{ type: 'string' }],
+      options: {
+        list: [
+          { title: 'Signature', value: 'signature' },
+          { title: 'Espresso', value: 'espresso' },
+          { title: 'Non-Coffee', value: 'non-coffee' },
+          { title: 'Matcha Series', value: 'matcha-series' },
+          { title: 'Meal', value: 'meal' },
+          { title: 'Waffle', value: 'waffle' },
+          { title: 'Snack', value: 'snack' },
+        ],
+      },
+    }),
+    defineField({
       name: 'image',
       title: 'Image',
       type: 'image',

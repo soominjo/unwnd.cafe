@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { variantClass } from '../utils'
 import type { Sale, SaleItem, SalesSummary } from '../types'
+import { buildReceiptBlocksFromSale } from '@/lib/printer/receiptFromSale'
+import { printViaRawBT } from '@/lib/printer/printViaRawBT'
+import { downloadReceiptPdf } from '@/lib/printer/buildReceiptPdf'
 
 const PAGE_SIZE    = 20
 const PH_OFFSET_MS = 8 * 60 * 60 * 1000
@@ -69,6 +72,13 @@ function formatPHTime(iso: string): string {
     minute:   '2-digit',
     hour12:   true,
   })
+}
+
+function buildPdfFilename(createdAt: string): string {
+  const d = new Date(createdAt)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`
+  return `unwnd-receipt-${stamp}.pdf`
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -701,6 +711,22 @@ function OrderGroup({
   onRequestDeleteItem, onCancelDeleteItem, onConfirmDeleteItem,
   onCompleteOrder,
 }: OrderGroupProps) {
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false)
+
+  function handleReprint() {
+    printViaRawBT(buildReceiptBlocksFromSale(order))
+  }
+
+  async function handleDownloadPdf() {
+    if (isDownloadingPdf) return
+    setIsDownloadingPdf(true)
+    try {
+      await downloadReceiptPdf(buildReceiptBlocksFromSale(order), buildPdfFilename(order._createdAt))
+    } finally {
+      setIsDownloadingPdf(false)
+    }
+  }
+
   return (
     <div className="divide-y divide-border">
 
@@ -758,6 +784,25 @@ function OrderGroup({
                   ✓ Done
                 </span>
               )}
+
+              <button
+                onClick={handleReprint}
+                className="text-foreground/40 hover:text-foreground transition-colors w-5 h-5 flex items-center justify-center text-sm"
+                title="Reprint thermal receipt"
+                aria-label="Reprint thermal receipt"
+              >
+                🖶
+              </button>
+
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isDownloadingPdf}
+                className="text-foreground/40 hover:text-foreground transition-colors w-5 h-5 flex items-center justify-center text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Download receipt PDF"
+                aria-label="Download receipt PDF"
+              >
+                {isDownloadingPdf ? '…' : '⬇'}
+              </button>
 
               <button
                 onClick={onRequestDelete}
