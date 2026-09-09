@@ -1,8 +1,6 @@
 import type { Sale } from '@/app/pos/types'
 import { buildReceiptDocument, type ReceiptBlock, type ReceiptDiscountInput } from './receiptDocument'
 
-const SHOP_NAME = 'unwnd. cafe'
-
 // Rebuilds the exact same ReceiptBlock[] a live checkout would have produced,
 // from a saved Sale record — used to reprint/re-download a receipt from sales
 // history without duplicating any printing logic. Sales saved before
@@ -15,7 +13,6 @@ export function buildReceiptBlocksFromSale(sale: Sale): ReceiptBlock[] {
   }))
 
   return buildReceiptDocument({
-    shopName: SHOP_NAME,
     timestamp: new Date(sale._createdAt),
     items: sale.items.map((item) => ({
       name: item.name,
@@ -29,6 +26,7 @@ export function buildReceiptBlocksFromSale(sale: Sale): ReceiptBlock[] {
     total: sale.total,
     paymentAmount: sale.paymentAmount,
     change: sale.change,
-    notes: sale.notes,
+    // The POS stores the customer's name in the sale's notes field.
+    customerName: sale.notes,
   })
 }

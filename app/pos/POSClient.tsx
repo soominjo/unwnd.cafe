@@ -243,7 +243,6 @@ export default function POSClient() {
         const paymentAmount = payment ?? grandTotal
         const discounts: ReceiptDiscountInput[] = discountLines.map(d => ({ label: d.name, amount: d.amount }))
         setReceiptBlocks(buildReceiptDocument({
-          shopName: 'unwnd. cafe',
           timestamp: new Date(),
           items: orderItems.map(item => ({
             name: item.name,
@@ -257,7 +256,7 @@ export default function POSClient() {
           total: grandTotal,
           paymentAmount,
           change: paymentAmount - grandTotal,
-          notes: notes.trim() || undefined,
+          customerName: notes.trim() || undefined,
         }))
       }
 
@@ -1045,12 +1044,12 @@ function OrderPanel({
         })()}
       </div>
 
-      {/* Notes / name */}
+      {/* Customer name — stored as the sale's notes and printed as "Name" on the receipt */}
       <div className="px-6 py-2 border-t border-foreground/10 shrink-0">
         <div className="relative">
           <input
             type="text"
-            placeholder="Notes / name…"
+            placeholder="Customer name…"
             value={notes}
             disabled={items.length === 0}
             maxLength={100}
