@@ -110,21 +110,19 @@ export async function renderLogoBitmap(size: number, { monochrome = true }: Logo
 
   const [topText, bottomText] = WORDMARK_LINES
   const targetWidth = size * WORDMARK_WIDTH_FRACTION
-  const topSize = fitFontSizeToWidth(ctx, topText, targetWidth, WORDMARK_FONT_FAMILY)
-  const bottomSize = fitFontSizeToWidth(ctx, bottomText, targetWidth, WORDMARK_FONT_FAMILY)
+  // Both lines share one font size — set by the wider word (top) — rather than each
+  // being stretched to fill the same width, so "CAFE" doesn't end up larger than "UNWND".
+  const fontSize = fitFontSizeToWidth(ctx, topText, targetWidth, WORDMARK_FONT_FAMILY)
   const gap = size * WORDMARK_LINE_GAP_FRACTION
-  const topCapHeight = topSize * CAP_HEIGHT_FRACTION
-  const bottomCapHeight = bottomSize * CAP_HEIGHT_FRACTION
+  const capHeight = fontSize * CAP_HEIGHT_FRACTION
 
   ctx.fillStyle = '#ffffff'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
+  ctx.font = `${WORDMARK_WEIGHT} ${fontSize}px ${WORDMARK_FONT_FAMILY}`
 
-  ctx.font = `${WORDMARK_WEIGHT} ${topSize}px ${WORDMARK_FONT_FAMILY}`
-  ctx.fillText(topText, size / 2, size / 2 - gap / 2 - topCapHeight / 2)
-
-  ctx.font = `${WORDMARK_WEIGHT} ${bottomSize}px ${WORDMARK_FONT_FAMILY}`
-  ctx.fillText(bottomText, size / 2, size / 2 + gap / 2 + bottomCapHeight / 2)
+  ctx.fillText(topText, size / 2, size / 2 - gap / 2 - capHeight / 2)
+  ctx.fillText(bottomText, size / 2, size / 2 + gap / 2 + capHeight / 2)
 
   return { canvas, image: monochrome ? toMonochrome(ctx, size, size) : readPixels(ctx, size, size) }
 }

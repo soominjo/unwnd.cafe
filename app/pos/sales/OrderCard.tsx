@@ -3,10 +3,12 @@
 import { useState } from 'react'
 import { variantClass } from '../utils'
 import type { Sale, SaleItem } from '../types'
+import type { ReceiptBlock } from '@/lib/printer/receiptDocument'
 import { buildReceiptBlocksFromSale } from '@/lib/printer/receiptFromSale'
 import { printViaRawBT } from '@/lib/printer/printViaRawBT'
 import { downloadReceiptPdf } from '@/lib/printer/buildReceiptPdf'
 import { buildReceiptPdfFilename } from '@/lib/printer/receiptFilename'
+import ReceiptPreviewModal from '../ReceiptPreviewModal'
 import { formatPHTime } from './dateRange'
 import { CheckIcon, DownloadIcon, PrinterIcon, TrashIcon } from './icons'
 import { ActionButton, Badge, InlineConfirm, RemoveButton } from './ui'
@@ -32,7 +34,7 @@ export interface OrderCardProps {
 
 type ReceiptActionState = 'idle' | 'busy' | 'failed'
 
-/** Reprint / PDF actions for one order, each with its own busy and failed state so a retry is one tap away. */
+/** Staff (kitchen-ticket) print / PDF actions for one order, each with its own busy and failed state so a retry is one tap away. */
 function useReceiptActions(order: Sale) {
   const [printState, setPrintState] = useState<ReceiptActionState>('idle')
   const [pdfState, setPdfState] = useState<ReceiptActionState>('idle')
@@ -59,13 +61,16 @@ function useReceiptActions(order: Sale) {
   }
 }
 
-const PRINT_LABELS: Record<ReceiptActionState, string> = { idle: 'Print', busy: 'Printing…', failed: 'Retry print' }
+const PRINT_LABELS: Record<ReceiptActionState, string> = { idle: 'Print Staff', busy: 'Printing…', failed: 'Retry print' }
 const PDF_LABELS: Record<ReceiptActionState, string> = { idle: 'PDF', busy: 'Preparing…', failed: 'Retry PDF' }
 
 export default function OrderCard(props: OrderCardProps) {
   const { order, mode, isConfirming, isDeleting, isCompleting, confirmItemKey, deletingItemKey } = props
   const receipt = useReceiptActions(order)
   const itemCount = order.items.reduce((sum, item) => sum + item.qty, 0)
+  // Reuses the same preview/print/PDF flow the checkout receipt uses (ReceiptPreviewModal),
+  // fed with the full customer receipt — logo, prices, thank-you footer — instead of the staff ticket.
+  const [reprintBlocks, setReprintBlocks] = useState<ReceiptBlock[] | null>(null)
 
   return (
     <article
@@ -132,7 +137,7 @@ export default function OrderCard(props: OrderCardProps) {
               busy={receipt.printState === 'busy'}
               failed={receipt.printState === 'failed'}
               onClick={receipt.print}
-              title="Reprint thermal receipt"
+              title="Print kitchen/staff ticket — no logo or prices"
             >
               {PRINT_LABELS[receipt.printState]}
             </ActionButton>
@@ -142,9 +147,17 @@ export default function OrderCard(props: OrderCardProps) {
               busy={receipt.pdfState === 'busy'}
               failed={receipt.pdfState === 'failed'}
               onClick={receipt.downloadPdf}
-              title="Download receipt PDF"
+              title="Download staff ticket PDF"
             >
               {PDF_LABELS[receipt.pdfState]}
+            </ActionButton>
+            <ActionButton
+              tone="neutral"
+              icon={<PrinterIcon />}
+              onClick={() => setReprintBlocks(buildReceiptBlocksFromSale(order, 'customer'))}
+              title="Reprint the full customer receipt"
+            >
+              Reprint
             </ActionButton>
             <span className="ml-auto hidden text-[11px] tabular-nums text-foreground/40 sm:inline">
               {itemCount} {itemCount === 1 ? 'item' : 'items'}
@@ -155,6 +168,8 @@ export default function OrderCard(props: OrderCardProps) {
           </div>
         )}
       </footer>
+
+      {reprintBlocks && <ReceiptPreviewModal blocks={reprintBlocks} onClose={() => setReprintBlocks(null)} />}
     </article>
   )
 }

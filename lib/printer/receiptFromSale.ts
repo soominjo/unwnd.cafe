@@ -1,12 +1,12 @@
 import type { Sale } from '@/app/pos/types'
-import { buildReceiptDocument, type ReceiptBlock, type ReceiptDiscountInput } from './receiptDocument'
+import { buildReceiptDocument, type ReceiptAudience, type ReceiptBlock, type ReceiptDiscountInput } from './receiptDocument'
 
 // Rebuilds the exact same ReceiptBlock[] a live checkout would have produced,
 // from a saved Sale record — used to reprint/re-download a receipt from sales
 // history without duplicating any printing logic. Sales saved before
 // subtotal/discounts/per-item notes were persisted fall back gracefully
 // (no discount line, no per-item note) rather than erroring.
-export function buildReceiptBlocksFromSale(sale: Sale): ReceiptBlock[] {
+export function buildReceiptBlocksFromSale(sale: Sale, audience: ReceiptAudience = 'kitchen'): ReceiptBlock[] {
   const discounts: ReceiptDiscountInput[] = (sale.discounts ?? []).map((d) => ({
     label: d.name,
     amount: d.amount,
@@ -28,7 +28,6 @@ export function buildReceiptBlocksFromSale(sale: Sale): ReceiptBlock[] {
     change: sale.change,
     // The POS stores the customer's name in the sale's notes field.
     customerName: sale.notes,
-    // Reprints from sales history are a back-of-house kitchen ticket, not a customer copy.
-    audience: 'kitchen',
+    audience,
   })
 }
