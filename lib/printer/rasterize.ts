@@ -1,5 +1,4 @@
 import { create as createQrCode } from 'qrcode'
-import { bodoniModa } from '@/lib/fonts'
 import type { RasterImage, ReceiptAssets } from './receiptAssets'
 import type { ReceiptBlock } from './receiptDocument'
 import { THERMAL_IMAGE_SIZES, type ThermalColumns } from './thermalConfig'
@@ -35,8 +34,11 @@ type QrBlock = Extract<ReceiptBlock, { kind: 'qr' }>
 const BLACK_THRESHOLD = 128
 /** The wordmark, stacked in two lines inside the disc. */
 const WORDMARK_LINES = ['UNWND', 'CAFE'] as const
-/** Bold weight the logo font (see lib/fonts.ts) is loaded at — the heaviest cut, for a poster-like brand mark. */
-const WORDMARK_WEIGHT = 900
+// A system serif rather than a webfont: Times New Roman ships with the OS, so
+// no font-loading race, and its regular weight is thinner and more classic
+// than the brand's display face — right for a small printed mark.
+const WORDMARK_FONT_FAMILY = '"Times New Roman", Times, serif'
+const WORDMARK_WEIGHT = 400
 /** Fraction of the disc's diameter each wordmark line's rendered width should fill. */
 const WORDMARK_WIDTH_FRACTION = 0.74
 /** Gap between the two stacked lines, as a fraction of the disc's diameter. */
@@ -93,27 +95,23 @@ function fitFontSizeToWidth(ctx: CanvasRenderingContext2D, text: string, targetW
 }
 
 /**
- * The round brand mark: the "unwnd cafe" wordmark set in the brand's own
- * display face (see lib/fonts.ts) and drawn straight onto a solid disc, so it
- * prints as a disc with the wordmark knocked out in white — always in sync
- * with the on-screen wordmark font rather than shipping a separate bitmap.
+ * The round brand mark: the "unwnd cafe" wordmark drawn straight onto a solid
+ * disc, so it prints as a disc with the wordmark knocked out in white — no
+ * separate bitmap asset to keep in sync.
  */
 export async function renderLogoBitmap(size: number, { monochrome = true }: LogoOptions = {}): Promise<Bitmap> {
   assertMultipleOfEight(size, 'Logo size')
   const { canvas, ctx } = createCanvas(size, size)
-  const fontFamily = bodoniModa.style.fontFamily
 
   ctx.fillStyle = '#000000'
   ctx.beginPath()
   ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2)
   ctx.fill()
 
-  await document.fonts.load(`${WORDMARK_WEIGHT} 48px ${fontFamily}`)
-
   const [topText, bottomText] = WORDMARK_LINES
   const targetWidth = size * WORDMARK_WIDTH_FRACTION
-  const topSize = fitFontSizeToWidth(ctx, topText, targetWidth, fontFamily)
-  const bottomSize = fitFontSizeToWidth(ctx, bottomText, targetWidth, fontFamily)
+  const topSize = fitFontSizeToWidth(ctx, topText, targetWidth, WORDMARK_FONT_FAMILY)
+  const bottomSize = fitFontSizeToWidth(ctx, bottomText, targetWidth, WORDMARK_FONT_FAMILY)
   const gap = size * WORDMARK_LINE_GAP_FRACTION
   const topCapHeight = topSize * CAP_HEIGHT_FRACTION
   const bottomCapHeight = bottomSize * CAP_HEIGHT_FRACTION
@@ -122,10 +120,10 @@ export async function renderLogoBitmap(size: number, { monochrome = true }: Logo
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
 
-  ctx.font = `${WORDMARK_WEIGHT} ${topSize}px ${fontFamily}`
+  ctx.font = `${WORDMARK_WEIGHT} ${topSize}px ${WORDMARK_FONT_FAMILY}`
   ctx.fillText(topText, size / 2, size / 2 - gap / 2 - topCapHeight / 2)
 
-  ctx.font = `${WORDMARK_WEIGHT} ${bottomSize}px ${fontFamily}`
+  ctx.font = `${WORDMARK_WEIGHT} ${bottomSize}px ${WORDMARK_FONT_FAMILY}`
   ctx.fillText(bottomText, size / 2, size / 2 + gap / 2 + bottomCapHeight / 2)
 
   return { canvas, image: monochrome ? toMonochrome(ctx, size, size) : readPixels(ctx, size, size) }
