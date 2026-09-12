@@ -20,27 +20,29 @@ export default function PeriodFilter({ period, customFrom, customTo, onChange }:
 
   return (
     <section className="space-y-3">
-      <div role="group" aria-label="Period" className="inline-flex flex-wrap gap-1 rounded-lg bg-foreground/6 p-1">
-        {PERIOD_OPTIONS.map(({ key, label }) => {
-          const active = period === key
-          return (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onChange({ period: key })}
-              className={`rounded-md px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-colors ${
-                active ? 'bg-foreground text-cream shadow-sm' : 'text-foreground/55 hover:bg-white/70 hover:text-foreground'
-              }`}
-            >
-              {label}
-            </button>
-          )
-        })}
+      <div className="flex justify-center">
+        <div role="group" aria-label="Period" className="inline-flex flex-wrap justify-center gap-1 rounded-lg bg-foreground/6 p-1">
+          {PERIOD_OPTIONS.map(({ key, label }) => {
+            const active = period === key
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onChange({ period: key })}
+                className={`rounded-md px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                  active ? 'bg-foreground text-cream shadow-sm' : 'text-foreground/55 hover:bg-white/70 hover:text-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {period === 'custom' && (
-        <div className="flex flex-wrap items-end gap-4 rounded-lg border border-border bg-white/60 px-4 py-3">
+        <div className="flex flex-wrap items-end justify-center gap-4 rounded-lg border border-border bg-white/60 px-4 py-3">
           <DateField
             label="From"
             value={customFrom}

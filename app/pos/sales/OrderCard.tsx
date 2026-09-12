@@ -142,7 +142,7 @@ export default function OrderCard(props: OrderCardProps) {
               {PRINT_LABELS[receipt.printState]}
             </ActionButton>
             <ActionButton
-              tone="neutral"
+              tone="rose"
               icon={<DownloadIcon />}
               busy={receipt.pdfState === 'busy'}
               failed={receipt.pdfState === 'failed'}
@@ -152,7 +152,7 @@ export default function OrderCard(props: OrderCardProps) {
               {PDF_LABELS[receipt.pdfState]}
             </ActionButton>
             <ActionButton
-              tone="neutral"
+              tone="amber"
               icon={<PrinterIcon />}
               onClick={() => setReprintBlocks(buildReceiptBlocksFromSale(order, 'customer'))}
               title="Reprint the full customer receipt"

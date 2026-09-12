@@ -1,6 +1,5 @@
 'use client'
 
-import { Fragment } from 'react'
 import { variantClass, groupOrderItems } from './utils'
 import type { OrderItem, LineDiscount } from './types'
 
@@ -52,13 +51,20 @@ export default function OrderReviewModal({
       <div className="w-full max-w-3xl mx-auto flex-1 flex flex-col min-h-0">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-foreground/10 shrink-0">
-          <div>
+        <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-foreground/10 shrink-0">
+          <div className="min-w-0">
             <p className="text-xs uppercase tracking-[0.3em] text-foreground/55 font-semibold">Review Your Order</p>
             <p className="text-foreground/45 text-sm mt-1">
               {itemCount} item{itemCount !== 1 ? 's' : ''} · {orderItems.length} line{orderItems.length !== 1 ? 's' : ''}
             </p>
           </div>
+          {notes.trim() && (
+            <div className="flex-1 flex justify-center min-w-0">
+              <span className="inline-block max-w-full truncate bg-[#d4ede1] text-[#1f5c3c] text-sm font-semibold px-4 py-1.5 rounded-full">
+                {notes.trim()}
+              </span>
+            </div>
+          )}
           <button
             onClick={onCancel}
             disabled={isSubmitting}
@@ -72,53 +78,57 @@ export default function OrderReviewModal({
         {/* Scrollable body: item list + notes */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-3">
           <div className="divide-y divide-foreground/[0.07]">
-            {parentItems.map(item => (
-              <Fragment key={item.lineId}>
-                <div className="flex items-start justify-between gap-4 py-3.5">
-                  <div className="min-w-0">
-                    <p className="text-base font-semibold leading-tight text-foreground flex items-center flex-wrap gap-x-3 gap-y-1">
-                      <span>{item.name}</span>
-                      {item.qty > 1 && (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-400 text-foreground text-sm font-black tabular-nums tracking-wide shadow-sm">
-                          ×{item.qty}
-                        </span>
-                      )}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      {item.variant && (
-                        <span className={`text-xs uppercase tracking-wider font-bold ${variantClass(item.variant)}`}>
-                          {item.variant}
-                        </span>
-                      )}
-                      {item.pwdDiscounted && (
-                        <span className="text-xs text-emerald-600 font-semibold tracking-wide">PWD/Senior −20%</span>
+            {parentItems.map(item => {
+              const addons = addonsByParent.get(item.lineId) ?? []
+              return (
+                <div key={item.lineId} className="py-3.5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold leading-tight text-foreground flex items-center flex-wrap gap-x-3 gap-y-1">
+                        <span>{item.name}</span>
+                        {item.qty > 1 && (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-400 text-foreground text-sm font-black tabular-nums tracking-wide shadow-sm">
+                            ×{item.qty}
+                          </span>
+                        )}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {item.variant && (
+                          <span className={`text-xs uppercase tracking-wider font-bold ${variantClass(item.variant)}`}>
+                            {item.variant}
+                          </span>
+                        )}
+                        {item.pwdDiscounted && (
+                          <span className="text-xs text-emerald-600 font-semibold tracking-wide">PWD/Senior −20%</span>
+                        )}
+                      </div>
+                      {item.note && (
+                        <p className="text-xs text-amber-600 font-semibold tracking-wide mt-1">📝 {item.note}</p>
                       )}
                     </div>
-                    {item.note && (
-                      <p className="text-xs text-amber-600 font-semibold tracking-wide mt-1">📝 {item.note}</p>
-                    )}
+                    <span className="text-base tabular-nums font-bold text-foreground shrink-0">
+                      ₱{(item.price * item.qty).toFixed(0)}
+                    </span>
                   </div>
-                  <span className="text-base tabular-nums font-bold text-foreground shrink-0">
-                    ₱{(item.price * item.qty).toFixed(0)}
-                  </span>
+                  {addons.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-1.5">
+                      {addons.map(addon => (
+                        <div key={addon.lineId} className="flex items-center justify-between gap-3">
+                          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+                            <span className="text-sky-500">+</span>
+                            {addon.name}
+                            {addon.qty > 1 && <span className="tabular-nums">×{addon.qty}</span>}
+                          </span>
+                          <span className="text-xs tabular-nums text-foreground/50 shrink-0">
+                            ₱{(addon.price * addon.qty).toFixed(0)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {(addonsByParent.get(item.lineId) ?? []).map(addon => (
-                  <div key={addon.lineId} className="flex items-center justify-between gap-4 py-2 pl-4 border-l-2 border-l-foreground/10 ml-1">
-                    <span className="text-sm text-foreground/60 inline-flex items-center flex-wrap gap-x-2 gap-y-1">
-                      <span>+ {addon.name}</span>
-                      {addon.qty > 1 && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-400 text-foreground text-xs font-black tabular-nums tracking-wide shadow-sm">
-                          ×{addon.qty}
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-sm tabular-nums text-foreground/50 shrink-0">
-                      ₱{(addon.price * addon.qty).toFixed(0)}
-                    </span>
-                  </div>
-                ))}
-              </Fragment>
-            ))}
+              )
+            })}
             {orphanAddons.map(addon => (
               <div key={addon.lineId} className="flex items-center justify-between gap-4 py-3.5">
                 <span className="text-base font-semibold text-foreground/70 flex items-center flex-wrap gap-x-3 gap-y-1">
@@ -135,15 +145,6 @@ export default function OrderReviewModal({
               </div>
             ))}
           </div>
-
-          {notes.trim() && (
-            <div className="border-t border-foreground/10 mt-3 pt-4 pb-1">
-              <p className="text-xs uppercase tracking-[0.3em] text-foreground/55 font-semibold mb-2">Notes</p>
-              <span className="inline-block bg-[#d4ede1] text-[#1f5c3c] text-sm px-3 py-2 rounded-lg rounded-tl-none leading-snug max-w-full wrap-break-word">
-                {notes.trim()}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Pinned footer — totals, payment/change, and actions never scroll out of view */}
