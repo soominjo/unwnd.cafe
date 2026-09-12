@@ -45,8 +45,6 @@ export interface ReceiptInput {
 
 const RECEIPT_TIME_ZONE = 'Asia/Manila'
 const DEFAULT_FOOTER = 'Thank you for visiting!'
-const REVIEW_PROMPT = 'Tell us about your experience:'
-const REVIEW_CAPTION = 'Scan to leave a Google review'
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('en-US', {
@@ -130,10 +128,6 @@ function footerBlocks(input: ReceiptInput, shop: ShopDetails): ReceiptBlock[] {
   return [
     { kind: 'spacer' },
     { kind: 'footer', text: input.footerMessage ?? DEFAULT_FOOTER },
-    { kind: 'meta', text: REVIEW_PROMPT },
-    { kind: 'spacer' },
-    { kind: 'qr', url: shop.reviewUrl, caption: REVIEW_CAPTION },
-    { kind: 'spacer' },
     { kind: 'meta', text: shop.instagram },
     { kind: 'rule' },
   ]
