@@ -54,6 +54,8 @@ export interface SaleItem {
   price: number
   qty: number
   note?: string
+  /** An add-on attached to another line, not an orderable menu item on its own. */
+  isAddon?: boolean
 }
 
 export interface Sale {

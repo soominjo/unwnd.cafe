@@ -250,6 +250,7 @@ export default function POSClient() {
             qty: item.qty,
             lineTotal: item.price * item.qty,
             note: item.note,
+            isAddon: Boolean(item.parentLineId),
           })),
           subtotal: total,
           discounts,

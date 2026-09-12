@@ -20,6 +20,7 @@ export function buildReceiptBlocksFromSale(sale: Sale, audience: ReceiptAudience
       qty: item.qty,
       lineTotal: item.price * item.qty,
       note: item.note,
+      isAddon: item.isAddon,
     })),
     subtotal: sale.subtotal ?? sale.total,
     discounts,

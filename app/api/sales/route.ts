@@ -8,12 +8,14 @@ export const dynamic = 'force-dynamic'
 const fresh = client.withConfig({ useCdn: false })
 
 interface SaleItemInput {
-  lineId:  string
-  name:    string
-  variant: string | null
-  price:   number
-  qty:     number
-  note?:   string
+  lineId:       string
+  name:         string
+  variant:      string | null
+  price:        number
+  qty:          number
+  note?:        string
+  /** Set when this line is an add-on attached to another line, rather than an orderable menu item on its own. */
+  parentLineId?: string
 }
 
 interface SaleDiscountInput {
@@ -72,6 +74,7 @@ function isValidSaleInput(body: unknown): body is SaleInput {
     if (typeof i.qty !== 'number' || !Number.isFinite(i.qty) || i.qty < 1 || i.qty > MAX_QTY) return false
     if (typeof i.variant === 'string' && i.variant.length > 100) return false
     if (i.note !== undefined && (typeof i.note !== 'string' || i.note.length > 200)) return false
+    if (i.parentLineId !== undefined && (typeof i.parentLineId !== 'string' || i.parentLineId.length > 100)) return false
     return (typeof i.variant === 'string' || i.variant === null)
   })
 }
@@ -125,6 +128,7 @@ export async function POST(request: NextRequest) {
         price:   item.price,
         qty:     item.qty,
         ...(item.note ? { note: item.note } : {}),
+        ...(item.parentLineId ? { isAddon: true } : {}),
       })),
     })
     return NextResponse.json({ success: true, id: doc._id })

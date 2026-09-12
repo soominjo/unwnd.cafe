@@ -22,6 +22,8 @@ export interface ReceiptItemInput {
   qty: number
   lineTotal: number
   note?: string
+  /** An add-on attached to another line — printed like any other line, but excluded from the "Items" count. */
+  isAddon?: boolean
 }
 
 export interface ReceiptDiscountInput {
@@ -94,7 +96,7 @@ function headerBlocks(shop: ShopDetails, audience: ReceiptAudience): ReceiptBloc
 }
 
 function detailBlocks(input: ReceiptInput): ReceiptBlock[] {
-  const itemCount = input.items.reduce((sum, item) => sum + item.qty, 0)
+  const itemCount = input.items.reduce((sum, item) => sum + (item.isAddon ? 0 : item.qty), 0)
   const name = input.customerName?.trim()
   const nameRow: ReceiptBlock[] = name ? [{ kind: 'detail', label: 'Name', value: name }] : []
   return [
