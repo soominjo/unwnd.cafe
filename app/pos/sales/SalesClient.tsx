@@ -17,6 +17,20 @@ interface NavigateUpdates extends PeriodUpdates {
   page?: number
 }
 
+type OrderStatus = 'pending' | 'completed'
+
+async function fetchSummary(from: string, to: string, signal: AbortSignal) {
+  const qs = new URLSearchParams({ from, to })
+  const res = await fetch(`/api/sales/summary?${qs}`, { signal })
+  return res.json()
+}
+
+async function fetchOrders(from: string, to: string, status: OrderStatus, page: number, signal: AbortSignal) {
+  const qs = new URLSearchParams({ from, to, status, page: String(page), limit: String(PAGE_SIZE) })
+  const res = await fetch(`/api/sales?${qs}`, { signal })
+  return res.json()
+}
+
 export default function SalesClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -31,6 +45,7 @@ export default function SalesClient() {
   // ── Local UI state ─────────────────────────────────────────────────────────
   const [view, setView] = useState<View>('recent')
   const [summary, setSummary] = useState<SalesSummary | null>(null)
+  // Scoped to the active tab's status (pending/completed) — not "every order on the page 1 of the whole period".
   const [orders, setOrders] = useState<Sale[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -79,27 +94,32 @@ export default function SalesClient() {
     router.replace(`/pos/sales?${params.toString()}`, { scroll: false })
   }
 
+  function changeView(next: View) {
+    setView(next)
+    navigate({ page: 1 })
+  }
+
   // ── Data fetching ──────────────────────────────────────────────────────────
-  const fetchData = useCallback(async (from: string, to: string, pg: number, signal: AbortSignal) => {
+  // Orders are fetched scoped to the active tab's status, with their own whole-period
+  // total/pagination — otherwise "Recent"/"Completed" only ever reflected whichever
+  // statuses happened to land on the newest 20 sales overall, regardless of period.
+  const load = useCallback(async (from: string, to: string, currentView: View, pg: number, signal: AbortSignal) => {
     setLoading(true)
     setError(null)
     try {
-      const summaryQs = new URLSearchParams({ from, to })
-      const ordersQs = new URLSearchParams({ from, to, page: String(pg), limit: String(PAGE_SIZE) })
-      const [summaryRes, ordersRes] = await Promise.all([
-        fetch(`/api/sales/summary?${summaryQs}`, { signal }),
-        fetch(`/api/sales?${ordersQs}`, { signal }),
+      const status: OrderStatus = currentView === 'completed' ? 'completed' : 'pending'
+      const [summaryJson, ordersJson] = await Promise.all([
+        fetchSummary(from, to, signal),
+        currentView === 'summary' ? null : fetchOrders(from, to, status, pg, signal),
       ])
       if (signal.aborted) return
-      const summaryJson = await summaryRes.json()
-      const ordersJson = await ordersRes.json()
-      if (!summaryJson.success || !ordersJson.success) {
+      if (!summaryJson.success || (ordersJson && !ordersJson.success)) {
         setError('Failed to load sales data.')
         return
       }
       setSummary(summaryJson.data)
-      setOrders(ordersJson.data)
-      setTotal(ordersJson.total ?? 0)
+      setOrders(ordersJson ? ordersJson.data : [])
+      setTotal(ordersJson ? ordersJson.total ?? 0 : 0)
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
       setError('Network error. Check your connection.')
@@ -108,29 +128,29 @@ export default function SalesClient() {
     }
   }, [])
 
-  // Re-fetch when URL filter params change
+  // Re-fetch when the period, page, or active tab changes
   useEffect(() => {
     const range = computeDateRange(period, customFrom, customTo)
     if (!range) return
     const controller = new AbortController()
-    fetchData(range.from, range.to, page, controller.signal)
+    load(range.from, range.to, view, page, controller.signal)
     return () => controller.abort()
-  }, [period, page, customFrom, customTo, fetchData])
+  }, [period, page, customFrom, customTo, view, load])
 
   // Keep a ref to current params so BroadcastChannel refresh can read them
-  const fetchParamsRef = useRef({ period, page, customFrom, customTo })
+  const fetchParamsRef = useRef({ period, page, customFrom, customTo, view })
   useEffect(() => {
-    fetchParamsRef.current = { period, page, customFrom, customTo }
+    fetchParamsRef.current = { period, page, customFrom, customTo, view }
   })
 
   // BroadcastChannel (same-browser live update) + bfcache restore
   useEffect(() => {
     function refresh() {
-      const { period: p, page: pg, customFrom: cf, customTo: ct } = fetchParamsRef.current
+      const { period: p, page: pg, customFrom: cf, customTo: ct, view: v } = fetchParamsRef.current
       const range = computeDateRange(p, cf, ct)
       if (!range) return
       const controller = new AbortController()
-      fetchData(range.from, range.to, pg, controller.signal)
+      load(range.from, range.to, v, pg, controller.signal)
     }
     const bc = new BroadcastChannel('pos-sales-update')
     bc.onmessage = refresh
@@ -142,7 +162,17 @@ export default function SalesClient() {
       bc.close()
       window.removeEventListener('pageshow', onPageShow)
     }
-  }, [fetchData])
+  }, [load])
+
+  // Every mutation below re-fetches rather than hand-patching local state: orders are
+  // now scoped by status, so e.g. completing an order must actually leave the "recent"
+  // list, and the KPI/badge counts must stay in sync with whichever page we land on.
+  function refreshCurrent() {
+    const range = computeDateRange(period, customFrom, customTo)
+    if (!range) return
+    const controller = new AbortController()
+    load(range.from, range.to, view, page, controller.signal)
+  }
 
   // ── Delete whole order ─────────────────────────────────────────────────────
   async function deleteOrder(id: string) {
@@ -155,8 +185,7 @@ export default function SalesClient() {
         setError(data.error ?? 'Failed to delete order.')
         return
       }
-      setOrders((prev) => prev.filter((o) => o._id !== id))
-      setTotal((prev) => Math.max(0, prev - 1))
+      refreshCurrent()
     } catch {
       setError('Network error. Could not delete order.')
     } finally {
@@ -180,19 +209,7 @@ export default function SalesClient() {
         setError(data.error ?? 'Failed to remove item.')
         return
       }
-      if (data.orderDeleted) {
-        setOrders((prev) => prev.filter((o) => o._id !== orderId))
-        setTotal((prev) => Math.max(0, prev - 1))
-      } else {
-        setOrders((prev) =>
-          prev.map((o) => {
-            if (o._id !== orderId) return o
-            const newItems = o.items.filter((i) => i.lineId !== lineId)
-            const newTotal = newItems.reduce((sum, i) => sum + i.price * i.qty, 0)
-            return { ...o, items: newItems, total: newTotal }
-          }),
-        )
-      }
+      refreshCurrent()
     } catch {
       setError('Network error. Could not remove item.')
     } finally {
@@ -213,13 +230,9 @@ export default function SalesClient() {
           return o._id
         }),
       )
-      const deletedIds = results
-        .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
-        .map((r) => r.value)
       const failedCount = results.filter((r) => r.status === 'rejected').length
       if (failedCount > 0) setError(`${failedCount} order(s) could not be deleted.`)
-      setOrders((prev) => prev.filter((o) => !deletedIds.includes(o._id)))
-      setTotal((prev) => Math.max(0, prev - deletedIds.length))
+      refreshCurrent()
     } catch {
       setError('Network error. Could not delete all orders.')
     } finally {
@@ -241,7 +254,7 @@ export default function SalesClient() {
         setError(data.error ?? 'Failed to complete order.')
         return
       }
-      setOrders((prev) => prev.map((o) => (o._id === id ? { ...o, isCompleted: true } : o)))
+      refreshCurrent()
     } catch {
       setError('Network error. Could not complete order.')
     } finally {
@@ -249,9 +262,7 @@ export default function SalesClient() {
     }
   }
 
-  // ── Derived lists ──────────────────────────────────────────────────────────
-  const pendingOrders = orders.filter((o) => !o.isCompleted)
-  const completedOrders = orders.filter((o) => o.isCompleted === true)
+  // ── Derived ─────────────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   // Only one inline confirmation is open at a time.
@@ -318,9 +329,9 @@ export default function SalesClient() {
 
         <ViewTabs
           view={view}
-          onChange={setView}
-          pendingCount={pendingOrders.length}
-          completedCount={completedOrders.length}
+          onChange={changeView}
+          pendingCount={summary?.pendingCount ?? 0}
+          completedCount={summary?.completedCount ?? 0}
           loading={loading}
         />
 
@@ -328,19 +339,12 @@ export default function SalesClient() {
 
         {view === 'summary' ? (
           <TopItemsView summary={summary} loading={loading} />
-        ) : view === 'recent' ? (
-          <OrdersView
-            {...sharedOrdersProps}
-            mode="recent"
-            orders={pendingOrders}
-            onConfirmDeleteAll={() => deleteOrderList(pendingOrders)}
-          />
         ) : (
           <OrdersView
             {...sharedOrdersProps}
-            mode="completed"
-            orders={completedOrders}
-            onConfirmDeleteAll={() => deleteOrderList(completedOrders)}
+            mode={view === 'completed' ? 'completed' : 'recent'}
+            orders={orders}
+            onConfirmDeleteAll={() => deleteOrderList(orders)}
           />
         )}
       </main>

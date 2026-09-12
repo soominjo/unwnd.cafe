@@ -5,7 +5,7 @@ import { AlertIcon, XIcon } from './icons'
 // easy tap target on the café's tablet, and toned from the brand palette
 // (deep green for primary, emerald for "done", red only for destructive).
 
-export type ActionTone = 'primary' | 'success' | 'neutral' | 'danger' | 'destructive' | 'ghost'
+export type ActionTone = 'primary' | 'success' | 'neutral' | 'danger' | 'destructive' | 'ghost' | 'info'
 
 interface ActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   tone?: ActionTone
@@ -22,6 +22,7 @@ const TONE_CLASSES: Record<ActionTone, string> = {
   primary: 'bg-foreground text-cream hover:bg-foreground/90',
   success: 'bg-emerald-600 text-white hover:bg-emerald-700',
   neutral: 'bg-white border border-foreground/20 text-foreground/75 hover:border-foreground/45 hover:text-foreground',
+  info: 'bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100 hover:border-sky-300',
   danger: 'text-red-500 border border-transparent hover:bg-red-50 hover:border-red-200',
   /** Filled red — only for the final "yes, delete" tap inside an inline confirmation. */
   destructive: 'bg-red-500 text-white hover:bg-red-600',

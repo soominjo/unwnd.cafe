@@ -16,7 +16,7 @@ const TABS: ReadonlyArray<{ key: View; label: string }> = [
 
 export default function ViewTabs({ view, onChange, pendingCount, completedCount, loading }: ViewTabsProps) {
   return (
-    <nav className="flex gap-6 border-b border-foreground/10" aria-label="Views">
+    <nav className="flex justify-center gap-8 border-b border-foreground/15" aria-label="Views">
       {TABS.map(({ key, label }) => {
         const active = view === key
         const count = key === 'recent' ? pendingCount : key === 'completed' ? completedCount : 0
@@ -26,8 +26,8 @@ export default function ViewTabs({ view, onChange, pendingCount, completedCount,
             type="button"
             onClick={() => onChange(key)}
             aria-current={active ? 'page' : undefined}
-            className={`-mb-px flex items-center gap-2 border-b-2 pb-3 text-[11px] font-bold uppercase tracking-[0.16em] transition-colors ${
-              active ? 'border-foreground text-foreground' : 'border-transparent text-foreground/40 hover:text-foreground/70'
+            className={`-mb-px flex items-center gap-2 border-b-[3px] pb-3 text-xs font-extrabold uppercase tracking-[0.16em] transition-colors ${
+              active ? 'border-foreground text-foreground' : 'border-transparent text-foreground/50 hover:text-foreground/80'
             }`}
           >
             {label}

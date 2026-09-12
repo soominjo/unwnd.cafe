@@ -132,7 +132,7 @@ export default function OrderCard(props: OrderCardProps) {
               </ActionButton>
             )}
             <ActionButton
-              tone="neutral"
+              tone="info"
               icon={<PrinterIcon />}
               busy={receipt.printState === 'busy'}
               failed={receipt.printState === 'failed'}

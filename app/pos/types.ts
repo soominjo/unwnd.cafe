@@ -83,4 +83,7 @@ export interface SalesSummary {
   orderCount: number
   avgOrderValue: number
   topItems: TopItem[]
+  /** Whole-period counts (not just the current page) — what the Recent/Completed tab badges show. */
+  pendingCount: number
+  completedCount: number
 }

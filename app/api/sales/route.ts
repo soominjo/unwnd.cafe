@@ -142,27 +142,35 @@ export async function GET(request: NextRequest) {
   if (authError) return authError
 
   const { searchParams } = new URL(request.url)
-  const from     = searchParams.get('from') ?? new Date(0).toISOString()
-  const to       = searchParams.get('to')   ?? new Date().toISOString()
-  const pageRaw  = parseInt(searchParams.get('page') ?? '1', 10)
-  const page     = isNaN(pageRaw) || pageRaw < 1 ? 1 : pageRaw
-  const limitRaw = parseInt(searchParams.get('limit') ?? '20', 10)
-  const limit    = isNaN(limitRaw) ? 20 : Math.min(limitRaw, 100)
-  const offset   = (page - 1) * limit
+  const from       = searchParams.get('from') ?? new Date(0).toISOString()
+  const to         = searchParams.get('to')   ?? new Date().toISOString()
+  const statusRaw  = searchParams.get('status')
+  const pageRaw    = parseInt(searchParams.get('page') ?? '1', 10)
+  const page       = isNaN(pageRaw) || pageRaw < 1 ? 1 : pageRaw
+  const limitRaw   = parseInt(searchParams.get('limit') ?? '20', 10)
+  const limit      = isNaN(limitRaw) ? 20 : Math.min(limitRaw, 100)
+  const offset     = (page - 1) * limit
 
   if (!isValidIso(from) || !isValidIso(to)) {
     return NextResponse.json({ success: false, error: 'Invalid date range' }, { status: 400 })
   }
+  if (statusRaw !== null && statusRaw !== 'pending' && statusRaw !== 'completed') {
+    return NextResponse.json({ success: false, error: 'Invalid status filter' }, { status: 400 })
+  }
+  // Whole-period pagination/counts per completion status, not just the current page —
+  // the Recent/Completed tabs would otherwise only ever reflect the newest 20 sales overall.
+  const statusFilter =
+    statusRaw === 'completed' ? ' && isCompleted == true' : statusRaw === 'pending' ? ' && isCompleted != true' : ''
 
   try {
     const [sales, total] = await Promise.all([
       fresh.fetch(
-        `*[_type == "sale" && _createdAt >= $from && _createdAt <= $to] | order(_createdAt desc)[$offset..$end]`,
+        `*[_type == "sale" && _createdAt >= $from && _createdAt <= $to${statusFilter}] | order(_createdAt desc)[$offset..$end]`,
         { from, to, offset, end: offset + limit - 1 },
         { cache: 'no-store' }
       ),
       fresh.fetch(
-        `count(*[_type == "sale" && _createdAt >= $from && _createdAt <= $to])`,
+        `count(*[_type == "sale" && _createdAt >= $from && _createdAt <= $to${statusFilter}])`,
         { from, to },
         { cache: 'no-store' }
       ),

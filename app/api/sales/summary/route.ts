@@ -20,6 +20,7 @@ interface SaleRecord {
   paymentAmount: number
   change:        number
   items:         SaleItemRecord[]
+  isCompleted?:  boolean
 }
 
 interface TopItem {
@@ -48,16 +49,18 @@ export async function GET(request: NextRequest) {
   try {
     const sales: SaleRecord[] = await fresh.fetch(
       `*[_type == "sale" && _createdAt >= $from && _createdAt <= $to]{
-        _id, _createdAt, total, paymentAmount, change,
+        _id, _createdAt, total, paymentAmount, change, isCompleted,
         items[]{ name, variant, price, qty }
       }`,
       { from, to },
       { cache: 'no-store' }
     )
 
-    const orderCount    = sales.length
-    const totalRevenue  = sales.reduce((sum, s) => sum + s.total, 0)
-    const avgOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0
+    const orderCount     = sales.length
+    const totalRevenue   = sales.reduce((sum, s) => sum + s.total, 0)
+    const avgOrderValue  = orderCount > 0 ? totalRevenue / orderCount : 0
+    const completedCount = sales.filter((s) => s.isCompleted === true).length
+    const pendingCount   = orderCount - completedCount
 
     const itemMap = new Map<string, TopItem>()
     for (const sale of sales) {
@@ -87,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { totalRevenue, orderCount, avgOrderValue, topItems },
+      data: { totalRevenue, orderCount, avgOrderValue, topItems, pendingCount, completedCount },
     })
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to fetch summary.' }, { status: 500 })
