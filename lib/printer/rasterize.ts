@@ -1,5 +1,5 @@
 import { create as createQrCode } from 'qrcode'
-import logoAsset from '@/app/icon.jpg'
+import { bodoniModa } from '@/lib/fonts'
 import type { RasterImage, ReceiptAssets } from './receiptAssets'
 import type { ReceiptBlock } from './receiptDocument'
 import { THERMAL_IMAGE_SIZES, type ThermalColumns } from './thermalConfig'
@@ -33,8 +33,16 @@ type QrBlock = Extract<ReceiptBlock, { kind: 'qr' }>
 
 /** Luminance (0–255) below which a pixel prints black. */
 const BLACK_THRESHOLD = 128
-/** Fraction of the artwork's shorter side that fills the disc — zooms the wordmark in a little. */
-const LOGO_CROP_FRACTION = 0.9
+/** The wordmark, stacked in two lines inside the disc. */
+const WORDMARK_LINES = ['UNWND', 'CAFE'] as const
+/** Bold weight the logo font (see lib/fonts.ts) is loaded at — the heaviest cut, for a poster-like brand mark. */
+const WORDMARK_WEIGHT = 900
+/** Fraction of the disc's diameter each wordmark line's rendered width should fill. */
+const WORDMARK_WIDTH_FRACTION = 0.74
+/** Gap between the two stacked lines, as a fraction of the disc's diameter. */
+const WORDMARK_LINE_GAP_FRACTION = 0.04
+/** Cap height as a fraction of font size — approximate, just enough to center the two-line block vertically. */
+const CAP_HEIGHT_FRACTION = 0.7
 /** Standard QR quiet zone, in modules. */
 const QR_QUIET_ZONE = 4
 const QR_ERROR_CORRECTION = 'M'
@@ -52,15 +60,6 @@ function createCanvas(width: number, height: number): { canvas: HTMLCanvasElemen
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, width, height)
   return { canvas, ctx }
-}
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error(`Failed to load image: ${src}`))
-    img.src = src
-  })
 }
 
 function readPixels(ctx: CanvasRenderingContext2D, width: number, height: number): RasterImage {
@@ -85,26 +84,49 @@ function toMonochrome(ctx: CanvasRenderingContext2D, width: number, height: numb
   return { width, height, data }
 }
 
+/** Font size (px) at which `text` renders exactly `targetWidthPx` wide, assuming near-linear scaling. */
+function fitFontSizeToWidth(ctx: CanvasRenderingContext2D, text: string, targetWidthPx: number, fontFamily: string): number {
+  const REFERENCE_PX = 100
+  ctx.font = `${WORDMARK_WEIGHT} ${REFERENCE_PX}px ${fontFamily}`
+  const referenceWidth = ctx.measureText(text).width
+  return referenceWidth > 0 ? (REFERENCE_PX * targetWidthPx) / referenceWidth : REFERENCE_PX
+}
+
 /**
- * The round brand mark: the icon artwork cropped to a centred square and
- * clipped to a disc, so it prints as a solid disc with the wordmark knocked out.
+ * The round brand mark: the "unwnd cafe" wordmark set in the brand's own
+ * display face (see lib/fonts.ts) and drawn straight onto a solid disc, so it
+ * prints as a disc with the wordmark knocked out in white — always in sync
+ * with the on-screen wordmark font rather than shipping a separate bitmap.
  */
 export async function renderLogoBitmap(size: number, { monochrome = true }: LogoOptions = {}): Promise<Bitmap> {
   assertMultipleOfEight(size, 'Logo size')
-  const artwork = await loadImage(logoAsset.src)
   const { canvas, ctx } = createCanvas(size, size)
+  const fontFamily = bodoniModa.style.fontFamily
 
-  // The source file is a portrait tile with the wordmark in its vertical
-  // centre — a centred square crop keeps the text in the middle of the disc.
-  const side = Math.min(artwork.naturalWidth, artwork.naturalHeight) * LOGO_CROP_FRACTION
-  const sx = (artwork.naturalWidth - side) / 2
-  const sy = (artwork.naturalHeight - side) / 2
-  ctx.save()
+  ctx.fillStyle = '#000000'
   ctx.beginPath()
   ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2)
-  ctx.clip()
-  ctx.drawImage(artwork, sx, sy, side, side, 0, 0, size, size)
-  ctx.restore()
+  ctx.fill()
+
+  await document.fonts.load(`${WORDMARK_WEIGHT} 48px ${fontFamily}`)
+
+  const [topText, bottomText] = WORDMARK_LINES
+  const targetWidth = size * WORDMARK_WIDTH_FRACTION
+  const topSize = fitFontSizeToWidth(ctx, topText, targetWidth, fontFamily)
+  const bottomSize = fitFontSizeToWidth(ctx, bottomText, targetWidth, fontFamily)
+  const gap = size * WORDMARK_LINE_GAP_FRACTION
+  const topCapHeight = topSize * CAP_HEIGHT_FRACTION
+  const bottomCapHeight = bottomSize * CAP_HEIGHT_FRACTION
+
+  ctx.fillStyle = '#ffffff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  ctx.font = `${WORDMARK_WEIGHT} ${topSize}px ${fontFamily}`
+  ctx.fillText(topText, size / 2, size / 2 - gap / 2 - topCapHeight / 2)
+
+  ctx.font = `${WORDMARK_WEIGHT} ${bottomSize}px ${fontFamily}`
+  ctx.fillText(bottomText, size / 2, size / 2 + gap / 2 + bottomCapHeight / 2)
 
   return { canvas, image: monochrome ? toMonochrome(ctx, size, size) : readPixels(ctx, size, size) }
 }

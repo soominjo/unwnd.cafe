@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Geist } from 'next/font/google'
 import { Cormorant_Garamond } from 'next/font/google'
 import { Poppins } from 'next/font/google'
-import { Abril_Fatface } from 'next/font/google'
+import { bodoniModa } from '@/lib/fonts'
 import './globals.css'
 import ChromeWrapper from '@/components/ChromeWrapper'
 
@@ -16,15 +16,6 @@ const cormorant = Cormorant_Garamond({
   variable: '--font-cormorant',
   subsets: ['latin'],
   weight: ['400', '500'],
-  display: 'swap',
-})
-
-// The "unwnd" wordmark's own display face — a tall, high-contrast Didone that
-// matches the brand mark, distinct from Cormorant which is used for body headlines.
-const abrilFatface = Abril_Fatface({
-  variable: '--font-abril',
-  subsets: ['latin'],
-  weight: '400',
   display: 'swap',
 })
 
@@ -49,7 +40,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${cormorant.variable} ${poppins.variable} ${abrilFatface.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${cormorant.variable} ${poppins.variable} ${bodoniModa.variable} antialiased`}>
         <ChromeWrapper>{children}</ChromeWrapper>
       </body>
     </html>
