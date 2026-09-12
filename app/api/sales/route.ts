@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
         price:   item.price,
         qty:     item.qty,
         ...(item.note ? { note: item.note } : {}),
-        ...(item.parentLineId ? { isAddon: true } : {}),
+        ...(item.parentLineId ? { isAddon: true, parentLineId: item.parentLineId } : {}),
       })),
     })
     return NextResponse.json({ success: true, id: doc._id })

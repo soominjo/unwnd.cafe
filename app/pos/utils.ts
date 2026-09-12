@@ -1,4 +1,4 @@
-import type { OrderItem } from './types'
+import type { OrderItem, SaleItem } from './types'
 
 export function variantClass(variant: string | null): string {
   if (variant === 'hot') return 'text-red-500'
@@ -33,4 +33,29 @@ export function groupOrderItems(items: OrderItem[]): GroupedOrderItems {
   }
 
   return { parentItems, addonsByParent, orphanAddons }
+}
+
+export interface GroupedSaleItems {
+  topLevel: SaleItem[]
+  addonsByParent: Map<string, SaleItem[]>
+}
+
+// Same idea as groupOrderItems, but for a saved Sale record: nests each add-on
+// under the parentLineId it was attached to. Sales saved before that link was
+// persisted (or an add-on bought with nothing selected) simply have no match,
+// so they fall back to their own top-level line rather than being nested.
+export function groupSaleItems(items: SaleItem[]): GroupedSaleItems {
+  const lineIds = new Set(items.map(i => i.lineId))
+  const addonsByParent = new Map<string, SaleItem[]>()
+  const topLevel: SaleItem[] = []
+  for (const item of items) {
+    if (item.parentLineId && lineIds.has(item.parentLineId)) {
+      const existing = addonsByParent.get(item.parentLineId)
+      if (existing) existing.push(item)
+      else addonsByParent.set(item.parentLineId, [item])
+    } else {
+      topLevel.push(item)
+    }
+  }
+  return { topLevel, addonsByParent }
 }

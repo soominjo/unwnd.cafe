@@ -14,11 +14,9 @@ interface OrderReviewModalProps {
   payment: number | null
   notes: string
   isSubmitting: boolean
-  pendingAction: 'plain' | 'receipt' | null
   submitError: string | null
   onCancel: () => void
-  onCompletePlain: () => void
-  onCompleteReceipt: () => void
+  onComplete: () => void
 }
 
 // Full-height review page (not a floating modal) shown to the customer
@@ -37,11 +35,9 @@ export default function OrderReviewModal({
   payment,
   notes,
   isSubmitting,
-  pendingAction,
   submitError,
   onCancel,
-  onCompletePlain,
-  onCompleteReceipt,
+  onComplete,
 }: OrderReviewModalProps) {
   const { parentItems, addonsByParent, orphanAddons } = groupOrderItems(orderItems)
   const short = payment !== null && payment < grandTotal
@@ -213,20 +209,12 @@ export default function OrderReviewModal({
                 <p className="text-sm text-red-500 uppercase tracking-widest font-medium text-center">{submitError}</p>
               )}
               <button
-                onClick={onCompletePlain}
+                onClick={onComplete}
                 disabled={isSubmitting}
                 className="w-full bg-foreground text-cream text-base uppercase tracking-widest py-4 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {pendingAction === 'plain' ? 'Saving…' : 'Order Complete ✓'}
+                {isSubmitting ? 'Saving…' : 'Order Complete ✓'}
               </button>
-              <button
-                onClick={onCompleteReceipt}
-                disabled={isSubmitting}
-                className="w-full border border-foreground/20 text-foreground/70 text-sm uppercase tracking-widest py-3 font-semibold hover:border-foreground/35 hover:text-foreground hover:bg-foreground/4 active:scale-[0.99] transition-all rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {pendingAction === 'receipt' ? 'Saving…' : '🖨 Complete + Print Receipt'}
-              </button>
-              <p className="text-xs text-foreground/35 text-center">Only if the customer asks for one</p>
             </div>
           </div>
         </div>

@@ -56,6 +56,8 @@ export interface SaleItem {
   note?: string
   /** An add-on attached to another line, not an orderable menu item on its own. */
   isAddon?: boolean
+  /** The lineId of the item this add-on is attached to — absent on sales saved before this was tracked. */
+  parentLineId?: string
 }
 
 export interface Sale {

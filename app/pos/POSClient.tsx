@@ -2,17 +2,16 @@
 
 import { useState, useMemo, useCallback, memo, Fragment, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { MENU } from './menuData'
 import { variantClass, groupOrderItems } from './utils'
 import type { MenuItem, MenuCategory, OrderItem, Variant, Addon, LineDiscount } from './types'
 import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
 import MenuItemPopup from './MenuItemPopup'
 import CardActions from './CardActions'
-import ReceiptPreviewModal from './ReceiptPreviewModal'
 import OrderReviewModal from './OrderReviewModal'
 import ItemNotePopover from './ItemNotePopover'
 import { ADDON_CATEGORY_ID } from './constants'
-import { buildReceiptDocument, type ReceiptBlock, type ReceiptDiscountInput } from '@/lib/printer/receiptDocument'
 
 interface DynamicMenuItem {
   _id: string
@@ -28,6 +27,7 @@ interface DynamicMenuItem {
 }
 
 export default function POSClient() {
+  const router = useRouter()
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [orderItems, setOrderItems]             = useState<OrderItem[]>([])
   const [showConfirm, setShowConfirm]           = useState(false)
@@ -39,8 +39,6 @@ export default function POSClient() {
   const [notes, setNotes]                       = useState('')
   const [selectedLineId, setSelectedLineId]     = useState<string | null>(null)
   const [showManageMenu, setShowManageMenu]     = useState(false)
-  const [receiptBlocks, setReceiptBlocks]       = useState<ReceiptBlock[] | null>(null)
-  const [pendingAction, setPendingAction]       = useState<'plain' | 'receipt' | null>(null)
   const [dynamicCategories, setDynamicCategories] = useState<DynamicCategory[]>([])
   const [dynamicItems, setDynamicItems]         = useState<DynamicMenuItem[]>([])
   const [hiddenBuiltInIds, setHiddenBuiltInIds] = useState<string[]>([])
@@ -209,14 +207,13 @@ export default function POSClient() {
     setSelectedLineId(null)
   }
 
-  async function completeSale(withReceipt: boolean) {
+  async function completeSale() {
     if (isSubmitting) return
     setIsSubmitting(true)
-    setPendingAction(withReceipt ? 'receipt' : 'plain')
     setSubmitError(null)
     try {
-      // Pre-formatted so the persisted record and the live receipt show the
-      // identical label — reprints later reuse this string verbatim.
+      // Pre-formatted so the persisted record and any later reprint from
+      // sales history show the identical label.
       const discountLines: LineDiscount[] = [
         ...foodDiscountLines.map(d => ({ lineId: d.lineId, name: `PWD Food -20% (${d.name})`, amount: d.amount })),
         ...drinkDiscountLines.map(d => ({ lineId: d.lineId, name: `PWD Drink -20% (${d.name})`, amount: d.amount })),
@@ -239,37 +236,15 @@ export default function POSClient() {
         return
       }
 
-      if (withReceipt) {
-        const paymentAmount = payment ?? grandTotal
-        const discounts: ReceiptDiscountInput[] = discountLines.map(d => ({ label: d.name, amount: d.amount }))
-        setReceiptBlocks(buildReceiptDocument({
-          timestamp: new Date(),
-          items: orderItems.map(item => ({
-            name: item.name,
-            variant: item.variant,
-            qty: item.qty,
-            lineTotal: item.price * item.qty,
-            note: item.note,
-            isAddon: Boolean(item.parentLineId),
-          })),
-          subtotal: total,
-          discounts,
-          total: grandTotal,
-          paymentAmount,
-          change: paymentAmount - grandTotal,
-          customerName: notes.trim() || undefined,
-        }))
-      }
-
       clearOrder()
       const bc = new BroadcastChannel('pos-sales-update')
       bc.postMessage({ type: 'sale-completed' })
       bc.close()
+      router.push('/pos/sales')
     } catch {
       setSubmitError('Network error. Check connection and try again.')
     } finally {
       setIsSubmitting(false)
-      setPendingAction(null)
     }
   }
 
@@ -694,11 +669,6 @@ export default function POSClient() {
         />
       )}
 
-      {/* ── Receipt preview modal ── */}
-      {receiptBlocks && (
-        <ReceiptPreviewModal blocks={receiptBlocks} onClose={() => setReceiptBlocks(null)} />
-      )}
-
       {/* ── Order review modal (centered card, shown to the customer before charging) ── */}
       {showConfirm && (
         <OrderReviewModal
@@ -712,11 +682,9 @@ export default function POSClient() {
           payment={payment}
           notes={notes}
           isSubmitting={isSubmitting}
-          pendingAction={pendingAction}
           submitError={submitError}
           onCancel={() => { setShowConfirm(false); setSubmitError(null) }}
-          onCompletePlain={() => completeSale(false)}
-          onCompleteReceipt={() => completeSale(true)}
+          onComplete={completeSale}
         />
       )}
     </div>
