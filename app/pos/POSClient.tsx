@@ -474,7 +474,7 @@ export default function POSClient() {
 
       {/* ── Header ── */}
       <header className="bg-foreground flex items-center justify-between px-6 py-4 shrink-0">
-        <Link href="/" className="font-serif text-2xl lowercase tracking-tight text-cream hover:text-cream/70 transition-colors">unwnd. pos</Link>
+        <Link href="/" className="font-logo text-2xl lowercase tracking-tight text-cream hover:text-cream/70 transition-colors">unwnd. pos</Link>
         <div className="flex items-center gap-4">
           <a
             href="/pos/sales"

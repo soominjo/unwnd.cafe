@@ -28,5 +28,7 @@ export function buildReceiptBlocksFromSale(sale: Sale): ReceiptBlock[] {
     change: sale.change,
     // The POS stores the customer's name in the sale's notes field.
     customerName: sale.notes,
+    // Reprints from sales history are a back-of-house kitchen ticket, not a customer copy.
+    audience: 'kitchen',
   })
 }

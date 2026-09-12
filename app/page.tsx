@@ -31,7 +31,7 @@ export default function HomePage() {
         <div className="relative z-10 px-8 pb-16 md:px-16 md:pb-24">
           <FadeUp delay={0.1}>
             <h1
-              className="font-serif text-cream lowercase leading-none tracking-tighter"
+              className="font-logo text-cream lowercase leading-none tracking-tight"
               style={{ fontSize: 'clamp(4rem, 15vw, 14rem)' }}
             >
               unwnd.cafe
@@ -181,7 +181,7 @@ export default function HomePage() {
                 </span>
                 <address className="not-italic">
                   <p className="font-serif text-3xl lowercase tracking-tight leading-snug">
-                    unwnd. café<br />
+                    <span className="font-logo">unwnd. café</span><br />
                     tuesday st.<br />
                     saint joseph village niog<br />
                     bacoor, cavite
@@ -263,7 +263,7 @@ export default function HomePage() {
             </div>
 
             <div className="absolute bottom-2 left-2 z-10 bg-foreground text-cream px-5 py-3 pointer-events-none">
-              <p className="font-serif text-lg lowercase tracking-tight">unwnd.</p>
+              <p className="font-logo text-lg lowercase tracking-tight">unwnd.</p>
               <p className="text-[10px] uppercase tracking-[0.2em] text-cream/60 mt-0.5">
                 specialty café
               </p>

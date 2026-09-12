@@ -51,7 +51,7 @@ export default function POSLoginPage() {
 
   return (
     <div className="min-h-screen bg-foreground text-cream flex flex-col items-center justify-center select-none">
-      <p className="font-serif text-3xl lowercase tracking-tight mb-20 text-cream/80">
+      <p className="font-logo text-3xl lowercase tracking-tight mb-20 text-cream/80">
         unwnd. pos
       </p>
 

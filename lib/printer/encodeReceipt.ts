@@ -126,6 +126,16 @@ function encodeDetail(encoder: ReceiptPrinterEncoder, block: DetailBlock, { colu
 
 function encodeItem(encoder: ReceiptPrinterEncoder, block: ItemBlock, { columns, money }: EncodeContext): void {
   const label = block.variant ? `${block.name} (${block.variant})` : block.name
+  if (block.lineTotal === null) {
+    encoder.table(
+      [
+        { width: QTY_COLUMN, align: 'left' },
+        { width: columns - QTY_COLUMN, align: 'left' },
+      ],
+      [[String(block.qty), label]],
+    )
+    return
+  }
   encoder.table(
     [
       { width: QTY_COLUMN, align: 'left' },

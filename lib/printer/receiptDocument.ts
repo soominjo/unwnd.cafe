@@ -9,7 +9,7 @@ export type ReceiptBlock =
   | { kind: 'meta'; text: string }
   | { kind: 'rule'; style?: 'single' | 'double' }
   | { kind: 'detail'; label: string; value: string }
-  | { kind: 'item'; name: string; variant: string | null; qty: number; lineTotal: number }
+  | { kind: 'item'; name: string; variant: string | null; qty: number; lineTotal: number | null }
   | { kind: 'itemNote'; text: string }
   | { kind: 'total'; label: string; value: number; emphasis?: boolean; isDiscount?: boolean }
   | { kind: 'spacer'; lines?: number }
@@ -29,6 +29,13 @@ export interface ReceiptDiscountInput {
   amount: number
 }
 
+/**
+ * `customer` is the full receipt handed to the customer at checkout (branding, pricing,
+ * payment breakdown). `kitchen` is a lean staff ticket reprinted from sales history to
+ * prep an order — no logo or money figures, since those mean nothing back of house.
+ */
+export type ReceiptAudience = 'customer' | 'kitchen'
+
 export interface ReceiptInput {
   timestamp: Date
   items: ReceiptItemInput[]
@@ -41,10 +48,13 @@ export interface ReceiptInput {
   customerName?: string
   footerMessage?: string
   shop?: ShopDetails
+  /** Defaults to 'customer'. */
+  audience?: ReceiptAudience
 }
 
 const RECEIPT_TIME_ZONE = 'Asia/Manila'
 const DEFAULT_FOOTER = 'Thank you for visiting!'
+const KITCHEN_TICKET_TITLE = 'KITCHEN TICKET'
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('en-US', {
@@ -70,7 +80,10 @@ export function assertNeverBlock(block: never): never {
   throw new Error(`Unhandled receipt block kind: ${(block as ReceiptBlock).kind}`)
 }
 
-function headerBlocks(shop: ShopDetails): ReceiptBlock[] {
+function headerBlocks(shop: ShopDetails, audience: ReceiptAudience): ReceiptBlock[] {
+  if (audience === 'kitchen') {
+    return [{ kind: 'footer', text: KITCHEN_TICKET_TITLE }, { kind: 'rule', style: 'double' }]
+  }
   return [
     // The logo carries the brand; the shop name only prints if the bitmap can't be rendered.
     { kind: 'logo', fallbackText: shop.name },
@@ -93,12 +106,18 @@ function detailBlocks(input: ReceiptInput): ReceiptBlock[] {
   ]
 }
 
-function itemBlocks(items: ReceiptItemInput[]): ReceiptBlock[] {
+function itemBlocks(items: ReceiptItemInput[], audience: ReceiptAudience): ReceiptBlock[] {
   return items.flatMap((item): ReceiptBlock[] => {
     const note = item.note?.trim()
     const noteRow: ReceiptBlock[] = note ? [{ kind: 'itemNote', text: note }] : []
     return [
-      { kind: 'item', name: item.name, variant: item.variant, qty: item.qty, lineTotal: item.lineTotal },
+      {
+        kind: 'item',
+        name: item.name,
+        variant: item.variant,
+        qty: item.qty,
+        lineTotal: audience === 'kitchen' ? null : item.lineTotal,
+      },
       ...noteRow,
     ]
   })
@@ -124,7 +143,8 @@ function totalBlocks(input: ReceiptInput): ReceiptBlock[] {
   ]
 }
 
-function footerBlocks(input: ReceiptInput, shop: ShopDetails): ReceiptBlock[] {
+function footerBlocks(input: ReceiptInput, shop: ShopDetails, audience: ReceiptAudience): ReceiptBlock[] {
+  if (audience === 'kitchen') return [{ kind: 'spacer' }]
   return [
     { kind: 'spacer' },
     { kind: 'footer', text: input.footerMessage ?? DEFAULT_FOOTER },
@@ -135,11 +155,12 @@ function footerBlocks(input: ReceiptInput, shop: ShopDetails): ReceiptBlock[] {
 
 export function buildReceiptDocument(input: ReceiptInput): ReceiptBlock[] {
   const shop = input.shop ?? UNWND_SHOP
+  const audience = input.audience ?? 'customer'
   return [
-    ...headerBlocks(shop),
+    ...headerBlocks(shop, audience),
     ...detailBlocks(input),
-    ...itemBlocks(input.items),
-    ...totalBlocks(input),
-    ...footerBlocks(input, shop),
+    ...itemBlocks(input.items, audience),
+    ...(audience === 'kitchen' ? [] : totalBlocks(input)),
+    ...footerBlocks(input, shop, audience),
   ]
 }

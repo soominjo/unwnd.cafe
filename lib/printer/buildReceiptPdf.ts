@@ -65,7 +65,8 @@ function itemLabel(block: ItemBlock): string {
 // so the two can never disagree.
 function wrapItem(doc: PdfDocument, block: ItemBlock): string[] {
   setText(doc, 11)
-  return doc.splitTextToSize(itemLabel(block), ITEM_NAME_WIDTH_MM)
+  const width = block.lineTotal === null ? ITEM_NAME_WIDTH_MM + MONEY_COLUMN_MM : ITEM_NAME_WIDTH_MM
+  return doc.splitTextToSize(itemLabel(block), width)
 }
 
 function wrapItemNote(doc: PdfDocument, text: string): string[] {
@@ -180,7 +181,7 @@ function drawItem(doc: PdfDocument, block: ItemBlock, y: number): number {
   const lines = wrapItem(doc, block)
   doc.text(String(block.qty), MARGIN_MM, y)
   doc.text(lines, MARGIN_MM + QTY_COLUMN_MM, y)
-  doc.text(formatMoney(block.lineTotal), RIGHT_X_MM, y, { align: 'right' })
+  if (block.lineTotal !== null) doc.text(formatMoney(block.lineTotal), RIGHT_X_MM, y, { align: 'right' })
   return y + itemHeightMm(lines)
 }
 

@@ -303,7 +303,7 @@ export default function SalesClient() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="flex items-center justify-between bg-foreground px-6 py-4">
         <div className="flex items-baseline gap-3">
-          <span className="font-serif text-2xl lowercase tracking-tight text-cream">unwnd. sales</span>
+          <span className="font-logo text-2xl lowercase tracking-tight text-cream">unwnd. sales</span>
           <span className="hidden text-[10px] uppercase tracking-[0.25em] text-cream/40 sm:inline">{periodLabel(period)}</span>
         </div>
         <a href="/pos" className="text-xs uppercase tracking-[0.2em] text-cream/50 transition-colors hover:text-cream">

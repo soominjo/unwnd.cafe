@@ -21,6 +21,7 @@
   --font-mono:    var(--font-geist-mono);
   --font-serif:   var(--font-cormorant);
   --font-display: var(--font-poppins);
+  --font-logo:    var(--font-abril);
 }
 
 body {

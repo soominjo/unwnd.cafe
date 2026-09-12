@@ -119,13 +119,16 @@ function ReceiptBlockView({ block, columns }: { block: ReceiptBlock; columns: Th
       )
     case 'item':
       return (
-        <div className="grid" style={{ gridTemplateColumns: `${QTY_COLUMN} 1fr ${MONEY_COLUMN}` }}>
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: block.lineTotal === null ? `${QTY_COLUMN} 1fr` : `${QTY_COLUMN} 1fr ${MONEY_COLUMN}` }}
+        >
           <span>{block.qty}</span>
           <span className="wrap-break-word">
             {block.name}
             {block.variant && <span className="text-black/60"> ({block.variant})</span>}
           </span>
-          <span className="text-right tabular-nums">{formatMoney(block.lineTotal)}</span>
+          {block.lineTotal !== null && <span className="text-right tabular-nums">{formatMoney(block.lineTotal)}</span>}
         </div>
       )
     case 'itemNote':
