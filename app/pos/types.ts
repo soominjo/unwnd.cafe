@@ -80,11 +80,18 @@ export interface TopItem {
   revenue: number
 }
 
+export interface TopCustomer {
+  name: string
+  orderCount: number
+  totalSpent: number
+}
+
 export interface SalesSummary {
   totalRevenue: number
   orderCount: number
   avgOrderValue: number
   topItems: TopItem[]
+  topCustomers: TopCustomer[]
   /** Whole-period counts (not just the current page) — what the Recent/Completed tab badges show. */
   pendingCount: number
   completedCount: number

@@ -6,6 +6,8 @@ interface ViewTabsProps {
   pendingCount: number
   completedCount: number
   loading: boolean
+  /** False for Week/Month/Year/a long Custom range — too much to page through order-by-order. */
+  detailed: boolean
 }
 
 const TABS: ReadonlyArray<{ key: View; label: string }> = [
@@ -14,7 +16,28 @@ const TABS: ReadonlyArray<{ key: View; label: string }> = [
   { key: 'summary', label: 'Top Items' },
 ]
 
-export default function ViewTabs({ view, onChange, pendingCount, completedCount, loading }: ViewTabsProps) {
+/** Just the counts, with no way to browse into either list — used once the period is too long to page through. */
+function CountsOnly({ pendingCount, completedCount, loading }: Pick<ViewTabsProps, 'pendingCount' | 'completedCount' | 'loading'>) {
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <p className="text-[10px] uppercase tracking-[0.16em] text-foreground/40">
+        Order lists are only browsable for Today or Yesterday — showing Top Items &amp; Customers instead
+      </p>
+      {!loading && (
+        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-foreground/60">
+          <span>{pendingCount} pending</span>
+          <span aria-hidden="true">·</span>
+          <span>{completedCount} completed</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function ViewTabs({ view, onChange, pendingCount, completedCount, loading, detailed }: ViewTabsProps) {
+  if (!detailed) {
+    return <CountsOnly pendingCount={pendingCount} completedCount={completedCount} loading={loading} />
+  }
   return (
     <nav aria-label="Views" className="flex justify-center">
       <div role="group" className="inline-flex flex-wrap justify-center gap-1 rounded-lg bg-foreground/6 p-1">

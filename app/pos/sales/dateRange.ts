@@ -82,6 +82,32 @@ export function computeDateRange(period: Period, customFrom: string, customTo: s
   return toRange(new Date(Date.UTC(y1, m1 - 1, d1)), new Date(Date.UTC(y2, m2 - 1, d2 + 1)))
 }
 
+/** Calendar days spanned by a custom range, inclusive of both ends. */
+function customRangeDays(customFrom: string, customTo: string): number {
+  const [y1, m1, d1] = customFrom.split('-').map(Number)
+  const [y2, m2, d2] = customTo.split('-').map(Number)
+  const ms = Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)
+  return Math.round(ms / (24 * 60 * 60 * 1000)) + 1
+}
+
+/** Longest custom range, in days, that still counts as "detailed" (see isDetailedPeriod). */
+const MAX_DETAILED_DAYS = 2
+
+/**
+ * Whether the period is short enough to browse individual orders (Recent/Completed).
+ * Today and Yesterday always qualify; Week/Month/Year never do (they're always
+ * longer than MAX_DETAILED_DAYS); a Custom range qualifies only if it's short.
+ * Longer ranges show only the aggregated Top Items/Top Customers view instead —
+ * fetching and paginating every order in a month- or year-long range isn't worth it
+ * when the aggregate is what's actually useful at that scale.
+ */
+export function isDetailedPeriod(period: Period, customFrom: string, customTo: string): boolean {
+  if (period === 'today' || period === 'yesterday') return true
+  if (period !== 'custom') return false
+  if (!customFrom || !customTo) return false
+  return customRangeDays(customFrom, customTo) <= MAX_DETAILED_DAYS
+}
+
 /** Today's date in PH time as YYYY-MM-DD, for date-input bounds. */
 export function todayPH(): string {
   const ph = phNow()
