@@ -567,7 +567,7 @@ export default function POSClient() {
         </div>
 
         {/* Right: order panel — desktop only */}
-        <aside className="hidden lg:flex w-100 xl:w-110 flex-col border-l border-foreground/10 bg-white shrink-0">
+        <aside data-order-panel className="hidden lg:flex w-100 xl:w-110 flex-col border-l border-foreground/10 bg-white shrink-0">
           <OrderPanel
             items={orderItems}
             addons={addonAttachItems}
@@ -611,7 +611,7 @@ export default function POSClient() {
       {mobileDrawer && (
         <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileDrawer(false)} />
-          <div className="relative z-50 bg-white border-t border-foreground/10 flex flex-col max-h-[85vh] rounded-t-2xl">
+          <div data-order-panel className="relative z-50 bg-white border-t border-foreground/10 flex flex-col max-h-[85vh] rounded-t-2xl">
             <div className="flex items-center justify-between px-6 py-5 border-b border-foreground/10 shrink-0">
               <span className="text-sm font-bold uppercase tracking-widest text-foreground">Your Order</span>
               <button

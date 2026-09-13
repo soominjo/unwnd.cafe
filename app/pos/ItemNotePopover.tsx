@@ -9,7 +9,7 @@ interface ItemNotePopoverProps {
 }
 
 const PRESETS = ['Less Sweet', 'No Sugar', '1 Shot Only', 'Less Ice', 'No Ice']
-const POPOVER_WIDTH = 240
+const POPOVER_WIDTH = 208
 
 function splitNote(note: string | undefined): { presets: string[]; custom: string } {
   const parts = (note ?? '').split(',').map(p => p.trim()).filter(Boolean)
@@ -49,17 +49,20 @@ export default function ItemNotePopover({ note, onSave }: ItemNotePopoverProps) 
     setIsOpen(true)
   }
 
-  // Refine the guessed position once the popover's real size is known, fully
-  // clamped to the viewport (not any ancestor's clipped bounds).
+  // Refine the guessed position once the popover's real size is known. Clamped to the
+  // order panel itself (the nearest `[data-order-panel]` ancestor) rather than the
+  // whole viewport, so it never spills past the panel's white background onto the
+  // tan menu area beside it — falls back to the viewport if no such ancestor exists.
   useLayoutEffect(() => {
     if (!isOpen || !popoverRef.current || !buttonRef.current) return
-    const margin = 12
+    const margin = 8
     const buttonRect = buttonRef.current.getBoundingClientRect()
     const popRect = popoverRef.current.getBoundingClientRect()
-    const left = Math.min(
-      Math.max(buttonRect.right - popRect.width, margin),
-      window.innerWidth - popRect.width - margin,
-    )
+    const panel = buttonRef.current.closest<HTMLElement>('[data-order-panel]')
+    const bounds = panel ? panel.getBoundingClientRect() : { left: 0, right: window.innerWidth }
+    const minLeft = bounds.left + margin
+    const maxLeft = Math.max(bounds.right - popRect.width - margin, minLeft)
+    const left = Math.min(Math.max(buttonRect.right - popRect.width, minLeft), maxLeft)
     let top = buttonRect.bottom + 4
     if (top + popRect.height > window.innerHeight - margin) {
       top = buttonRect.top - popRect.height - 4
@@ -119,15 +122,15 @@ export default function ItemNotePopover({ note, onSave }: ItemNotePopoverProps) 
           ref={popoverRef}
           onClick={e => e.stopPropagation()}
           style={{ position: 'fixed', top: position.top, left: position.left }}
-          className="z-50 w-60 max-w-[calc(100vw-1.5rem)] bg-white border border-foreground/12 rounded-lg shadow-xl p-3 space-y-2.5"
+          className="z-50 w-52 max-w-[calc(100vw-1.5rem)] bg-white border border-foreground/12 rounded-lg shadow-xl p-2.5 space-y-2"
         >
           <p className="text-[9px] uppercase tracking-widest text-foreground/45 font-semibold">Customize this drink</p>
-          <div className="grid grid-cols-1 gap-1.5">
+          <div className="grid grid-cols-1 gap-1">
             {PRESETS.map(preset => (
               <button
                 key={preset}
                 onClick={() => togglePreset(preset)}
-                className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-full border transition-colors text-center truncate ${
+                className={`px-2 py-1 text-[10px] font-semibold rounded-full border transition-colors text-center truncate ${
                   presets.includes(preset)
                     ? 'bg-amber-500 text-white border-amber-500'
                     : 'border-foreground/15 text-foreground/65 hover:border-amber-400 hover:text-amber-600'
@@ -144,7 +147,7 @@ export default function ItemNotePopover({ note, onSave }: ItemNotePopoverProps) 
             onChange={e => setCustom(e.target.value)}
             onBlur={commitCustom}
             onKeyDown={e => { if (e.key === 'Enter') { commitCustom(); setIsOpen(false) } }}
-            className="w-full border border-foreground/13 rounded-sm px-2.5 py-1.5 text-xs text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-amber-400"
+            className="w-full border border-foreground/13 rounded-sm px-2 py-1 text-[11px] text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-amber-400"
           />
         </div>,
         document.body,
