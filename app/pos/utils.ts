@@ -41,21 +41,33 @@ export interface GroupedSaleItems {
 }
 
 // Same idea as groupOrderItems, but for a saved Sale record: nests each add-on
-// under the parentLineId it was attached to. Sales saved before that link was
-// persisted (or an add-on bought with nothing selected) simply have no match,
-// so they fall back to their own top-level line rather than being nested.
+// under the item it belongs to. Prefers the explicit parentLineId link; when
+// that's missing (sales saved before it was tracked, or an add-on whose parent
+// line wasn't selected at the time) it falls back to nesting under whichever
+// non-addon line came just before it — add-ons are always saved with the
+// load-bearing 'addon__' lineId prefix (see constants.ts), so that's still a
+// reliable way to tell an add-on apart from a real order line either way. Only
+// an add-on with nothing ordered before it at all stays on its own top-level line.
 export function groupSaleItems(items: SaleItem[]): GroupedSaleItems {
   const lineIds = new Set(items.map(i => i.lineId))
   const addonsByParent = new Map<string, SaleItem[]>()
   const topLevel: SaleItem[] = []
+  let lastTopLevelLineId: string | null = null
+
   for (const item of items) {
-    if (item.parentLineId && lineIds.has(item.parentLineId)) {
-      const existing = addonsByParent.get(item.parentLineId)
+    const isAddon = item.lineId.startsWith('addon__')
+    const parentLineId =
+      item.parentLineId && lineIds.has(item.parentLineId) ? item.parentLineId : isAddon ? lastTopLevelLineId : null
+
+    if (parentLineId) {
+      const existing = addonsByParent.get(parentLineId)
       if (existing) existing.push(item)
-      else addonsByParent.set(item.parentLineId, [item])
+      else addonsByParent.set(parentLineId, [item])
     } else {
       topLevel.push(item)
+      lastTopLevelLineId = item.lineId
     }
   }
+
   return { topLevel, addonsByParent }
 }

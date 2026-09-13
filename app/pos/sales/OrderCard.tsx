@@ -259,13 +259,15 @@ function AddonRow({ addon, isConfirming, isDeleting, onRequestRemove, onCancelRe
   }
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+      <span className="inline-flex w-fit items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
         <span className="text-sky-500">+</span>
         {addon.name}
-        {addon.qty > 1 && <span className="tabular-nums">×{addon.qty}</span>}
       </span>
-      <div className="flex items-center gap-1">
-        <span className="text-xs tabular-nums text-foreground/50">₱{(addon.price * addon.qty).toLocaleString()}</span>
+      <div className="flex items-center gap-3">
+        <span className="text-xs tabular-nums text-foreground/50">×{addon.qty}</span>
+        <span className="w-16 text-right text-xs font-semibold tabular-nums text-foreground/80">
+          ₱{(addon.price * addon.qty).toLocaleString()}
+        </span>
         <RemoveButton aria-label={`Remove ${addon.name}`} onClick={onRequestRemove} />
       </div>
     </div>
