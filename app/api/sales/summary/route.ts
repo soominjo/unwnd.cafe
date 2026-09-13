@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { client } from '@/sanity/lib/client'
 import { requirePosAuth } from '@/lib/requirePosAuth'
+import { getResolvedCategories } from '@/lib/menuCategories'
 
 export const dynamic = 'force-dynamic'
 
 const fresh = client.withConfig({ useCdn: false })
 
 interface SaleItemRecord {
-  name:    string
-  variant: string | null
-  price:   number
-  qty:     number
+  name:       string
+  variant:    string | null
+  price:      number
+  qty:        number
+  categoryId?: string | null
 }
 
 interface SaleRecord {
@@ -25,10 +27,16 @@ interface SaleRecord {
 }
 
 interface TopItem {
-  name:    string
-  variant: string | null
-  qtySold: number
-  revenue: number
+  name:       string
+  variant:    string | null
+  qtySold:    number
+  revenue:    number
+  categoryId: string | null
+}
+
+interface TopItemCategory {
+  id:    string
+  label: string
 }
 
 interface TopCustomer {
@@ -57,14 +65,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const sales: SaleRecord[] = await fresh.fetch(
-      `*[_type == "sale" && _createdAt >= $from && _createdAt <= $to]{
-        _id, _createdAt, total, paymentAmount, change, isCompleted, notes,
-        items[]{ name, variant, price, qty }
-      }`,
-      { from, to },
-      { cache: 'no-store' }
-    )
+    const [sales, categories]: [SaleRecord[], Awaited<ReturnType<typeof getResolvedCategories>>] = await Promise.all([
+      fresh.fetch(
+        `*[_type == "sale" && _createdAt >= $from && _createdAt <= $to]{
+          _id, _createdAt, total, paymentAmount, change, isCompleted, notes,
+          items[]{ name, variant, price, qty, categoryId }
+        }`,
+        { from, to },
+        { cache: 'no-store' }
+      ),
+      getResolvedCategories(),
+    ])
 
     const orderCount     = sales.length
     const totalRevenue   = sales.reduce((sum, s) => sum + s.total, 0)
@@ -85,18 +96,24 @@ export async function GET(request: NextRequest) {
           })
         } else {
           itemMap.set(key, {
-            name:    item.name,
-            variant: item.variant ?? null,
-            qtySold: item.qty,
-            revenue: item.price * item.qty,
+            name:       item.name,
+            variant:    item.variant ?? null,
+            qtySold:    item.qty,
+            revenue:    item.price * item.qty,
+            categoryId: item.categoryId ?? null,
           })
         }
       }
     }
 
-    const topItems = [...itemMap.values()]
-      .sort((a, b) => b.qtySold - a.qtySold)
-      .slice(0, LEADERBOARD_SIZE)
+    // Not capped to LEADERBOARD_SIZE here — the client filters by category first,
+    // then takes its own top 20 of whichever subset is selected.
+    const topItems = [...itemMap.values()].sort((a, b) => b.qtySold - a.qtySold)
+
+    const presentCategoryIds = new Set(topItems.map((i) => i.categoryId).filter((id): id is string => id !== null))
+    const topItemCategories: TopItemCategory[] = categories
+      .filter((c) => presentCategoryIds.has(c.id))
+      .map((c) => ({ id: c.id, label: c.label }))
 
     // Only sales with a customer name (stored as the sale's notes) can be attributed —
     // "No name" orders are excluded rather than lumped together as one "customer".
@@ -122,7 +139,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { totalRevenue, orderCount, avgOrderValue, topItems, topCustomers, pendingCount, completedCount },
+      data: { totalRevenue, orderCount, avgOrderValue, topItems, topItemCategories, topCustomers, pendingCount, completedCount },
     })
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to fetch summary.' }, { status: 500 })

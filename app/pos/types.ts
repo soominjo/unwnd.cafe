@@ -58,6 +58,8 @@ export interface SaleItem {
   isAddon?: boolean
   /** The lineId of the item this add-on is attached to — absent on sales saved before this was tracked. */
   parentLineId?: string
+  /** The menu category this was ordered from — absent for add-ons and sales saved before this was tracked. */
+  categoryId?: string
 }
 
 export interface Sale {
@@ -78,6 +80,13 @@ export interface TopItem {
   variant: string | null
   qtySold: number
   revenue: number
+  /** Null for add-ons and sales saved before category tracking — filtered out of the category sub-tabs, still shown under "All". */
+  categoryId: string | null
+}
+
+export interface TopItemCategory {
+  id: string
+  label: string
 }
 
 export interface TopCustomer {
@@ -91,6 +100,8 @@ export interface SalesSummary {
   orderCount: number
   avgOrderValue: number
   topItems: TopItem[]
+  /** Only the categories actually present in topItems, in menu order — the Top Items sub-tabs. */
+  topItemCategories: TopItemCategory[]
   topCustomers: TopCustomer[]
   /** Whole-period counts (not just the current page) — what the Recent/Completed tab badges show. */
   pendingCount: number

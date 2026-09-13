@@ -19,7 +19,7 @@ export default function TopCustomersView({ summary, loading }: TopCustomersViewP
   return (
     <section className="overflow-hidden rounded-lg border border-border bg-white/80">
       <header className="flex items-baseline justify-between border-b border-border/70 bg-foreground/3 px-4 py-3">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/60">Top customers</h2>
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/60">Top names</h2>
         <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/40">by orders placed</span>
       </header>
       <ol className="divide-y divide-border/60">

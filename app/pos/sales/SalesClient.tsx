@@ -6,7 +6,7 @@ import type { Sale, SalesSummary } from '../types'
 import { computeDateRange, isDetailedPeriod, isPeriod, periodLabel, type Period } from './dateRange'
 import PeriodFilter, { type PeriodUpdates } from './PeriodFilter'
 import KpiStrip from './KpiStrip'
-import ViewTabs, { type View } from './ViewTabs'
+import ViewTabs, { type SummaryTab, type View } from './ViewTabs'
 import OrdersView, { type OrderActions } from './OrdersView'
 import TopItemsView from './TopItemsView'
 import TopCustomersView from './TopCustomersView'
@@ -46,6 +46,8 @@ export default function SalesClient() {
 
   // ── Local UI state ─────────────────────────────────────────────────────────
   const [view, setView] = useState<View>('recent')
+  // Which of Top Items / Top Names shows on a long (!detailed) period.
+  const [summaryTab, setSummaryTab] = useState<SummaryTab>('items')
   const [summary, setSummary] = useState<SalesSummary | null>(null)
   // Scoped to the active tab's status (pending/completed) — not "every order on the page 1 of the whole period".
   const [orders, setOrders] = useState<Sale[]>([])
@@ -338,12 +340,20 @@ export default function SalesClient() {
           completedCount={summary?.completedCount ?? 0}
           loading={loading}
           detailed={detailed}
+          summaryTab={summaryTab}
+          onSummaryTabChange={setSummaryTab}
         />
 
         {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-        {!detailed || view === 'summary' ? (
-          <div className="space-y-6">
+        {!detailed ? (
+          summaryTab === 'items' ? (
+            <TopItemsView summary={summary} loading={loading} />
+          ) : (
+            <TopCustomersView summary={summary} loading={loading} />
+          )
+        ) : view === 'summary' ? (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <TopItemsView summary={summary} loading={loading} />
             <TopCustomersView summary={summary} loading={loading} />
           </div>

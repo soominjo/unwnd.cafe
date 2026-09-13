@@ -16,6 +16,8 @@ interface SaleItemInput {
   note?:        string
   /** Set when this line is an add-on attached to another line, rather than an orderable menu item on its own. */
   parentLineId?: string
+  /** The menu category this item was ordered from (e.g. "signature", "espresso") — absent for add-ons. */
+  categoryId?:  string
 }
 
 interface SaleDiscountInput {
@@ -75,6 +77,7 @@ function isValidSaleInput(body: unknown): body is SaleInput {
     if (typeof i.variant === 'string' && i.variant.length > 100) return false
     if (i.note !== undefined && (typeof i.note !== 'string' || i.note.length > 200)) return false
     if (i.parentLineId !== undefined && (typeof i.parentLineId !== 'string' || i.parentLineId.length > 100)) return false
+    if (i.categoryId !== undefined && (typeof i.categoryId !== 'string' || i.categoryId.length > 100)) return false
     return (typeof i.variant === 'string' || i.variant === null)
   })
 }
@@ -129,6 +132,7 @@ export async function POST(request: NextRequest) {
         qty:     item.qty,
         ...(item.note ? { note: item.note } : {}),
         ...(item.parentLineId ? { isAddon: true, parentLineId: item.parentLineId } : {}),
+        ...(item.categoryId ? { categoryId: item.categoryId } : {}),
       })),
     })
     return NextResponse.json({ success: true, id: doc._id })

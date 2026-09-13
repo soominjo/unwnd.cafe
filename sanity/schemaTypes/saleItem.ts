@@ -13,5 +13,6 @@ export const saleItem = defineType({
     defineField({ name: 'note',    title: 'Note',     type: 'string' }),
     defineField({ name: 'isAddon', title: 'Is Add-on', type: 'boolean' }),
     defineField({ name: 'parentLineId', title: 'Parent Line ID', type: 'string' }),
+    defineField({ name: 'categoryId', title: 'Category ID', type: 'string' }),
   ],
 })
