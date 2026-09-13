@@ -1031,18 +1031,15 @@ function OrderPanel({
                       </div>
                     </div>
 
-                    {/* Attached add-ons */}
+                    {/* Attached add-ons — a light-blue "+ name" chip, same look as the Review Your Order
+                        screen, with editable qty/price alongside since this cart is still live. */}
                     {childAddons.map(addon => (
-                      <div
-                        key={addon.lineId}
-                        className={`flex items-center gap-2 py-1.5 ml-3 pl-3 border-b border-foreground/5 ${
-                          isSelected ? 'border-l-2 border-l-emerald-200' : 'border-l border-l-foreground/10'
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[0.8rem] text-foreground/55">+ {addon.name}</p>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
+                      <div key={addon.lineId} className="flex items-center gap-2 py-1.5 pl-3">
+                        <span className="inline-flex min-w-0 shrink items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+                          <span className="text-sky-500">+</span>
+                          <span className="truncate">{addon.name}</span>
+                        </span>
+                        <div className="ml-auto flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => onAdjust(addon.lineId, -1)}
                             className="w-7 h-7 flex items-center justify-center text-foreground/35 hover:text-foreground border border-foreground/10 hover:border-foreground/25 rounded-sm text-sm transition-colors"
@@ -1057,7 +1054,7 @@ function OrderPanel({
                             +
                           </button>
                         </div>
-                        <span className="text-xs tabular-nums w-16 text-right text-foreground/45">
+                        <span className="text-xs tabular-nums w-16 text-right text-foreground/45 shrink-0">
                           ₱{(addon.price * addon.qty).toFixed(0)}
                         </span>
                       </div>
@@ -1085,27 +1082,7 @@ function OrderPanel({
         })()}
       </div>
 
-      {/* Customer name — stored as the sale's notes and printed as "Name" on the receipt */}
-      <div className="px-6 py-2 border-t border-foreground/10 shrink-0">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Customer name…"
-            value={notes}
-            disabled={items.length === 0}
-            maxLength={100}
-            onChange={e => onNotesChange(e.target.value)}
-            className={`w-full border border-foreground/13 rounded-sm px-2.5 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/40 disabled:opacity-30 bg-transparent ${notes.length > 70 ? 'pr-7' : ''}`}
-          />
-          {notes.length > 70 && (
-            <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums pointer-events-none ${notes.length >= 95 ? 'text-red-400' : 'text-foreground/30'}`}>
-              {100 - notes.length}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Add-ons — hidden until a drink's "+" is tapped */}
+      {/* Add-ons — hidden until a drink's "+" is tapped; shown above Customer name/Customize */}
       {addonsLineId && items.find(i => i.lineId === addonsLineId) && (
         <div className="px-6 py-2 border-t border-foreground/10 shrink-0">
           <div className="flex items-center justify-between mb-2">
@@ -1135,7 +1112,7 @@ function OrderPanel({
         </div>
       )}
 
-      {/* Customize — hidden until a drink's 📝 is tapped */}
+      {/* Customize — hidden until a drink's 📝 is tapped; shown above Customer name */}
       {customizeLineId && items.find(i => i.lineId === customizeLineId) && (
         <CustomizeDrinkRow
           key={customizeLineId}
@@ -1145,6 +1122,26 @@ function OrderPanel({
           onPresetChosen={onCustomizeDone}
         />
       )}
+
+      {/* Customer name — stored as the sale's notes and printed as "Name" on the receipt */}
+      <div className="px-6 py-2 border-t border-foreground/10 shrink-0">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Customer name…"
+            value={notes}
+            disabled={items.length === 0}
+            maxLength={100}
+            onChange={e => onNotesChange(e.target.value)}
+            className={`w-full border border-foreground/13 rounded-sm px-2.5 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/40 disabled:opacity-30 bg-transparent ${notes.length > 70 ? 'pr-7' : ''}`}
+          />
+          {notes.length > 70 && (
+            <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums pointer-events-none ${notes.length >= 95 ? 'text-red-400' : 'text-foreground/30'}`}>
+              {100 - notes.length}
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Footer: discount toggle + total + payment + actions */}
       <div className="px-6 pt-3 pb-3 border-t border-foreground/10 shrink-0 space-y-2.5">
