@@ -9,7 +9,7 @@ interface ItemNotePopoverProps {
 }
 
 const PRESETS = ['Less Sweet', 'No Sugar', '1 Shot Only', 'Less Ice', 'No Ice']
-const POPOVER_WIDTH = 340
+const POPOVER_WIDTH = 240
 
 function splitNote(note: string | undefined): { presets: string[]; custom: string } {
   const parts = (note ?? '').split(',').map(p => p.trim()).filter(Boolean)
@@ -119,15 +119,15 @@ export default function ItemNotePopover({ note, onSave }: ItemNotePopoverProps) 
           ref={popoverRef}
           onClick={e => e.stopPropagation()}
           style={{ position: 'fixed', top: position.top, left: position.left }}
-          className="z-50 w-85 max-w-[calc(100vw-1.5rem)] bg-white border border-foreground/12 rounded-lg shadow-xl p-3 space-y-2.5"
+          className="z-50 w-60 max-w-[calc(100vw-1.5rem)] bg-white border border-foreground/12 rounded-lg shadow-xl p-3 space-y-2.5"
         >
           <p className="text-[9px] uppercase tracking-widest text-foreground/45 font-semibold">Customize this drink</p>
-          <div className="grid grid-cols-5 gap-1">
+          <div className="grid grid-cols-1 gap-1.5">
             {PRESETS.map(preset => (
               <button
                 key={preset}
                 onClick={() => togglePreset(preset)}
-                className={`px-1 py-1.5 text-[9px] font-semibold rounded-full border transition-colors text-center truncate ${
+                className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-full border transition-colors text-center truncate ${
                   presets.includes(preset)
                     ? 'bg-amber-500 text-white border-amber-500'
                     : 'border-foreground/15 text-foreground/65 hover:border-amber-400 hover:text-amber-600'
