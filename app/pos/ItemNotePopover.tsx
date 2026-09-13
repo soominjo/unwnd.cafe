@@ -9,7 +9,11 @@ interface ItemNotePopoverProps {
 }
 
 const PRESETS = ['Less Sweet', 'No Sugar', '1 Shot Only', 'Less Ice', 'No Ice']
-const POPOVER_WIDTH = 208
+/** Guessed width before the row's actual layout is measured — replaced immediately by the layout effect below. */
+const INITIAL_WIDTH = 160
+/** The order row's own horizontal padding (`px-6` on the scrollable item list) — the price sits flush against it. */
+const ROW_PADDING = 24
+const MIN_WIDTH = 140
 
 function splitNote(note: string | undefined): { presets: string[]; custom: string } {
   const parts = (note ?? '').split(',').map(p => p.trim()).filter(Boolean)
@@ -34,7 +38,7 @@ export default function ItemNotePopover({ note, onSave }: ItemNotePopoverProps) 
   const [isOpen, setIsOpen] = useState(false)
   const [presets, setPresets] = useState<string[]>([])
   const [custom, setCustom] = useState('')
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+  const [position, setPosition] = useState<{ top: number; left: number; width: number } | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
 
@@ -44,15 +48,17 @@ export default function ItemNotePopover({ note, onSave }: ItemNotePopoverProps) 
     setCustom(parsed.custom)
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
-      setPosition({ top: rect.bottom + 4, left: rect.right - POPOVER_WIDTH })
+      setPosition({ top: rect.bottom + 4, left: rect.left, width: INITIAL_WIDTH })
     }
     setIsOpen(true)
   }
 
-  // Refine the guessed position once the popover's real size is known. Clamped to the
-  // order panel itself (the nearest `[data-order-panel]` ancestor) rather than the
-  // whole viewport, so it never spills past the panel's white background onto the
-  // tan menu area beside it — falls back to the viewport if no such ancestor exists.
+  // Spans from the customize button (left edge) to where the row's price column sits
+  // (right edge) instead of a fixed width, so it reads as "attached to this row" rather
+  // than a floating box — narrower on a narrow order panel, wider on a roomy one, but
+  // always this row's own width. Clamped to the nearest `[data-order-panel]` ancestor
+  // so it never spills past the panel's white background onto the tan menu area beside
+  // it — falls back to the viewport if no such ancestor exists.
   useLayoutEffect(() => {
     if (!isOpen || !popoverRef.current || !buttonRef.current) return
     const margin = 8
@@ -60,14 +66,14 @@ export default function ItemNotePopover({ note, onSave }: ItemNotePopoverProps) 
     const popRect = popoverRef.current.getBoundingClientRect()
     const panel = buttonRef.current.closest<HTMLElement>('[data-order-panel]')
     const bounds = panel ? panel.getBoundingClientRect() : { left: 0, right: window.innerWidth }
-    const minLeft = bounds.left + margin
-    const maxLeft = Math.max(bounds.right - popRect.width - margin, minLeft)
-    const left = Math.min(Math.max(buttonRect.right - popRect.width, minLeft), maxLeft)
+    const left = Math.max(buttonRect.left, bounds.left + margin)
+    const right = Math.max(bounds.right - ROW_PADDING, left + MIN_WIDTH)
+    const width = right - left
     let top = buttonRect.bottom + 4
     if (top + popRect.height > window.innerHeight - margin) {
       top = buttonRect.top - popRect.height - 4
     }
-    setPosition({ top, left })
+    setPosition({ top, left, width })
   }, [isOpen])
 
   useEffect(() => {
@@ -121,16 +127,16 @@ export default function ItemNotePopover({ note, onSave }: ItemNotePopoverProps) 
         <div
           ref={popoverRef}
           onClick={e => e.stopPropagation()}
-          style={{ position: 'fixed', top: position.top, left: position.left }}
-          className="z-50 w-52 max-w-[calc(100vw-1.5rem)] bg-white border border-foreground/12 rounded-lg shadow-xl p-2.5 space-y-2"
+          style={{ position: 'fixed', top: position.top, left: position.left, width: position.width }}
+          className="z-50 max-w-[calc(100vw-1.5rem)] bg-white border border-foreground/12 rounded-lg shadow-xl p-2.5 space-y-2"
         >
           <p className="text-[9px] uppercase tracking-widest text-foreground/45 font-semibold">Customize this drink</p>
-          <div className="grid grid-cols-1 gap-1">
+          <div className="grid grid-cols-1 gap-1.5">
             {PRESETS.map(preset => (
               <button
                 key={preset}
                 onClick={() => togglePreset(preset)}
-                className={`px-2 py-1 text-[10px] font-semibold rounded-full border transition-colors text-center truncate ${
+                className={`px-2 py-2.5 text-[11px] font-semibold rounded-full border transition-colors text-center truncate ${
                   presets.includes(preset)
                     ? 'bg-amber-500 text-white border-amber-500'
                     : 'border-foreground/15 text-foreground/65 hover:border-amber-400 hover:text-amber-600'
@@ -147,7 +153,7 @@ export default function ItemNotePopover({ note, onSave }: ItemNotePopoverProps) 
             onChange={e => setCustom(e.target.value)}
             onBlur={commitCustom}
             onKeyDown={e => { if (e.key === 'Enter') { commitCustom(); setIsOpen(false) } }}
-            className="w-full border border-foreground/13 rounded-sm px-2 py-1 text-[11px] text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-amber-400"
+            className="w-full border border-foreground/13 rounded-sm px-2 py-2 text-[11px] text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-amber-400"
           />
         </div>,
         document.body,
