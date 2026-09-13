@@ -10,7 +10,7 @@ import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
 import MenuItemPopup from './MenuItemPopup'
 import CardActions from './CardActions'
 import OrderReviewModal from './OrderReviewModal'
-import ItemNotePopover from './ItemNotePopover'
+import CustomizeDrinkRow from './CustomizeDrinkRow'
 import { ADDON_CATEGORY_ID } from './constants'
 
 interface DynamicMenuItem {
@@ -38,6 +38,9 @@ export default function POSClient() {
   const [submitError, setSubmitError]           = useState<string | null>(null)
   const [notes, setNotes]                       = useState('')
   const [selectedLineId, setSelectedLineId]     = useState<string | null>(null)
+  // Which item's "Customize" chip row (Less Sweet, No Sugar, etc.) is expanded — hidden
+  // (null) until the drink's 📝 button is tapped, one at a time.
+  const [customizeLineId, setCustomizeLineId]   = useState<string | null>(null)
   const [showManageMenu, setShowManageMenu]     = useState(false)
   const [dynamicCategories, setDynamicCategories] = useState<DynamicCategory[]>([])
   const [dynamicItems, setDynamicItems]         = useState<DynamicMenuItem[]>([])
@@ -184,6 +187,14 @@ export default function POSClient() {
       return willRemove ? trimmed.filter(i => i.parentLineId !== lineId) : trimmed
     })
     if (willRemove && selectedLineId === lineId) setSelectedLineId(null)
+    if (willRemove && customizeLineId === lineId) setCustomizeLineId(null)
+  }
+
+  // Tapping a drink's 📝 always targets that exact item — selects it (so Add-ons
+  // points at the same drink) and shows/hides its Customize row, one open at a time.
+  function toggleCustomize(lineId: string) {
+    setSelectedLineId(lineId)
+    setCustomizeLineId(prev => (prev === lineId ? null : lineId))
   }
 
   // Each line's discount toggles independently — a single transaction can carry
@@ -205,6 +216,7 @@ export default function POSClient() {
     setSubmitError(null)
     setNotes('')
     setSelectedLineId(null)
+    setCustomizeLineId(null)
   }
 
   async function completeSale() {
@@ -576,6 +588,7 @@ export default function POSClient() {
             foodDiscountLines={foodDiscountLines}
             drinkDiscountLines={drinkDiscountLines}
             selectedLineId={selectedLineId}
+            customizeLineId={customizeLineId}
             payment={payment}
             customInput={customInput}
             notes={notes}
@@ -588,6 +601,7 @@ export default function POSClient() {
             onSelectItem={setSelectedLineId}
             onToggleItemDiscount={toggleItemPwdDiscount}
             onSetItemNote={setItemNote}
+            onToggleCustomize={toggleCustomize}
           />
         </aside>
       </div>
@@ -629,6 +643,7 @@ export default function POSClient() {
               foodDiscountLines={foodDiscountLines}
               drinkDiscountLines={drinkDiscountLines}
               selectedLineId={selectedLineId}
+              customizeLineId={customizeLineId}
               payment={payment}
               customInput={customInput}
               notes={notes}
@@ -641,6 +656,7 @@ export default function POSClient() {
               onSelectItem={setSelectedLineId}
               onToggleItemDiscount={toggleItemPwdDiscount}
               onSetItemNote={setItemNote}
+              onToggleCustomize={toggleCustomize}
             />
           </div>
         </div>
@@ -841,6 +857,7 @@ function OrderPanel({
   foodDiscountLines,
   drinkDiscountLines,
   selectedLineId,
+  customizeLineId,
   payment,
   customInput,
   notes,
@@ -853,6 +870,7 @@ function OrderPanel({
   onSelectItem,
   onToggleItemDiscount,
   onSetItemNote,
+  onToggleCustomize,
 }: {
   items: OrderItem[]
   addons: Addon[]
@@ -861,6 +879,7 @@ function OrderPanel({
   foodDiscountLines: LineDiscount[]
   drinkDiscountLines: LineDiscount[]
   selectedLineId: string | null
+  customizeLineId: string | null
   payment: number | null
   customInput: string
   notes: string
@@ -873,6 +892,7 @@ function OrderPanel({
   onSelectItem: (lineId: string) => void
   onToggleItemDiscount: (lineId: string) => void
   onSetItemNote: (lineId: string, note: string) => void
+  onToggleCustomize: (lineId: string) => void
 }) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -927,7 +947,17 @@ function OrderPanel({
                         )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <ItemNotePopover note={item.note} onSave={(text) => onSetItemNote(item.lineId, text)} />
+                        <button
+                          onClick={e => { e.stopPropagation(); onToggleCustomize(item.lineId) }}
+                          title="Customize (less sweet, 1 shot, etc.)"
+                          className={`w-8 h-8 flex items-center justify-center text-[11px] font-bold rounded-full border transition-colors ${
+                            item.note
+                              ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                              : 'bg-amber-50 border-amber-300 text-amber-600 hover:bg-amber-100 hover:border-amber-500'
+                          } ${customizeLineId === item.lineId ? 'ring-2 ring-amber-300 ring-offset-1' : ''}`}
+                        >
+                          📝
+                        </button>
                         <button
                           onClick={e => { e.stopPropagation(); onToggleItemDiscount(item.lineId) }}
                           title="Toggle PWD/Senior 20% discount"
@@ -1064,6 +1094,16 @@ function OrderPanel({
           ))}
         </div>
       </div>
+
+      {/* Customize — hidden until a drink's 📝 is tapped */}
+      {customizeLineId && items.find(i => i.lineId === customizeLineId) && (
+        <CustomizeDrinkRow
+          key={customizeLineId}
+          itemName={items.find(i => i.lineId === customizeLineId)!.name}
+          note={items.find(i => i.lineId === customizeLineId)!.note}
+          onSave={(text) => onSetItemNote(customizeLineId, text)}
+        />
+      )}
 
       {/* Footer: discount toggle + total + payment + actions */}
       <div className="px-6 pt-3 pb-3 border-t border-foreground/10 shrink-0 space-y-2.5">
