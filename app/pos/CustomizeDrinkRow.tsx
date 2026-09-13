@@ -19,6 +19,8 @@ interface CustomizeDrinkRowProps {
   itemName: string
   note?: string
   onSave: (note: string) => void
+  /** Called right after any preset is tapped (picked or un-picked) — the parent closes the row on it, so picking one is a single tap rather than tap-then-dismiss. Typing "Other" doesn't trigger this. */
+  onPresetChosen: () => void
 }
 
 // Inline "attached to the selected item" editor for drink customizations (less sweet,
@@ -26,7 +28,7 @@ interface CustomizeDrinkRowProps {
 // a tap applies to. Rendered in normal document flow rather than a floating popover, so
 // there's no position to compute and it can never spill outside the order panel.
 // Mount with `key={itemLineId}` from the parent so switching items resets local state.
-export default function CustomizeDrinkRow({ itemName, note, onSave }: CustomizeDrinkRowProps) {
+export default function CustomizeDrinkRow({ itemName, note, onSave, onPresetChosen }: CustomizeDrinkRowProps) {
   const initial = splitNote(note)
   const [presets, setPresets] = useState<string[]>(initial.presets)
   const [custom, setCustom] = useState(initial.custom)
@@ -35,6 +37,7 @@ export default function CustomizeDrinkRow({ itemName, note, onSave }: CustomizeD
     const next = presets.includes(preset) ? presets.filter(p => p !== preset) : [...presets, preset]
     setPresets(next)
     onSave(joinNote(next, custom))
+    onPresetChosen()
   }
 
   function commitCustom() {

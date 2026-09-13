@@ -41,6 +41,8 @@ export default function POSClient() {
   // Which item's "Customize" chip row (Less Sweet, No Sugar, etc.) is expanded — hidden
   // (null) until the drink's 📝 button is tapped, one at a time.
   const [customizeLineId, setCustomizeLineId]   = useState<string | null>(null)
+  // Same idea for the Add-ons row — hidden until the "+" button is tapped.
+  const [addonsLineId, setAddonsLineId]         = useState<string | null>(null)
   const [showManageMenu, setShowManageMenu]     = useState(false)
   const [dynamicCategories, setDynamicCategories] = useState<DynamicCategory[]>([])
   const [dynamicItems, setDynamicItems]         = useState<DynamicMenuItem[]>([])
@@ -177,6 +179,13 @@ export default function POSClient() {
     })
   }
 
+  // Picking an add-on closes the row immediately — same one-tap-and-done feel as
+  // Customize, rather than requiring a second tap to dismiss it.
+  function addAddonAndClose(addon: Addon) {
+    addAddon(addon)
+    setAddonsLineId(null)
+  }
+
   function adjustQty(lineId: string, delta: number) {
     const target = orderItems.find(i => i.lineId === lineId)
     const willRemove = target !== undefined && target.qty + delta <= 0
@@ -188,6 +197,7 @@ export default function POSClient() {
     })
     if (willRemove && selectedLineId === lineId) setSelectedLineId(null)
     if (willRemove && customizeLineId === lineId) setCustomizeLineId(null)
+    if (willRemove && addonsLineId === lineId) setAddonsLineId(null)
   }
 
   // Tapping a drink's 📝 always targets that exact item — selects it (so Add-ons
@@ -195,6 +205,12 @@ export default function POSClient() {
   function toggleCustomize(lineId: string) {
     setSelectedLineId(lineId)
     setCustomizeLineId(prev => (prev === lineId ? null : lineId))
+  }
+
+  // Same toggle mechanic as Customize, for the Add-ons row.
+  function toggleAddons(lineId: string) {
+    setSelectedLineId(lineId)
+    setAddonsLineId(prev => (prev === lineId ? null : lineId))
   }
 
   // Each line's discount toggles independently — a single transaction can carry
@@ -217,6 +233,7 @@ export default function POSClient() {
     setNotes('')
     setSelectedLineId(null)
     setCustomizeLineId(null)
+    setAddonsLineId(null)
   }
 
   async function completeSale() {
@@ -589,6 +606,7 @@ export default function POSClient() {
             drinkDiscountLines={drinkDiscountLines}
             selectedLineId={selectedLineId}
             customizeLineId={customizeLineId}
+            addonsLineId={addonsLineId}
             payment={payment}
             customInput={customInput}
             notes={notes}
@@ -596,12 +614,14 @@ export default function POSClient() {
             onClear={clearOrder}
             onCharge={() => setShowConfirm(true)}
             onSetPayment={handleSetPayment}
-            onAddAddon={addAddon}
+            onAddAddon={addAddonAndClose}
             onNotesChange={setNotes}
             onSelectItem={setSelectedLineId}
             onToggleItemDiscount={toggleItemPwdDiscount}
             onSetItemNote={setItemNote}
             onToggleCustomize={toggleCustomize}
+            onToggleAddons={toggleAddons}
+            onCustomizeDone={() => setCustomizeLineId(null)}
           />
         </aside>
       </div>
@@ -644,6 +664,7 @@ export default function POSClient() {
               drinkDiscountLines={drinkDiscountLines}
               selectedLineId={selectedLineId}
               customizeLineId={customizeLineId}
+              addonsLineId={addonsLineId}
               payment={payment}
               customInput={customInput}
               notes={notes}
@@ -651,12 +672,14 @@ export default function POSClient() {
               onClear={clearOrder}
               onCharge={() => { setMobileDrawer(false); setShowConfirm(true) }}
               onSetPayment={handleSetPayment}
-              onAddAddon={addAddon}
+              onAddAddon={addAddonAndClose}
               onNotesChange={setNotes}
               onSelectItem={setSelectedLineId}
               onToggleItemDiscount={toggleItemPwdDiscount}
               onSetItemNote={setItemNote}
               onToggleCustomize={toggleCustomize}
+              onToggleAddons={toggleAddons}
+              onCustomizeDone={() => setCustomizeLineId(null)}
             />
           </div>
         </div>
@@ -858,6 +881,7 @@ function OrderPanel({
   drinkDiscountLines,
   selectedLineId,
   customizeLineId,
+  addonsLineId,
   payment,
   customInput,
   notes,
@@ -871,6 +895,8 @@ function OrderPanel({
   onToggleItemDiscount,
   onSetItemNote,
   onToggleCustomize,
+  onToggleAddons,
+  onCustomizeDone,
 }: {
   items: OrderItem[]
   addons: Addon[]
@@ -880,6 +906,7 @@ function OrderPanel({
   drinkDiscountLines: LineDiscount[]
   selectedLineId: string | null
   customizeLineId: string | null
+  addonsLineId: string | null
   payment: number | null
   customInput: string
   notes: string
@@ -893,6 +920,8 @@ function OrderPanel({
   onToggleItemDiscount: (lineId: string) => void
   onSetItemNote: (lineId: string, note: string) => void
   onToggleCustomize: (lineId: string) => void
+  onToggleAddons: (lineId: string) => void
+  onCustomizeDone: () => void
 }) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -957,6 +986,17 @@ function OrderPanel({
                           } ${customizeLineId === item.lineId ? 'ring-2 ring-amber-300 ring-offset-1' : ''}`}
                         >
                           📝
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); onToggleAddons(item.lineId) }}
+                          title="Add-ons (extra shots, syrups, etc.)"
+                          className={`w-8 h-8 flex items-center justify-center text-base font-bold rounded-full border transition-colors ${
+                            childAddons.length > 0
+                              ? 'bg-sky-500 text-white border-sky-500 shadow-sm'
+                              : 'bg-sky-50 border-sky-300 text-sky-600 hover:bg-sky-100 hover:border-sky-500'
+                          } ${addonsLineId === item.lineId ? 'ring-2 ring-sky-300 ring-offset-1' : ''}`}
+                        >
+                          +
                         </button>
                         <button
                           onClick={e => { e.stopPropagation(); onToggleItemDiscount(item.lineId) }}
@@ -1065,35 +1105,35 @@ function OrderPanel({
         </div>
       </div>
 
-      {/* Add-ons */}
-      <div className="px-6 py-2 border-t border-foreground/10 shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] uppercase tracking-[0.25em] text-foreground/45 font-semibold">Add-ons</p>
-          {selectedLineId && items.find(i => i.lineId === selectedLineId) && (
+      {/* Add-ons — hidden until a drink's "+" is tapped */}
+      {addonsLineId && items.find(i => i.lineId === addonsLineId) && (
+        <div className="px-6 py-2 border-t border-foreground/10 shrink-0">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] uppercase tracking-[0.25em] text-foreground/45 font-semibold">Add-ons</p>
             <p className="text-[10px] text-emerald-600 font-semibold truncate max-w-[55%] text-right">
-              → {items.find(i => i.lineId === selectedLineId)!.name}
+              → {items.find(i => i.lineId === addonsLineId)!.name}
             </p>
-          )}
+          </div>
+          <div className="flex gap-2">
+            {addons.map(addon => (
+              <button
+                key={addon.id}
+                onClick={() => onAddAddon(addon)}
+                title={addon.type ? `${addon.type} add-on` : undefined}
+                className={`flex-1 px-2 py-1.5 text-[11px] font-semibold border-y border-r rounded-sm transition-all whitespace-nowrap text-center text-foreground/65 hover:text-foreground hover:bg-foreground/4 ${
+                  addon.type === 'food'
+                    ? 'border-l-2 border-l-[#8b5e3c] border-y-foreground/20 border-r-foreground/20 hover:border-y-[#8b5e3c]/45 hover:border-r-[#8b5e3c]/45'
+                    : addon.type === 'drink'
+                    ? 'border-l-2 border-l-foreground border-y-foreground/20 border-r-foreground/20 hover:border-y-foreground/45 hover:border-r-foreground/45'
+                    : 'border-l border-l-foreground/20 border-y-foreground/20 border-r-foreground/20 hover:border-foreground/45'
+                }`}
+              >
+                {addon.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex gap-2">
-          {addons.map(addon => (
-            <button
-              key={addon.id}
-              onClick={() => onAddAddon(addon)}
-              title={addon.type ? `${addon.type} add-on` : undefined}
-              className={`flex-1 px-2 py-1.5 text-[11px] font-semibold border-y border-r rounded-sm transition-all whitespace-nowrap text-center text-foreground/65 hover:text-foreground hover:bg-foreground/4 ${
-                addon.type === 'food'
-                  ? 'border-l-2 border-l-[#8b5e3c] border-y-foreground/20 border-r-foreground/20 hover:border-y-[#8b5e3c]/45 hover:border-r-[#8b5e3c]/45'
-                  : addon.type === 'drink'
-                  ? 'border-l-2 border-l-foreground border-y-foreground/20 border-r-foreground/20 hover:border-y-foreground/45 hover:border-r-foreground/45'
-                  : 'border-l border-l-foreground/20 border-y-foreground/20 border-r-foreground/20 hover:border-foreground/45'
-              }`}
-            >
-              {addon.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Customize — hidden until a drink's 📝 is tapped */}
       {customizeLineId && items.find(i => i.lineId === customizeLineId) && (
@@ -1102,6 +1142,7 @@ function OrderPanel({
           itemName={items.find(i => i.lineId === customizeLineId)!.name}
           note={items.find(i => i.lineId === customizeLineId)!.note}
           onSave={(text) => onSetItemNote(customizeLineId, text)}
+          onPresetChosen={onCustomizeDone}
         />
       )}
 
