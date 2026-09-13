@@ -53,12 +53,13 @@ export default function ItemNotePopover({ note, onSave }: ItemNotePopoverProps) 
     setIsOpen(true)
   }
 
-  // Spans from the customize button (left edge) to where the row's price column sits
-  // (right edge) instead of a fixed width, so it reads as "attached to this row" rather
-  // than a floating box — narrower on a narrow order panel, wider on a roomy one, but
-  // always this row's own width. Clamped to the nearest `[data-order-panel]` ancestor
-  // so it never spills past the panel's white background onto the tan menu area beside
-  // it — falls back to the viewport if no such ancestor exists.
+  // Spans from the customize button (left edge) to the row's qty "+" button (right
+  // edge) instead of a fixed width, so it reads as "attached to this row" rather than
+  // a floating box — narrower on a narrow order panel, wider on a roomy one, but always
+  // this row's own width. Falls back to the panel's own right edge (minus its padding)
+  // when the row/plus-button markers aren't found, and is always clamped to the nearest
+  // `[data-order-panel]` ancestor so it never spills past the panel's white background
+  // onto the tan menu area beside it (or the viewport, if no such ancestor exists).
   useLayoutEffect(() => {
     if (!isOpen || !popoverRef.current || !buttonRef.current) return
     const margin = 8
@@ -67,8 +68,13 @@ export default function ItemNotePopover({ note, onSave }: ItemNotePopoverProps) 
     const panel = buttonRef.current.closest<HTMLElement>('[data-order-panel]')
     const bounds = panel ? panel.getBoundingClientRect() : { left: 0, right: window.innerWidth }
     const left = Math.max(buttonRect.left, bounds.left + margin)
-    const right = Math.max(bounds.right - ROW_PADDING, left + MIN_WIDTH)
+
+    const row = buttonRef.current.closest<HTMLElement>('[data-item-row]')
+    const plusButton = row?.querySelector<HTMLElement>('[data-qty-plus]')
+    const rightEdge = plusButton ? plusButton.getBoundingClientRect().right : bounds.right - ROW_PADDING
+    const right = Math.max(Math.min(rightEdge, bounds.right - margin), left + MIN_WIDTH)
     const width = right - left
+
     let top = buttonRect.bottom + 4
     if (top + popRect.height > window.innerHeight - margin) {
       top = buttonRect.top - popRect.height - 4

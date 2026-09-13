@@ -902,6 +902,7 @@ function OrderPanel({
                   <Fragment key={item.lineId}>
                     {/* Parent item row */}
                     <div
+                      data-item-row
                       onClick={() => onSelectItem(item.lineId)}
                       className={`flex items-start gap-3 py-2.5 border-b border-foreground/[0.07] cursor-pointer transition-all ${
                         isSelected ? 'border-l-2 border-l-emerald-500 pl-1 -ml-1' : ''
@@ -947,6 +948,7 @@ function OrderPanel({
                           </button>
                           <span className="w-6 text-center text-sm tabular-nums font-bold text-foreground">{item.qty}</span>
                           <button
+                            data-qty-plus
                             onClick={e => { e.stopPropagation(); onAdjust(item.lineId, 1) }}
                             className="w-8 h-8 flex items-center justify-center text-foreground/50 hover:text-foreground border border-foreground/12 hover:border-foreground/30 rounded-sm text-base transition-colors"
                           >
