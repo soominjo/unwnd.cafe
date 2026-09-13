@@ -259,8 +259,8 @@ function AddonRow({ addon, isConfirming, isDeleting, onRequestRemove, onCancelRe
   }
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="inline-flex w-fit items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
-        <span className="text-sky-500">+</span>
+      <span className="inline-flex w-fit items-center gap-1 rounded-full border border-border bg-white px-2.5 py-1 text-xs font-semibold text-foreground">
+        <span>+</span>
         {addon.name}
       </span>
       <div className="flex items-center gap-3">
