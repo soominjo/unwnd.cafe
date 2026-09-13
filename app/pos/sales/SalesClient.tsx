@@ -6,7 +6,7 @@ import type { Sale, SalesSummary } from '../types'
 import { computeDateRange, isDetailedPeriod, isPeriod, periodLabel, type Period } from './dateRange'
 import PeriodFilter, { type PeriodUpdates } from './PeriodFilter'
 import KpiStrip from './KpiStrip'
-import ViewTabs, { type SummaryTab, type View } from './ViewTabs'
+import ViewTabs, { type View } from './ViewTabs'
 import OrdersView, { type OrderActions } from './OrdersView'
 import TopItemsView from './TopItemsView'
 import TopCustomersView from './TopCustomersView'
@@ -46,8 +46,10 @@ export default function SalesClient() {
 
   // ── Local UI state ─────────────────────────────────────────────────────────
   const [view, setView] = useState<View>('recent')
-  // Which of Top Items / Top Names shows on a long (!detailed) period.
-  const [summaryTab, setSummaryTab] = useState<SummaryTab>('items')
+  // On a long period, Recent/Completed aren't offered — fall back to Top Items rather
+  // than showing a tab that isn't in the bar (the raw `view` state is left untouched,
+  // so switching back to Today/Yesterday restores whichever tab was picked there).
+  const activeView: View = detailed || view === 'summary' || view === 'names' ? view : 'summary'
   const [summary, setSummary] = useState<SalesSummary | null>(null)
   // Scoped to the active tab's status (pending/completed) — not "every order on the page 1 of the whole period".
   const [orders, setOrders] = useState<Sale[]>([])
@@ -114,9 +116,10 @@ export default function SalesClient() {
     setError(null)
     try {
       const status: OrderStatus = currentView === 'completed' ? 'completed' : 'pending'
+      const wantsOrders = detailed && currentView !== 'summary' && currentView !== 'names'
       const [summaryJson, ordersJson] = await Promise.all([
         fetchSummary(from, to, signal),
-        detailed && currentView !== 'summary' ? fetchOrders(from, to, status, pg, signal) : null,
+        wantsOrders ? fetchOrders(from, to, status, pg, signal) : null,
       ])
       if (signal.aborted) return
       if (!summaryJson.success || (ordersJson && !ordersJson.success)) {
@@ -139,14 +142,14 @@ export default function SalesClient() {
     const range = computeDateRange(period, customFrom, customTo)
     if (!range) return
     const controller = new AbortController()
-    load(range.from, range.to, view, page, detailed, controller.signal)
+    load(range.from, range.to, activeView, page, detailed, controller.signal)
     return () => controller.abort()
-  }, [period, page, customFrom, customTo, view, detailed, load])
+  }, [period, page, customFrom, customTo, activeView, detailed, load])
 
   // Keep a ref to current params so BroadcastChannel refresh can read them
-  const fetchParamsRef = useRef({ period, page, customFrom, customTo, view, detailed })
+  const fetchParamsRef = useRef({ period, page, customFrom, customTo, view: activeView, detailed })
   useEffect(() => {
-    fetchParamsRef.current = { period, page, customFrom, customTo, view, detailed }
+    fetchParamsRef.current = { period, page, customFrom, customTo, view: activeView, detailed }
   })
 
   // BroadcastChannel (same-browser live update) + bfcache restore
@@ -177,7 +180,7 @@ export default function SalesClient() {
     const range = computeDateRange(period, customFrom, customTo)
     if (!range) return
     const controller = new AbortController()
-    load(range.from, range.to, view, page, detailed, controller.signal)
+    load(range.from, range.to, activeView, page, detailed, controller.signal)
   }
 
   // ── Delete whole order ─────────────────────────────────────────────────────
@@ -334,33 +337,24 @@ export default function SalesClient() {
         <KpiStrip summary={summary} loading={loading} />
 
         <ViewTabs
-          view={view}
+          view={activeView}
           onChange={changeView}
           pendingCount={summary?.pendingCount ?? 0}
           completedCount={summary?.completedCount ?? 0}
           loading={loading}
           detailed={detailed}
-          summaryTab={summaryTab}
-          onSummaryTabChange={setSummaryTab}
         />
 
         {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-        {!detailed ? (
-          summaryTab === 'items' ? (
-            <TopItemsView summary={summary} loading={loading} />
-          ) : (
-            <TopCustomersView summary={summary} loading={loading} />
-          )
-        ) : view === 'summary' ? (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <TopItemsView summary={summary} loading={loading} />
-            <TopCustomersView summary={summary} loading={loading} />
-          </div>
+        {activeView === 'summary' ? (
+          <TopItemsView summary={summary} loading={loading} />
+        ) : activeView === 'names' ? (
+          <TopCustomersView summary={summary} loading={loading} />
         ) : (
           <OrdersView
             {...sharedOrdersProps}
-            mode={view === 'completed' ? 'completed' : 'recent'}
+            mode={activeView === 'completed' ? 'completed' : 'recent'}
             orders={orders}
             onConfirmDeleteAll={() => deleteOrderList(orders)}
           />
