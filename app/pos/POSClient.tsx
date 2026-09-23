@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, memo, Fragment, useEffect } from 'react
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { MENU } from './menuData'
-import { variantClass, groupOrderItems } from './utils'
+import { variantClass, groupOrderItems, addonLineId } from './utils'
 import type {
   MenuItem,
   MenuCategory,
@@ -160,16 +160,16 @@ export default function POSClient() {
   // no parent the add-on becomes its own standalone order line, rendered by OrderPanel's
   // "orphan add-ons" branch.
   function addAddon(addon: Addon, parentLineId: string | null) {
-    const addonLineId = parentLineId ? `${addon.id}__${parentLineId}` : addon.id
+    const lineId = addonLineId(addon.id, parentLineId)
     setOrderItems(prev => {
-      const existing = prev.find(i => i.lineId === addonLineId)
+      const existing = prev.find(i => i.lineId === lineId)
       if (existing) {
-        return prev.map(i => i.lineId === addonLineId ? { ...i, qty: i.qty + 1 } : i)
+        return prev.map(i => i.lineId === lineId ? { ...i, qty: i.qty + 1 } : i)
       }
       return [
         ...prev,
         {
-          lineId: addonLineId,
+          lineId,
           name: addon.name,
           variant: null,
           price: addon.price,
@@ -711,8 +711,6 @@ export default function POSClient() {
           attachedAddons={orderItems.filter(i => i.parentLineId === modalItem.lineId)}
           addonOptions={addonAttachItems}
           discountLines={discountLines}
-          subtotal={total}
-          grandTotal={grandTotal}
           onPickDiscount={(kind, scope) => pickItemDiscount(modalItem.lineId, kind, scope)}
           onSaveNote={note => setItemNote(modalItem.lineId, note)}
           onAddAddon={addon => addAddon(addon, modalItem.lineId)}

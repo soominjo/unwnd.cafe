@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import type { Addon, DiscountLine, LineDiscountKind, LineDiscountScope, OrderItem } from './types'
-import { variantClass } from './utils'
+import { addonLineId, variantClass } from './utils'
 import CustomizeSection from './CustomizeSection'
 import AddonsSection from './AddonsSection'
 import DiscountSection from './DiscountSection'
@@ -23,10 +23,6 @@ interface ItemActionModalProps {
   addonOptions: Addon[]
   /** The whole order's discount rows; this item's rows are picked out of it. */
   discountLines: DiscountLine[]
-  /** Pre-discount order total. */
-  subtotal: number
-  /** What the customer owes after every discount. */
-  grandTotal: number
   onPickDiscount: (kind: LineDiscountKind, scope: LineDiscountScope) => void
   onSaveNote: (note: string) => void
   onAddAddon: (addon: Addon) => void
@@ -37,26 +33,35 @@ interface ItemActionModalProps {
 // modes opened from that line's buttons: "+" for add-ons and customizations,
 // "%" for discounts. Each mode shows only its own concern — the add-ons mode
 // carries no discount figures, the discount mode no add-ons or notes — so
-// neither screen is crowded. Every tap applies straight away and leaves the
-// modal open, so several add-ons, presets or discounts can be stacked; only
-// Done, ✕, the backdrop or Escape close it.
+// neither screen is crowded. Every figure here is this item's, not the whole
+// order's: the panel behind keeps the order total. Every tap applies straight
+// away and leaves the modal open, so several add-ons, presets or discounts can
+// be stacked; only Done, ✕, the backdrop or Escape close it.
 export default function ItemActionModal({
   mode,
   item,
   attachedAddons,
   addonOptions,
   discountLines,
-  subtotal,
-  grandTotal,
   onPickDiscount,
   onSaveNote,
   onAddAddon,
   onClose,
 }: ItemActionModalProps) {
   const lineRows = discountLines.filter(d => d.lineId === item.lineId)
+  const menuSubtotal = item.price * item.qty
   const addonsTotal = attachedAddons.reduce((sum, a) => sum + a.price * a.qty, 0)
-  const itemTotal = item.price * item.qty + addonsTotal
-  const discountAmount = subtotal - grandTotal
+  const itemTotal = menuSubtotal + addonsTotal
+  // Only this line's own discounts. A whole-order discount belongs to the order,
+  // not to any one item, so it is not folded in here.
+  const lineDiscount = lineRows.reduce((sum, d) => sum + d.amount, 0)
+
+  // Which add-ons are already on the line, so their buttons render filled.
+  const attachedQty: Record<string, number> = {}
+  for (const option of addonOptions) {
+    const attached = attachedAddons.find(a => a.lineId === addonLineId(option.id, item.lineId))
+    if (attached) attachedQty[option.id] = attached.qty
+  }
 
   // Escape closes, for the cashier on a keyboard; touch users have the backdrop, ✕ and Done.
   useEffect(() => {
@@ -119,7 +124,7 @@ export default function ItemActionModal({
           <div className="px-5 py-4">
             {mode === 'addons' ? (
               <div className="space-y-4">
-                <AddonsSection options={addonOptions} onAdd={onAddAddon} />
+                <AddonsSection options={addonOptions} attachedQty={attachedQty} onAdd={onAddAddon} />
                 <div className="border-t border-foreground/10 pt-4">
                   <CustomizeSection note={item.note} onSave={onSaveNote} />
                 </div>
@@ -130,31 +135,32 @@ export default function ItemActionModal({
           </div>
         </div>
 
-        {/* The money that belongs to this mode: what this line costs while add-ons are
-            being attached, or what the whole order comes to while discounts are picked. */}
-        {mode === 'addons' ? (
-          <div className="border-t border-foreground/10 px-5 py-3 flex justify-between items-baseline shrink-0">
-            <span className="text-xs uppercase tracking-widest font-semibold text-foreground/70">Item total</span>
-            <span className="font-display font-bold text-3xl tabular-nums text-foreground">₱{itemTotal}</span>
+        {/* What this item comes to: the menu lines, then its add-ons, then — while
+            discounts are being picked — this line's own discount and what is left. */}
+        <div className="border-t border-foreground/10 px-5 py-3 space-y-1.5 text-sm shrink-0">
+          <div className="flex justify-between text-foreground/55">
+            <span className="text-xs uppercase tracking-widest">Subtotal</span>
+            <span className="tabular-nums">₱{menuSubtotal}</span>
           </div>
-        ) : (
-          <div className="border-t border-foreground/10 px-5 py-3 space-y-1.5 text-sm shrink-0">
-            <div className="flex justify-between text-foreground/55">
-              <span className="text-xs uppercase tracking-widest">Subtotal</span>
-              <span className="tabular-nums">₱{subtotal}</span>
-            </div>
-            {discountAmount > 0 && (
-              <div className="flex justify-between text-emerald-600 font-semibold">
-                <span className="text-xs uppercase tracking-widest">Discount</span>
-                <span className="tabular-nums">−₱{discountAmount}</span>
-              </div>
-            )}
-            <div className="flex justify-between items-baseline pt-1">
-              <span className="text-xs uppercase tracking-widest font-semibold text-foreground/70">Total</span>
-              <span className="font-display font-bold text-3xl tabular-nums text-foreground">₱{grandTotal}</span>
-            </div>
+          <div className="flex justify-between text-foreground/55">
+            <span className="text-xs uppercase tracking-widest">Add-ons</span>
+            <span className="tabular-nums">₱{addonsTotal}</span>
           </div>
-        )}
+          {mode === 'discount' && (
+            <div className="flex justify-between text-emerald-600 font-semibold">
+              <span className="text-xs uppercase tracking-widest">Discount</span>
+              <span className="tabular-nums">{lineDiscount > 0 ? `−₱${lineDiscount}` : '₱0'}</span>
+            </div>
+          )}
+          <div className="flex justify-between items-baseline pt-1 border-t border-foreground/10">
+            <span className="text-xs uppercase tracking-widest font-semibold text-foreground/70">
+              {mode === 'discount' ? 'Total' : 'Item total'}
+            </span>
+            <span className="font-display font-bold text-3xl tabular-nums text-foreground">
+              ₱{mode === 'discount' ? itemTotal - lineDiscount : itemTotal}
+            </span>
+          </div>
+        </div>
 
         <div className="px-5 pb-4 shrink-0">
           <button

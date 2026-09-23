@@ -5,36 +5,45 @@ import type { Addon } from './types'
 interface AddonsSectionProps {
   /** Add-ons that may attach to the open item — already filtered by its menu category. */
   options: Addon[]
+  /** How many of each add-on are already on the line, keyed by add-on id. */
+  attachedQty: Record<string, number>
   /** Attaches one unit. The modal stays open, so several add-ons can be stacked in a row. */
   onAdd: (addon: Addon) => void
 }
 
-// The Add-ons part of the per-item modal. The left rule tells drink add-ons
-// (dark) from food add-ons (brown) at a glance.
-export default function AddonsSection({ options, onAdd }: AddonsSectionProps) {
+// The Add-ons part of the per-item modal. An add-on already on the line is
+// filled and carries its count, the same read-at-a-glance state the Customize
+// presets use; the rest keep a left rule that tells drink add-ons (dark) from
+// food add-ons (brown).
+export default function AddonsSection({ options, attachedQty, onAdd }: AddonsSectionProps) {
   if (options.length === 0) {
     return <p className="text-sm text-foreground/45">No add-ons available for this item.</p>
   }
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2">
-        {options.map(addon => (
+    <div className="grid grid-cols-2 gap-2">
+      {options.map(addon => {
+        const qty = attachedQty[addon.id] ?? 0
+        return (
           <button
             key={addon.id}
             onClick={() => onAdd(addon)}
+            aria-pressed={qty > 0}
             title={addon.type ? `${addon.type} add-on` : undefined}
-            className={`px-3 py-3 text-sm font-semibold border-y border-r rounded-sm transition-all text-left text-foreground/70 hover:text-foreground hover:bg-foreground/4 ${
-              addon.type === 'food'
-                ? 'border-l-2 border-l-[#8b5e3c] border-y-foreground/20 border-r-foreground/20 hover:border-y-[#8b5e3c]/45 hover:border-r-[#8b5e3c]/45'
+            className={`px-3 py-3 text-sm font-semibold border rounded-sm transition-all text-left flex items-center justify-between gap-2 ${
+              qty > 0
+                ? 'bg-sky-500 text-white border-sky-500 shadow-sm'
+                : addon.type === 'food'
+                ? 'border-y-foreground/20 border-r-foreground/20 border-l-2 border-l-[#8b5e3c] text-foreground/70 hover:text-foreground hover:bg-foreground/4'
                 : addon.type === 'drink'
-                ? 'border-l-2 border-l-foreground border-y-foreground/20 border-r-foreground/20 hover:border-y-foreground/45 hover:border-r-foreground/45'
-                : 'border-l border-l-foreground/20 border-y-foreground/20 border-r-foreground/20 hover:border-foreground/45'
+                ? 'border-y-foreground/20 border-r-foreground/20 border-l-2 border-l-foreground text-foreground/70 hover:text-foreground hover:bg-foreground/4'
+                : 'border-foreground/20 text-foreground/70 hover:text-foreground hover:bg-foreground/4'
             }`}
           >
-            {addon.label}
+            <span>{addon.label}</span>
+            {qty > 0 && <span className="tabular-nums shrink-0">×{qty}</span>}
           </button>
-        ))}
-      </div>
+        )
+      })}
     </div>
   )
 }

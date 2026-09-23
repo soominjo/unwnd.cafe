@@ -7,6 +7,14 @@ export function isAddonLine(item: { lineId: string }): boolean {
   return item.lineId.startsWith('addon__')
 }
 
+// The line id an attached add-on takes: its own id (which already carries the
+// 'addon__' prefix) plus the line it hangs off, so the same add-on on two
+// different drinks stays two lines. With no parent it keeps its own id and
+// becomes a standalone order line.
+export function addonLineId(addonId: string, parentLineId: string | null): string {
+  return parentLineId ? `${addonId}__${parentLineId}` : addonId
+}
+
 export function variantClass(variant: string | null): string {
   if (variant === 'hot') return 'text-red-500'
   if (variant === 'ice') return 'text-sky-500'

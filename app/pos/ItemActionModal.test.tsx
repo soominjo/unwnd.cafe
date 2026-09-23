@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import ItemActionModal from './ItemActionModal'
+import { addonLineId } from './utils'
 import type { Addon, DiscountLine, OrderItem } from './types'
 
 const noop = () => {}
@@ -16,8 +17,9 @@ const item: OrderItem = {
   categoryId: 'signature',
 }
 
+// Two of the espresso shots are already on the line; the oat milk is not.
 const attachedAddons: OrderItem[] = [
-  { lineId: 'addon__l1-shot', name: 'Extra Shot', variant: null, price: 30, qty: 2, parentLineId: 'l1' },
+  { lineId: addonLineId('addon__shot', 'l1'), name: 'Espresso Shot', variant: null, price: 30, qty: 2, parentLineId: 'l1' },
 ]
 
 const discountLines: DiscountLine[] = [
@@ -36,8 +38,6 @@ const base = {
   attachedAddons,
   addonOptions,
   discountLines,
-  subtotal: 950,
-  grandTotal: 827,
   onPickDiscount: noop,
   onSaveNote: noop,
   onAddAddon: noop,
@@ -57,13 +57,13 @@ describe('ItemActionModal', () => {
 
   it('discount mode shows only the discount — no add-ons, no note, no customize presets', () => {
     const html = render('discount')
-    expect(html).not.toContain('Extra Shot')
     expect(html).not.toContain('Espresso Shot')
+    expect(html).not.toContain('Oat Milk')
     expect(html).not.toContain('Less Sweet')
     expect(html).not.toContain('No Sugar')
   })
 
-  it('discount mode presses the active chips and shows each row’s computation over the order totals', () => {
+  it('discount mode presses the active chips and shows each row’s computation', () => {
     const html = render('discount')
     expect(html).toMatch(/aria-pressed="true"[^>]*>PWD\/S −20% · SOLO/)
     expect(html).toMatch(/aria-pressed="true"[^>]*>GR −10% · ALL/)
@@ -76,10 +76,18 @@ describe('ItemActionModal', () => {
     expect(html).toContain('−₱66')
     // The add-ons are not listed in this mode, so the base says where its extra pesos came from.
     expect(html).toContain('incl. add-ons')
+  })
+
+  it('discount mode totals this item: menu subtotal, add-ons, its own discount, total', () => {
+    const html = render('discount')
     expect(html).toContain('Subtotal')
-    expect(html).toContain('₱950')
-    expect(html).toContain('−₱123')
-    expect(html).toContain('₱827')
+    expect(html).toContain('>₱600<')
+    expect(html).toContain('Add-ons')
+    expect(html).toContain('>₱60<')
+    // This line's own rows only: 33 + 66. The other line's ₱24 belongs to the order, not here.
+    expect(html).toContain('Discount')
+    expect(html).toContain('−₱99')
+    expect(html).toContain('>₱561<')
     expect(html).not.toContain('Croissant')
   })
 
@@ -87,22 +95,28 @@ describe('ItemActionModal', () => {
     const html = render('addons')
     expect(html).toContain('+30 Espresso Shot')
     expect(html).toContain('+40 Oat Milk')
-    expect(html).toContain('Extra Shot')
     expect(html).toMatch(/aria-pressed="true"[^>]*>Less Sweet/)
     expect(html).toMatch(/aria-pressed="false"[^>]*>No Sugar/)
     expect(html).toContain('value="no whip"')
   })
 
-  it('add-ons mode shows the item total with its add-ons, and no discount information', () => {
+  it('add-ons mode fills the add-ons already on the line and counts them', () => {
     const html = render('addons')
-    // 150 × 4 + 30 × 2 = 660
-    expect(html).toContain('₱660')
-    expect(html).toContain('₱60')
+    expect(html).toMatch(/aria-pressed="true"[^>]*><span>\+30 Espresso Shot<\/span><span[^>]*>×2<\/span>/)
+    expect(html).toMatch(/aria-pressed="false"[^>]*><span>\+40 Oat Milk<\/span><\/button>/)
+  })
+
+  it('add-ons mode totals this item: menu subtotal, add-ons, both together — and no discount', () => {
+    const html = render('addons')
+    expect(html).toContain('Subtotal')
+    expect(html).toContain('>₱600<')
+    expect(html).toContain('Add-ons')
+    expect(html).toContain('>₱60<')
+    expect(html).toContain('Item total')
+    expect(html).toContain('>₱660<')
+    expect(html).not.toContain('Discount')
     expect(html).not.toContain('PWD')
-    expect(html).not.toContain('GR −10%')
-    expect(html).not.toContain('Subtotal')
-    expect(html).not.toContain('−₱123')
-    expect(html).not.toContain('₱827')
+    expect(html).not.toContain('−₱99')
   })
 
   it('says so when no add-on can attach, and still offers the presets', () => {
