@@ -1143,3 +1143,16 @@ body in app/pos/salePayload.ts, both unit-tested; pwdDiscounted is gone.
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
+
+---
+
+## Revision 2 (2026-09-23, owner feedback after v1 shipped on the branch)
+
+The owner reviewed the v1 screenshots and overruled Decisions 1–4 above. What ships is:
+
+- **Stacking is allowed.** PWD/Senior and Google Review can both apply to the same line and to the same order. Every row is computed on the undiscounted base (additive, not sequential), so each receipt row reads as a plain percentage of what it covers; the most any peso can be discounted is 30%.
+- **Per-line chips gain a scope.** Four chips: `PWD/S −20% · ALL`, `GR −10% · ALL`, `PWD/S −20% · SOLO`, `GR −10% · SOLO`. ALL covers every unit ordered; SOLO covers one unit's share of the line (price × qty + attached add-ons, divided by qty — so one drink and its share of the extra shots). Tapping the active chip clears that kind; the other scope switches it; the other kind stacks. The row stays open after a tap so both kinds can be combined.
+- **Whole-order buttons replace "all items".** Footer: `PWD/S −20% · Total items` and `G Review −10% · Total items`, each the rate off the full pre-discount subtotal; both may be on at once. A kind applies per line or to the total, never both: turning a Total button on clears that kind from every line, and picking that kind on a line turns its Total button off.
+- **Data model.** `OrderItem.discounts?: Partial<Record<'pwd' | 'review', 'all' | 'solo'>>`; the whole-order toggles live in POSClient state as `OrderDiscounts`. `DiscountLine.scope` is `'all' | 'solo' | 'order'`; whole-order rows use `lineId: 'order:<kind>'` and the name `Total items`. Labels append ` ×N` (units covered) only when the line quantity is above 1; persisted names swap `−` → `-` and `×` → `x` for the thermal printer.
+- **API.** `POST /api/sales` now derives each discount `_key` from the lineId plus the row's position (`lib/sales/toSaleDiscountDocs.ts`), because a line can carry two rows; the discounts cap is `2 × items + 2`. Sanity schema and printer code are unchanged; sales saved before this revision reprint exactly as before.
+- **Badges.** Order panel and review screen both show `PWD/Senior −20% ×1` / `Google Review −10% ×4` per kind on a line (the old `SC/PWD −20% applied` wording is gone).
