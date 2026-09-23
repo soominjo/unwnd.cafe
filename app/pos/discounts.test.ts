@@ -8,6 +8,10 @@ import {
   buildDiscountLines,
   totalDiscount,
   savedDiscountName,
+  toggleLineDiscount,
+  isReviewEligible,
+  allEligibleHaveReview,
+  toggleReviewForAll,
 } from './discounts'
 
 const item = (over: Partial<OrderItem> & { lineId: string }): OrderItem =>
@@ -95,5 +99,74 @@ describe('savedDiscountName', () => {
       .toBe('Google Review -10% (Spanish Latte)')
     expect(savedDiscountName({ lineId: 'c', name: 'Mocha', amount: 34, kind: 'pwd', label: 'PWD Drink −20%' }))
       .toBe('PWD Drink -20% (Mocha)')
+  })
+})
+
+describe('toggleLineDiscount', () => {
+  const items = [item({ lineId: 'a' }), item({ lineId: 'b', discount: 'pwd' })]
+
+  it('puts the kind on a line that had none, without touching the original array', () => {
+    const next = toggleLineDiscount(items, 'a', 'review')
+    expect(next[0].discount).toBe('review')
+    expect(items[0].discount).toBeUndefined()
+    expect(next).not.toBe(items)
+  })
+
+  it('clears the discount when the line already has that kind', () => {
+    expect(toggleLineDiscount(items, 'b', 'pwd')[1].discount).toBeUndefined()
+  })
+
+  it('replaces PWD with review rather than stacking them', () => {
+    expect(toggleLineDiscount(items, 'b', 'review')[1].discount).toBe('review')
+  })
+
+  it('leaves every other line as it was', () => {
+    expect(toggleLineDiscount(items, 'a', 'review')[1]).toBe(items[1])
+  })
+})
+
+describe('isReviewEligible', () => {
+  it('accepts an orderable line with no discount or with the review discount', () => {
+    expect(isReviewEligible(item({ lineId: 'a' }))).toBe(true)
+    expect(isReviewEligible(item({ lineId: 'a', discount: 'review' }))).toBe(true)
+  })
+
+  it('rejects a PWD line and any add-on line', () => {
+    expect(isReviewEligible(item({ lineId: 'a', discount: 'pwd' }))).toBe(false)
+    expect(isReviewEligible(addon('a', 20))).toBe(false)
+  })
+})
+
+describe('allEligibleHaveReview', () => {
+  it('is false with no eligible lines at all', () => {
+    expect(allEligibleHaveReview([])).toBe(false)
+    expect(allEligibleHaveReview([item({ lineId: 'a', discount: 'pwd' })])).toBe(false)
+  })
+
+  it('is true only when every eligible line has the review discount', () => {
+    expect(allEligibleHaveReview([
+      item({ lineId: 'a', discount: 'review' }),
+      item({ lineId: 'b', discount: 'pwd' }),
+      addon('a', 20),
+    ])).toBe(true)
+    expect(allEligibleHaveReview([item({ lineId: 'a', discount: 'review' }), item({ lineId: 'b' })])).toBe(false)
+  })
+})
+
+describe('toggleReviewForAll', () => {
+  const items = [
+    item({ lineId: 'a' }),
+    item({ lineId: 'b', discount: 'pwd' }),
+    addon('a', 20),
+    item({ lineId: 'c', discount: 'review' }),
+  ]
+
+  it('gives every eligible line the review discount and leaves PWD and add-on lines alone', () => {
+    expect(toggleReviewForAll(items).map(i => i.discount)).toEqual(['review', 'pwd', undefined, 'review'])
+  })
+
+  it('clears the review discount from all of them once they all have it, keeping PWD lines', () => {
+    const allOn = toggleReviewForAll(items)
+    expect(toggleReviewForAll(allOn).map(i => i.discount)).toEqual([undefined, 'pwd', undefined, undefined])
   })
 })

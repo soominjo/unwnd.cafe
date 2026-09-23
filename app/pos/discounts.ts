@@ -62,3 +62,29 @@ export function totalDiscount(lines: DiscountLine[]): number {
 export function savedDiscountName(line: DiscountLine): string {
   return `${line.label.replace('−', '-')} (${line.name})`
 }
+
+/** Picking the kind a line already has clears it; any other kind replaces it. Returns a new array. */
+export function toggleLineDiscount(items: OrderItem[], lineId: string, kind: LineDiscountKind): OrderItem[] {
+  return items.map(i =>
+    i.lineId === lineId ? { ...i, discount: i.discount === kind ? undefined : kind } : i
+  )
+}
+
+// A line can take the review promo when it's an orderable item (not an add-on)
+// that isn't already carrying the PWD/Senior discount.
+export function isReviewEligible(item: OrderItem): boolean {
+  return !isAddonLine(item) && item.discount !== 'pwd'
+}
+
+/** True when there is at least one eligible line and every one of them has the review discount. */
+export function allEligibleHaveReview(items: OrderItem[]): boolean {
+  const eligible = items.filter(isReviewEligible)
+  return eligible.length > 0 && eligible.every(i => i.discount === 'review')
+}
+
+// Footer "all items" tap: review discount on every eligible line, or — when they
+// all already have it — off all of them. PWD lines and add-ons are left alone.
+export function toggleReviewForAll(items: OrderItem[]): OrderItem[] {
+  const next: LineDiscountKind | undefined = allEligibleHaveReview(items) ? undefined : 'review'
+  return items.map(i => (isReviewEligible(i) ? { ...i, discount: next } : i))
+}
