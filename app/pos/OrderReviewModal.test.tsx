@@ -4,22 +4,23 @@ import OrderReviewModal from './OrderReviewModal'
 import type { OrderItem, DiscountLine } from './types'
 
 const items: OrderItem[] = [
-  { lineId: 'a', name: 'Spanish Latte', variant: 'ice', price: 150, qty: 2, discount: 'review' },
-  { lineId: 'b', name: 'Croissant', variant: null, price: 100, qty: 1, discount: 'pwd' },
+  { lineId: 'a', name: 'Spanish Latte', variant: 'ice', price: 150, qty: 2, discounts: { pwd: 'solo', review: 'all' } },
+  { lineId: 'b', name: 'Croissant', variant: null, price: 100, qty: 1 },
 ]
 
 const discountLines: DiscountLine[] = [
-  { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'review', label: 'Google Review −10%' },
-  { lineId: 'b', name: 'Croissant', amount: 20, kind: 'pwd', label: 'PWD Food −20%' },
+  { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'pwd', scope: 'solo', label: 'PWD Drink −20% ×1' },
+  { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'review', scope: 'all', label: 'Google Review −10% ×2' },
+  { lineId: 'order:pwd', name: 'Total items', amount: 80, kind: 'pwd', scope: 'order', label: 'PWD/Senior −20%' },
 ]
 
 const base = {
   orderItems: items,
   itemCount: 3,
   total: 400,
-  grandTotal: 350,
+  grandTotal: 260,
   discountLines,
-  discountAmount: 50,
+  discountAmount: 140,
   payment: 500,
   notes: 'Ana',
   isSubmitting: false,
@@ -29,23 +30,23 @@ const base = {
 }
 
 describe('OrderReviewModal', () => {
-  it('lists one breakdown row per discounted line under the subtotal', () => {
+  it('lists every discount row — two for a stacked line and the whole-order row — under the subtotal', () => {
     const html = renderToStaticMarkup(<OrderReviewModal {...base} />)
     expect(html).toContain('Subtotal')
-    expect(html).toContain('Google Review −10% (Spanish Latte)')
-    expect(html).toContain('−₱30')
-    expect(html).toContain('PWD Food −20% (Croissant)')
-    expect(html).toContain('−₱20')
+    expect(html).toContain('PWD Drink −20% ×1 (Spanish Latte)')
+    expect(html).toContain('Google Review −10% ×2 (Spanish Latte)')
+    expect(html).toContain('PWD/Senior −20% (Total items)')
+    expect(html).toContain('−₱80')
   })
 
-  it('badges each discounted item with its discount', () => {
+  it('badges a stacked item with both of its discounts and their unit counts', () => {
     const html = renderToStaticMarkup(<OrderReviewModal {...base} />)
-    expect(html).toContain('Google Review −10%</span>')
-    expect(html).toContain('PWD/Senior −20%</span>')
+    expect(html).toContain('PWD/Senior −20% ×1</span>')
+    expect(html).toContain('Google Review −10% ×2</span>')
   })
 
   it('hides the breakdown when nothing is discounted', () => {
-    const plain = items.map(i => ({ ...i, discount: undefined }))
+    const plain = items.map(i => ({ ...i, discounts: undefined }))
     const html = renderToStaticMarkup(
       <OrderReviewModal {...base} orderItems={plain} discountLines={[]} discountAmount={0} />
     )

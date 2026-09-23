@@ -1,7 +1,7 @@
 'use client'
 
 import { variantClass, groupOrderItems } from './utils'
-import { DISCOUNT_LABELS } from './discounts'
+import { DISCOUNT_KINDS, discountBadge } from './discounts'
 import type { OrderItem, DiscountLine } from './types'
 
 interface OrderReviewModalProps {
@@ -93,9 +93,12 @@ export default function OrderReviewModal({
                             {item.variant}
                           </span>
                         )}
-                        {item.discount && (
-                          <span className="text-xs text-emerald-600 font-semibold tracking-wide">{DISCOUNT_LABELS[item.discount]}</span>
-                        )}
+                        {DISCOUNT_KINDS.map(kind => {
+                          const scope = item.discounts?.[kind]
+                          return scope ? (
+                            <span key={kind} className="text-xs text-emerald-600 font-semibold tracking-wide">{discountBadge(kind, item, scope)}</span>
+                          ) : null
+                        })}
                       </div>
                       {item.note && (
                         <p className="text-xs text-amber-600 font-semibold tracking-wide mt-1">📝 {item.note}</p>
@@ -151,7 +154,7 @@ export default function OrderReviewModal({
                 <span className="tabular-nums">₱{total.toFixed(0)}</span>
               </div>
               {discountLines.map(d => (
-                <div key={d.lineId} className="flex justify-between text-xs text-emerald-600 font-semibold gap-2">
+                <div key={`${d.lineId}:${d.kind}`} className="flex justify-between text-xs text-emerald-600 font-semibold gap-2">
                   <span className="uppercase tracking-widest truncate">{d.label} ({d.name})</span>
                   <span className="tabular-nums shrink-0">−₱{d.amount}</span>
                 </div>

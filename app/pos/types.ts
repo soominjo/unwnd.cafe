@@ -29,8 +29,14 @@ export interface Addon {
   type?: AddonType | null
 }
 
-/** The one discount an order line can carry: statutory PWD/Senior (20%) or the Google Review promo (10%). */
+/** The discounts an order can carry: statutory PWD/Senior (20%) and the Google Review promo (10%). They stack. */
 export type LineDiscountKind = 'pwd' | 'review'
+/** How much of a line a discount covers: every unit ordered (ALL) or one unit only (SOLO). */
+export type LineDiscountScope = 'all' | 'solo'
+/** A line's discounts — each kind at most once, at one scope. */
+export type LineDiscounts = Partial<Record<LineDiscountKind, LineDiscountScope>>
+/** Whole-order discounts on the pre-discount total — a kind applies either here or per line, never both. */
+export type OrderDiscounts = Partial<Record<LineDiscountKind, true>>
 
 export interface OrderItem {
   lineId: string
@@ -38,8 +44,8 @@ export interface OrderItem {
   variant: Variant | null
   price: number
   qty: number
-  /** Which discount this line carries, if any — at most one, since PWD/Senior and promo discounts never stack. */
-  discount?: LineDiscountKind
+  /** The discounts on this line, by kind. Absent when the line has none. */
+  discounts?: LineDiscounts
   parentLineId?: string
   note?: string
   categoryId?: string
@@ -53,10 +59,13 @@ export interface LineDiscount {
 
 /**
  * A LineDiscount plus what the live UI needs to render it. `name` is the item's
- * name, `label` the row prefix ("PWD Drink −20%", "Google Review −10%").
+ * name (or "Total items" for a whole-order row), `label` the row prefix
+ * ("PWD Drink −20% ×1", "Google Review −10%").
  */
 export interface DiscountLine extends LineDiscount {
   kind: LineDiscountKind
+  /** 'order' for a whole-total row; otherwise how much of the line the row covers. */
+  scope: LineDiscountScope | 'order'
   label: string
 }
 

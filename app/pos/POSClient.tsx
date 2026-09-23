@@ -5,7 +5,17 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { MENU } from './menuData'
 import { variantClass, groupOrderItems } from './utils'
-import type { MenuItem, MenuCategory, OrderItem, Variant, Addon, DiscountLine, LineDiscountKind } from './types'
+import type {
+  MenuItem,
+  MenuCategory,
+  OrderItem,
+  Variant,
+  Addon,
+  DiscountLine,
+  LineDiscountKind,
+  LineDiscountScope,
+  OrderDiscounts,
+} from './types'
 import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
 import MenuItemPopup from './MenuItemPopup'
 import CardActions from './CardActions'
@@ -13,12 +23,15 @@ import OrderReviewModal from './OrderReviewModal'
 import CustomizeDrinkRow from './CustomizeDrinkRow'
 import DiscountPickerRow from './DiscountPickerRow'
 import {
+  DISCOUNT_KINDS,
+  DISCOUNT_FOOTER_NAMES,
+  DISCOUNT_RATE_LABELS,
   buildDiscountLines,
   totalDiscount,
-  toggleLineDiscount,
-  toggleReviewForAll,
-  allEligibleHaveReview,
-  isReviewEligible,
+  discountBadge,
+  hasLineDiscount,
+  pickLineDiscount,
+  toggleOrderDiscount,
 } from './discounts'
 import { buildSalePayload } from './salePayload'
 import { ADDON_CATEGORY_ID } from './constants'
@@ -53,8 +66,10 @@ export default function POSClient() {
   const [customizeLineId, setCustomizeLineId]   = useState<string | null>(null)
   // Same idea for the Add-ons row — hidden until the "+" button is tapped.
   const [addonsLineId, setAddonsLineId]         = useState<string | null>(null)
-  // Same idea for the Discount row (PWD/Senior −20% or Google Review −10%) — hidden until the "%" button is tapped.
+  // Same idea for the Discount row (PWD/Senior −20% and/or Google Review −10%) — hidden until the "%" button is tapped.
   const [discountLineId, setDiscountLineId]     = useState<string | null>(null)
+  // Whole-order discounts (the footer "Total items" buttons), by kind.
+  const [orderDiscounts, setOrderDiscounts]     = useState<OrderDiscounts>({})
   const [showManageMenu, setShowManageMenu]     = useState(false)
   const [dynamicCategories, setDynamicCategories] = useState<DynamicCategory[]>([])
   const [dynamicItems, setDynamicItems]         = useState<DynamicMenuItem[]>([])
@@ -123,13 +138,11 @@ export default function POSClient() {
     [orderItems]
   )
 
-  // One row per discounted line (a line carries at most one kind) — a single transaction
-  // can bundle several customers' orders, each with its own PWD/Senior ID or Google review.
-  const discountLines    = useMemo(() => buildDiscountLines(orderItems), [orderItems])
-  const discountAmount   = useMemo(() => totalDiscount(discountLines), [discountLines])
-  const grandTotal       = useMemo(() => total - discountAmount, [total, discountAmount])
-  const reviewAllEnabled = useMemo(() => orderItems.some(isReviewEligible), [orderItems])
-  const reviewAllActive  = useMemo(() => allEligibleHaveReview(orderItems), [orderItems])
+  // One row per discount on each line plus the whole-order rows — a single transaction can
+  // bundle several customers' orders, each with its own PWD/Senior ID or Google review.
+  const discountLines  = useMemo(() => buildDiscountLines(orderItems, orderDiscounts), [orderItems, orderDiscounts])
+  const discountAmount = useMemo(() => totalDiscount(discountLines), [discountLines])
+  const grandTotal     = useMemo(() => total - discountAmount, [total, discountAmount])
 
   const addItem = useCallback((item: MenuItem, variant: Variant | null, categoryId: string) => {
     const price =
@@ -212,16 +225,20 @@ export default function POSClient() {
     setDiscountLineId(prev => (prev === lineId ? null : lineId))
   }
 
-  // A line carries at most one discount (PWD/Senior and the review promo never stack):
-  // picking the kind it already has clears it. One tap and the row closes.
-  function pickItemDiscount(lineId: string, kind: LineDiscountKind) {
-    setOrderItems(prev => toggleLineDiscount(prev, lineId, kind))
-    setDiscountLineId(null)
+  // A chip tap on one line: the active chip again clears that kind, the other scope switches it,
+  // the other kind stacks. The row stays open so PWD and the review promo combine in two taps.
+  function pickItemDiscount(lineId: string, kind: LineDiscountKind, scope: LineDiscountScope) {
+    const next = pickLineDiscount({ items: orderItems, order: orderDiscounts }, lineId, kind, scope)
+    setOrderItems(next.items)
+    setOrderDiscounts(next.order)
   }
 
-  // Footer shortcut: the review promo on every line that can take it, or off again if they all have it.
-  function toggleReviewDiscountForAll() {
-    setOrderItems(prev => toggleReviewForAll(prev))
+  // Footer "Total items" tap: the kind on (or off) the whole pre-discount total. Turning it on
+  // takes that kind off every individual line — a kind applies per line or to the total, never both.
+  function toggleOrderDiscountFor(kind: LineDiscountKind) {
+    const next = toggleOrderDiscount({ items: orderItems, order: orderDiscounts }, kind)
+    setOrderItems(next.items)
+    setOrderDiscounts(next.order)
   }
 
   function setItemNote(lineId: string, note: string) {
@@ -240,6 +257,7 @@ export default function POSClient() {
     setCustomizeLineId(null)
     setAddonsLineId(null)
     setDiscountLineId(null)
+    setOrderDiscounts({})
   }
 
   async function completeSale() {
@@ -600,8 +618,7 @@ export default function POSClient() {
             customizeLineId={customizeLineId}
             addonsLineId={addonsLineId}
             discountLineId={discountLineId}
-            reviewAllEnabled={reviewAllEnabled}
-            reviewAllActive={reviewAllActive}
+            orderDiscounts={orderDiscounts}
             payment={payment}
             customInput={customInput}
             notes={notes}
@@ -614,7 +631,7 @@ export default function POSClient() {
             onSelectItem={setSelectedLineId}
             onToggleDiscountPicker={toggleDiscountPicker}
             onPickDiscount={pickItemDiscount}
-            onToggleReviewAll={toggleReviewDiscountForAll}
+            onToggleOrderDiscount={toggleOrderDiscountFor}
             onSetItemNote={setItemNote}
             onToggleCustomize={toggleCustomize}
             onToggleAddons={toggleAddons}
@@ -662,8 +679,7 @@ export default function POSClient() {
               customizeLineId={customizeLineId}
               addonsLineId={addonsLineId}
               discountLineId={discountLineId}
-              reviewAllEnabled={reviewAllEnabled}
-              reviewAllActive={reviewAllActive}
+              orderDiscounts={orderDiscounts}
               payment={payment}
               customInput={customInput}
               notes={notes}
@@ -676,7 +692,7 @@ export default function POSClient() {
               onSelectItem={setSelectedLineId}
               onToggleDiscountPicker={toggleDiscountPicker}
               onPickDiscount={pickItemDiscount}
-              onToggleReviewAll={toggleReviewDiscountForAll}
+              onToggleOrderDiscount={toggleOrderDiscountFor}
               onSetItemNote={setItemNote}
               onToggleCustomize={toggleCustomize}
               onToggleAddons={toggleAddons}
@@ -882,8 +898,7 @@ function OrderPanel({
   customizeLineId,
   addonsLineId,
   discountLineId,
-  reviewAllEnabled,
-  reviewAllActive,
+  orderDiscounts,
   payment,
   customInput,
   notes,
@@ -896,7 +911,7 @@ function OrderPanel({
   onSelectItem,
   onToggleDiscountPicker,
   onPickDiscount,
-  onToggleReviewAll,
+  onToggleOrderDiscount,
   onSetItemNote,
   onToggleCustomize,
   onToggleAddons,
@@ -911,8 +926,7 @@ function OrderPanel({
   customizeLineId: string | null
   addonsLineId: string | null
   discountLineId: string | null
-  reviewAllEnabled: boolean
-  reviewAllActive: boolean
+  orderDiscounts: OrderDiscounts
   payment: number | null
   customInput: string
   notes: string
@@ -924,8 +938,8 @@ function OrderPanel({
   onNotesChange: (value: string) => void
   onSelectItem: (lineId: string) => void
   onToggleDiscountPicker: (lineId: string) => void
-  onPickDiscount: (lineId: string, kind: LineDiscountKind) => void
-  onToggleReviewAll: () => void
+  onPickDiscount: (lineId: string, kind: LineDiscountKind, scope: LineDiscountScope) => void
+  onToggleOrderDiscount: (kind: LineDiscountKind) => void
   onSetItemNote: (lineId: string, note: string) => void
   onToggleCustomize: (lineId: string) => void
   onToggleAddons: (lineId: string) => void
@@ -951,7 +965,7 @@ function OrderPanel({
           return (
             <>
               {parentItems.map(item => {
-                const hasDiscount  = item.discount !== undefined
+                const hasDiscount  = hasLineDiscount(item)
                 const isSelected   = item.lineId === selectedLineId
                 const childAddons  = addonsByParent.get(item.lineId) ?? []
 
@@ -972,11 +986,14 @@ function OrderPanel({
                             {item.variant}
                           </p>
                         )}
-                        {item.discount && (
-                          <p className="text-[10px] text-emerald-600 font-semibold mt-0.5 tracking-wide">
-                            {item.discount === 'pwd' ? 'SC/PWD −20% applied' : 'Google Review −10% applied'}
-                          </p>
-                        )}
+                        {DISCOUNT_KINDS.map(kind => {
+                          const scope = item.discounts?.[kind]
+                          return scope ? (
+                            <p key={kind} className="text-[10px] text-emerald-600 font-semibold mt-0.5 tracking-wide">
+                              {discountBadge(kind, item, scope)} applied
+                            </p>
+                          ) : null
+                        })}
                         {item.note && (
                           <p className="text-[10px] text-amber-600 font-semibold mt-0.5 tracking-wide truncate">
                             📝 {item.note}
@@ -1136,8 +1153,8 @@ function OrderPanel({
         <DiscountPickerRow
           key={discountLineId}
           itemName={items.find(i => i.lineId === discountLineId)!.name}
-          current={items.find(i => i.lineId === discountLineId)!.discount}
-          onPick={kind => onPickDiscount(discountLineId, kind)}
+          current={items.find(i => i.lineId === discountLineId)!.discounts}
+          onPick={(kind, scope) => onPickDiscount(discountLineId, kind, scope)}
         />
       )}
 
@@ -1164,20 +1181,28 @@ function OrderPanel({
       {/* Footer: discount toggle + total + payment + actions */}
       <div className="px-6 pt-3 pb-3 border-t border-foreground/10 shrink-0 space-y-2.5">
 
-        {/* Google Review promo shortcut — one tap puts the 10% on every line that can take it
-            (PWD/Senior lines never stack); tap again to take it off all of them. */}
-        <button
-          onClick={onToggleReviewAll}
-          disabled={!reviewAllEnabled}
-          aria-pressed={reviewAllActive}
-          className={`w-full py-2 text-[10px] font-bold uppercase tracking-widest rounded-sm border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
-            reviewAllActive
-              ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-              : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-500'
-          }`}
-        >
-          ⭐ Google Review −10% · {reviewAllActive ? 'applied to all items' : 'all items'}
-        </button>
+        {/* Whole-order discounts — each takes its rate off the full pre-discount total, and both can be
+            on at once. Turning one on takes that kind off any individual lines (per line or per total, not both). */}
+        <div className="flex gap-2">
+          {DISCOUNT_KINDS.map(kind => {
+            const active = orderDiscounts[kind] === true
+            return (
+              <button
+                key={kind}
+                onClick={() => onToggleOrderDiscount(kind)}
+                disabled={items.length === 0}
+                aria-pressed={active}
+                className={`flex-1 py-2 px-2 text-[10px] font-bold uppercase tracking-widest rounded-sm border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                  active
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                    : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-500'
+                }`}
+              >
+                {DISCOUNT_FOOTER_NAMES[kind]} {DISCOUNT_RATE_LABELS[kind]} · Total items
+              </button>
+            )
+          })}
+        </div>
 
         {/* Discount breakdown — one row per discounted line, visible whenever any line is discounted */}
         {discountLines.length > 0 && (
@@ -1187,7 +1212,7 @@ function OrderPanel({
               <span className="text-xs tabular-nums text-foreground/50">₱{total.toFixed(0)}</span>
             </div>
             {discountLines.map(d => (
-              <div key={d.lineId} className="flex justify-between items-center gap-2">
+              <div key={`${d.lineId}:${d.kind}`} className="flex justify-between items-center gap-2">
                 <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-semibold truncate">{d.label} ({d.name})</span>
                 <span className="text-xs tabular-nums text-emerald-600 font-bold shrink-0">−₱{d.amount}</span>
               </div>

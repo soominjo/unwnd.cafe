@@ -3,33 +3,33 @@ import type { OrderItem, DiscountLine } from './types'
 import { buildSalePayload } from './salePayload'
 
 const items: OrderItem[] = [
-  { lineId: 'a', name: 'Spanish Latte', variant: 'ice', price: 150, qty: 2, discount: 'review' },
-  { lineId: 'b', name: 'Croissant', variant: null, price: 100, qty: 1, discount: 'pwd' },
+  { lineId: 'a', name: 'Spanish Latte', variant: 'ice', price: 150, qty: 2, discounts: { pwd: 'solo', review: 'all' } },
+  { lineId: 'b', name: 'Croissant', variant: null, price: 100, qty: 1 },
 ]
 
 const discountLines: DiscountLine[] = [
-  { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'review', label: 'Google Review −10%' },
-  { lineId: 'b', name: 'Croissant', amount: 20, kind: 'pwd', label: 'PWD Food −20%' },
+  { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'pwd', scope: 'solo', label: 'PWD Drink −20% ×1' },
+  { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'review', scope: 'all', label: 'Google Review −10% ×2' },
+  { lineId: 'order:pwd', name: 'Total items', amount: 80, kind: 'pwd', scope: 'order', label: 'PWD/Senior −20%' },
 ]
 
-const args = { items, discountLines, subtotal: 400, grandTotal: 350, payment: 500, notes: ' Ana ' }
+const args = { items, discountLines, subtotal: 400, grandTotal: 260, payment: 500, notes: ' Ana ' }
 
 describe('buildSalePayload', () => {
   it('posts the discounted total, the pre-discount subtotal and the items as-is', () => {
     const body = buildSalePayload(args)
-    expect(body.total).toBe(350)
+    expect(body.total).toBe(260)
     expect(body.subtotal).toBe(400)
     expect(body.paymentAmount).toBe(500)
     expect(body.items).toBe(items)
   })
 
-  it('pre-formats each discount with its persisted (receipt) name, one row per line', () => {
-    const body = buildSalePayload(args)
-    expect(body.discounts).toEqual([
-      { lineId: 'a', name: 'Google Review -10% (Spanish Latte)', amount: 30 },
-      { lineId: 'b', name: 'PWD Food -20% (Croissant)', amount: 20 },
+  it('pre-formats every discount row with its persisted (receipt) name, keeping stacked rows on one line', () => {
+    expect(buildSalePayload(args).discounts).toEqual([
+      { lineId: 'a', name: 'PWD Drink -20% x1 (Spanish Latte)', amount: 30 },
+      { lineId: 'a', name: 'Google Review -10% x2 (Spanish Latte)', amount: 30 },
+      { lineId: 'order:pwd', name: 'PWD/Senior -20% (Total items)', amount: 80 },
     ])
-    expect(new Set(body.discounts!.map(d => d.lineId)).size).toBe(body.discounts!.length)
   })
 
   it('omits discounts entirely when there are none', () => {
@@ -37,7 +37,7 @@ describe('buildSalePayload', () => {
   })
 
   it('treats a missing payment as paying the exact total', () => {
-    expect(buildSalePayload({ ...args, payment: null }).paymentAmount).toBe(350)
+    expect(buildSalePayload({ ...args, payment: null }).paymentAmount).toBe(260)
   })
 
   it('trims the customer name and omits it when blank', () => {
