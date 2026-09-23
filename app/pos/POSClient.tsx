@@ -20,8 +20,7 @@ import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
 import MenuItemPopup from './MenuItemPopup'
 import CardActions from './CardActions'
 import OrderReviewModal from './OrderReviewModal'
-import CustomizeDrinkRow from './CustomizeDrinkRow'
-import DiscountPickerRow from './DiscountPickerRow'
+import ItemActionModal, { type ItemModalMode } from './ItemActionModal'
 import {
   DISCOUNT_KINDS,
   DISCOUNT_FOOTER_NAMES,
@@ -61,13 +60,9 @@ export default function POSClient() {
   const [submitError, setSubmitError]           = useState<string | null>(null)
   const [notes, setNotes]                       = useState('')
   const [selectedLineId, setSelectedLineId]     = useState<string | null>(null)
-  // Which item's "Customize" chip row (Less Sweet, No Sugar, etc.) is expanded — hidden
-  // (null) until the drink's 📝 button is tapped, one at a time.
-  const [customizeLineId, setCustomizeLineId]   = useState<string | null>(null)
-  // Same idea for the Add-ons row — hidden until the "+" button is tapped.
-  const [addonsLineId, setAddonsLineId]         = useState<string | null>(null)
-  // Same idea for the Discount row (PWD/Senior −20% and/or Google Review −10%) — hidden until the "%" button is tapped.
-  const [discountLineId, setDiscountLineId]     = useState<string | null>(null)
+  // The per-item modal (Customize / Add-ons / Discount): which line it is for and which
+  // section it shows; null when closed. One at a time, opened from that line's buttons.
+  const [itemModal, setItemModal]               = useState<{ lineId: string; mode: ItemModalMode } | null>(null)
   // Whole-order discounts (the footer "Total items" buttons), by kind.
   const [orderDiscounts, setOrderDiscounts]     = useState<OrderDiscounts>({})
   const [showManageMenu, setShowManageMenu]     = useState(false)
@@ -122,6 +117,7 @@ export default function POSClient() {
         setShowConfirm(false)
         setShowManageMenu(false)
         setMobileDrawer(false)
+        setItemModal(null)
       }
     }
     window.addEventListener('pageshow', onPageShow)
@@ -160,11 +156,11 @@ export default function POSClient() {
     setSelectedLineId(lineId)
   }, [])
 
-  // With a line selected, the add-on attaches to it. With nothing selected —
-  // including an empty cart — the add-on becomes its own standalone order line,
-  // rendered by OrderPanel's "orphan add-ons" branch.
-  function addAddon(addon: Addon) {
-    const addonLineId = selectedLineId ? `${addon.id}__${selectedLineId}` : addon.id
+  // Attaches the add-on to the given line (the item whose Add-ons modal is open). With
+  // no parent the add-on becomes its own standalone order line, rendered by OrderPanel's
+  // "orphan add-ons" branch.
+  function addAddon(addon: Addon, parentLineId: string | null) {
+    const addonLineId = parentLineId ? `${addon.id}__${parentLineId}` : addon.id
     setOrderItems(prev => {
       const existing = prev.find(i => i.lineId === addonLineId)
       if (existing) {
@@ -178,17 +174,10 @@ export default function POSClient() {
           variant: null,
           price: addon.price,
           qty: 1,
-          ...(selectedLineId ? { parentLineId: selectedLineId } : {}),
+          ...(parentLineId ? { parentLineId } : {}),
         },
       ]
     })
-  }
-
-  // Picking an add-on closes the row immediately — same one-tap-and-done feel as
-  // Customize, rather than requiring a second tap to dismiss it.
-  function addAddonAndClose(addon: Addon) {
-    addAddon(addon)
-    setAddonsLineId(null)
   }
 
   function adjustQty(lineId: string, delta: number) {
@@ -201,32 +190,18 @@ export default function POSClient() {
       return willRemove ? trimmed.filter(i => i.parentLineId !== lineId) : trimmed
     })
     if (willRemove && selectedLineId === lineId) setSelectedLineId(null)
-    if (willRemove && customizeLineId === lineId) setCustomizeLineId(null)
-    if (willRemove && addonsLineId === lineId) setAddonsLineId(null)
-    if (willRemove && discountLineId === lineId) setDiscountLineId(null)
+    if (willRemove && itemModal?.lineId === lineId) setItemModal(null)
     // The whole-order discounts belong to this order: when its last line goes they go too,
     // rather than sitting pressed-but-disabled and applying to the next customer's first item.
     const emptied = willRemove && orderItems.every(i => i.lineId === lineId || i.parentLineId === lineId)
     if (emptied) setOrderDiscounts({})
   }
 
-  // Tapping a drink's 📝 always targets that exact item — selects it (so Add-ons
-  // points at the same drink) and shows/hides its Customize row, one open at a time.
-  function toggleCustomize(lineId: string) {
+  // A line's 📝 / + / % buttons open the per-item modal on that section for that exact
+  // item — and select the line, so the panel highlights what the modal is editing.
+  function openItemModal(lineId: string, mode: ItemModalMode) {
     setSelectedLineId(lineId)
-    setCustomizeLineId(prev => (prev === lineId ? null : lineId))
-  }
-
-  // Same toggle mechanic as Customize, for the Add-ons row.
-  function toggleAddons(lineId: string) {
-    setSelectedLineId(lineId)
-    setAddonsLineId(prev => (prev === lineId ? null : lineId))
-  }
-
-  // Tapping a line's "%" opens/closes its Discount row — same mechanic as Customize and Add-ons.
-  function toggleDiscountPicker(lineId: string) {
-    setSelectedLineId(lineId)
-    setDiscountLineId(prev => (prev === lineId ? null : lineId))
+    setItemModal({ lineId, mode })
   }
 
   // A chip tap on one line: the active chip again clears that kind, the other scope switches it,
@@ -258,9 +233,7 @@ export default function POSClient() {
     setSubmitError(null)
     setNotes('')
     setSelectedLineId(null)
-    setCustomizeLineId(null)
-    setAddonsLineId(null)
-    setDiscountLineId(null)
+    setItemModal(null)
     setOrderDiscounts({})
   }
 
@@ -459,25 +432,25 @@ export default function POSClient() {
   // in the order panel — not orderable menu items in their own right.
   // The 'addon__' id prefix is load-bearing: order-line detection elsewhere
   // (utils.ts isAddonLine — used by groupOrderItems and discounts.ts) matches it.
-  // Smart-filtered: when an order line is selected, only add-ons whose
+  // Smart-filtered for the item whose modal is open: only add-ons whose
   // `applicableCategories` includes that line's source category (or that have
   // no restriction set at all) are offered — narrows an 11-item add-on list
-  // down to the handful relevant to whatever was just tapped. With nothing
-  // selected (empty cart, or adding a standalone/orphan add-on) the full list
-  // shows, same as before this existed.
-  const selectedCategoryId = useMemo(
-    () => orderItems.find((i) => i.lineId === selectedLineId)?.categoryId,
-    [orderItems, selectedLineId]
+  // down to the handful relevant to the item. With no category known the full
+  // list shows.
+  const modalItem = useMemo(
+    () => (itemModal ? orderItems.find((i) => i.lineId === itemModal.lineId) : undefined),
+    [orderItems, itemModal]
   )
+  const modalCategoryId = modalItem?.categoryId
 
   const addonAttachItems = useMemo<Addon[]>(() => {
     const addonCategory = mergedMenu.find((c) => c.id === ADDON_CATEGORY_ID)
     return (addonCategory?.items ?? [])
       .filter((i) => i.priceFixed !== null && !i.hiddenFromPos)
       .filter((i) => {
-        if (!selectedCategoryId) return true
+        if (!modalCategoryId) return true
         const restrictions = i.applicableCategories
-        return !restrictions || restrictions.length === 0 || restrictions.includes(selectedCategoryId)
+        return !restrictions || restrictions.length === 0 || restrictions.includes(modalCategoryId)
       })
       .map((i) => ({
         id:        `addon__${i._sanityId ?? i.id}`,
@@ -487,7 +460,7 @@ export default function POSClient() {
         price:     i.priceFixed!,
         type:      i.addonType ?? null,
       }))
-  }, [mergedMenu, selectedCategoryId])
+  }, [mergedMenu, modalCategoryId])
 
   return (
     <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
@@ -579,7 +552,7 @@ export default function POSClient() {
                     name: item.name,
                     label: `+${item.priceFixed} ${item.name}`,
                     price: item.priceFixed!,
-                  }) : undefined}
+                  }, selectedLineId) : undefined}
                   hasSelection={!!selectedLineId}
                   onEdit={item._sanityId ? () => setEditingItem({ item: { ...item, _sanityId: item._sanityId! }, categoryId: category.id }) : undefined}
                   onDelete={item._sanityId ? () => handleDeleteItem(item._sanityId!) : undefined}
@@ -614,14 +587,11 @@ export default function POSClient() {
         <aside data-order-panel className="hidden lg:flex w-100 xl:w-110 flex-col border-l border-foreground/10 bg-white shrink-0">
           <OrderPanel
             items={orderItems}
-            addons={addonAttachItems}
             total={total}
             grandTotal={grandTotal}
             discountLines={discountLines}
             selectedLineId={selectedLineId}
-            customizeLineId={customizeLineId}
-            addonsLineId={addonsLineId}
-            discountLineId={discountLineId}
+            itemModal={itemModal}
             orderDiscounts={orderDiscounts}
             payment={payment}
             customInput={customInput}
@@ -630,16 +600,10 @@ export default function POSClient() {
             onClear={clearOrder}
             onCharge={() => setShowConfirm(true)}
             onSetPayment={handleSetPayment}
-            onAddAddon={addAddonAndClose}
             onNotesChange={setNotes}
             onSelectItem={setSelectedLineId}
-            onToggleDiscountPicker={toggleDiscountPicker}
-            onPickDiscount={pickItemDiscount}
+            onOpenItemModal={openItemModal}
             onToggleOrderDiscount={toggleOrderDiscountFor}
-            onSetItemNote={setItemNote}
-            onToggleCustomize={toggleCustomize}
-            onToggleAddons={toggleAddons}
-            onCustomizeDone={() => setCustomizeLineId(null)}
           />
         </aside>
       </div>
@@ -675,14 +639,11 @@ export default function POSClient() {
             </div>
             <OrderPanel
               items={orderItems}
-              addons={addonAttachItems}
               total={total}
               grandTotal={grandTotal}
               discountLines={discountLines}
               selectedLineId={selectedLineId}
-              customizeLineId={customizeLineId}
-              addonsLineId={addonsLineId}
-              discountLineId={discountLineId}
+              itemModal={itemModal}
               orderDiscounts={orderDiscounts}
               payment={payment}
               customInput={customInput}
@@ -691,16 +652,10 @@ export default function POSClient() {
               onClear={clearOrder}
               onCharge={() => { setMobileDrawer(false); setShowConfirm(true) }}
               onSetPayment={handleSetPayment}
-              onAddAddon={addAddonAndClose}
               onNotesChange={setNotes}
               onSelectItem={setSelectedLineId}
-              onToggleDiscountPicker={toggleDiscountPicker}
-              onPickDiscount={pickItemDiscount}
+              onOpenItemModal={openItemModal}
               onToggleOrderDiscount={toggleOrderDiscountFor}
-              onSetItemNote={setItemNote}
-              onToggleCustomize={toggleCustomize}
-              onToggleAddons={toggleAddons}
-              onCustomizeDone={() => setCustomizeLineId(null)}
             />
           </div>
         </div>
@@ -744,6 +699,24 @@ export default function POSClient() {
           submitError={submitError}
           onCancel={() => { setShowConfirm(false); setSubmitError(null) }}
           onComplete={completeSale}
+        />
+      )}
+
+      {/* ── Per-item modal: Customize / Add-ons / Discount for one line, above either order panel ── */}
+      {itemModal && modalItem && (
+        <ItemActionModal
+          key={`${itemModal.mode}-${itemModal.lineId}`}
+          mode={itemModal.mode}
+          item={modalItem}
+          attachedAddons={orderItems.filter(i => i.parentLineId === modalItem.lineId)}
+          addonOptions={addonAttachItems}
+          discountLines={discountLines}
+          subtotal={total}
+          grandTotal={grandTotal}
+          onPickDiscount={(kind, scope) => pickItemDiscount(modalItem.lineId, kind, scope)}
+          onSaveNote={note => setItemNote(modalItem.lineId, note)}
+          onAddAddon={addon => addAddon(addon, modalItem.lineId)}
+          onClose={() => setItemModal(null)}
         />
       )}
     </div>
@@ -894,14 +867,11 @@ const AddonTile = memo(function AddonTile({
 
 function OrderPanel({
   items,
-  addons,
   total,
   grandTotal,
   discountLines,
   selectedLineId,
-  customizeLineId,
-  addonsLineId,
-  discountLineId,
+  itemModal,
   orderDiscounts,
   payment,
   customInput,
@@ -910,26 +880,17 @@ function OrderPanel({
   onClear,
   onCharge,
   onSetPayment,
-  onAddAddon,
   onNotesChange,
   onSelectItem,
-  onToggleDiscountPicker,
-  onPickDiscount,
+  onOpenItemModal,
   onToggleOrderDiscount,
-  onSetItemNote,
-  onToggleCustomize,
-  onToggleAddons,
-  onCustomizeDone,
 }: {
   items: OrderItem[]
-  addons: Addon[]
   total: number
   grandTotal: number
   discountLines: DiscountLine[]
   selectedLineId: string | null
-  customizeLineId: string | null
-  addonsLineId: string | null
-  discountLineId: string | null
+  itemModal: { lineId: string; mode: ItemModalMode } | null
   orderDiscounts: OrderDiscounts
   payment: number | null
   customInput: string
@@ -938,17 +899,14 @@ function OrderPanel({
   onClear: () => void
   onCharge: () => void
   onSetPayment: (amount: number | null, raw: string) => void
-  onAddAddon: (addon: Addon) => void
   onNotesChange: (value: string) => void
   onSelectItem: (lineId: string) => void
-  onToggleDiscountPicker: (lineId: string) => void
-  onPickDiscount: (lineId: string, kind: LineDiscountKind, scope: LineDiscountScope) => void
+  onOpenItemModal: (lineId: string, mode: ItemModalMode) => void
   onToggleOrderDiscount: (kind: LineDiscountKind) => void
-  onSetItemNote: (lineId: string, note: string) => void
-  onToggleCustomize: (lineId: string) => void
-  onToggleAddons: (lineId: string) => void
-  onCustomizeDone: () => void
 }) {
+  const modalOpenFor = (lineId: string, mode: ItemModalMode) =>
+    itemModal !== null && itemModal.lineId === lineId && itemModal.mode === mode
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
@@ -1006,35 +964,35 @@ function OrderPanel({
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
-                          onClick={e => { e.stopPropagation(); onToggleCustomize(item.lineId) }}
+                          onClick={e => { e.stopPropagation(); onOpenItemModal(item.lineId, 'customize') }}
                           title="Customize (less sweet, 1 shot, etc.)"
                           className={`w-8 h-8 flex items-center justify-center text-[11px] font-bold rounded-full border transition-colors ${
                             item.note
                               ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
                               : 'bg-amber-50 border-amber-300 text-amber-600 hover:bg-amber-100 hover:border-amber-500'
-                          } ${customizeLineId === item.lineId ? 'ring-2 ring-amber-300 ring-offset-1' : ''}`}
+                          } ${modalOpenFor(item.lineId, 'customize') ? 'ring-2 ring-amber-300 ring-offset-1' : ''}`}
                         >
                           📝
                         </button>
                         <button
-                          onClick={e => { e.stopPropagation(); onToggleAddons(item.lineId) }}
+                          onClick={e => { e.stopPropagation(); onOpenItemModal(item.lineId, 'addons') }}
                           title="Add-ons (extra shots, syrups, etc.)"
                           className={`w-8 h-8 flex items-center justify-center text-base font-bold rounded-full border transition-colors ${
                             childAddons.length > 0
                               ? 'bg-sky-500 text-white border-sky-500 shadow-sm'
                               : 'bg-sky-50 border-sky-300 text-sky-600 hover:bg-sky-100 hover:border-sky-500'
-                          } ${addonsLineId === item.lineId ? 'ring-2 ring-sky-300 ring-offset-1' : ''}`}
+                          } ${modalOpenFor(item.lineId, 'addons') ? 'ring-2 ring-sky-300 ring-offset-1' : ''}`}
                         >
                           +
                         </button>
                         <button
-                          onClick={e => { e.stopPropagation(); onToggleDiscountPicker(item.lineId) }}
+                          onClick={e => { e.stopPropagation(); onOpenItemModal(item.lineId, 'discount') }}
                           title="Discount (PWD/Senior 20%, Google Review 10% — all units or one)"
                           className={`w-8 h-8 flex items-center justify-center text-[10px] font-bold rounded-full border transition-colors ${
                             hasDiscount
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                               : 'bg-emerald-50 border-emerald-300 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-500'
-                          } ${discountLineId === item.lineId ? 'ring-2 ring-emerald-300 ring-offset-1' : ''}`}
+                          } ${modalOpenFor(item.lineId, 'discount') ? 'ring-2 ring-emerald-300 ring-offset-1' : ''}`}
                         >
                           %
                         </button>
@@ -1110,57 +1068,6 @@ function OrderPanel({
           )
         })()}
       </div>
-
-      {/* Add-ons — hidden until a drink's "+" is tapped; shown above Customer name/Customize */}
-      {addonsLineId && items.find(i => i.lineId === addonsLineId) && (
-        <div className="px-6 py-2 border-t border-foreground/10 shrink-0">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-foreground/45 font-semibold">Add-ons</p>
-            <p className="text-[10px] text-emerald-600 font-semibold truncate max-w-[55%] text-right">
-              → {items.find(i => i.lineId === addonsLineId)!.name}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            {addons.map(addon => (
-              <button
-                key={addon.id}
-                onClick={() => onAddAddon(addon)}
-                title={addon.type ? `${addon.type} add-on` : undefined}
-                className={`flex-1 px-2 py-1.5 text-[11px] font-semibold border-y border-r rounded-sm transition-all whitespace-nowrap text-center text-foreground/65 hover:text-foreground hover:bg-foreground/4 ${
-                  addon.type === 'food'
-                    ? 'border-l-2 border-l-[#8b5e3c] border-y-foreground/20 border-r-foreground/20 hover:border-y-[#8b5e3c]/45 hover:border-r-[#8b5e3c]/45'
-                    : addon.type === 'drink'
-                    ? 'border-l-2 border-l-foreground border-y-foreground/20 border-r-foreground/20 hover:border-y-foreground/45 hover:border-r-foreground/45'
-                    : 'border-l border-l-foreground/20 border-y-foreground/20 border-r-foreground/20 hover:border-foreground/45'
-                }`}
-              >
-                {addon.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Customize — hidden until a drink's 📝 is tapped; shown above Customer name */}
-      {customizeLineId && items.find(i => i.lineId === customizeLineId) && (
-        <CustomizeDrinkRow
-          key={customizeLineId}
-          itemName={items.find(i => i.lineId === customizeLineId)!.name}
-          note={items.find(i => i.lineId === customizeLineId)!.note}
-          onSave={(text) => onSetItemNote(customizeLineId, text)}
-          onPresetChosen={onCustomizeDone}
-        />
-      )}
-
-      {/* Discount — hidden until a line's "%" is tapped; PWD/Senior and/or Google Review, ALL or SOLO, for that line */}
-      {discountLineId && items.find(i => i.lineId === discountLineId) && (
-        <DiscountPickerRow
-          key={discountLineId}
-          itemName={items.find(i => i.lineId === discountLineId)!.name}
-          current={items.find(i => i.lineId === discountLineId)!.discounts}
-          onPick={(kind, scope) => onPickDiscount(discountLineId, kind, scope)}
-        />
-      )}
 
       {/* Customer name — stored as the sale's notes and printed as "Name" on the receipt */}
       <div className="px-6 py-2 border-t border-foreground/10 shrink-0">
