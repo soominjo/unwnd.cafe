@@ -5,11 +5,11 @@ import type { Addon } from './types'
 interface AddonsSectionProps {
   /** Add-ons that may attach to the open item — already filtered by its menu category. */
   options: Addon[]
-  /** Attaches one unit; the modal closes right after, so one tap is enough. */
+  /** Attaches one unit. The modal stays open, so several add-ons can be stacked in a row. */
   onAdd: (addon: Addon) => void
 }
 
-// The Add-ons section of the per-item modal. The left rule tells drink add-ons
+// The Add-ons part of the per-item modal. The left rule tells drink add-ons
 // (dark) from food add-ons (brown) at a glance.
 export default function AddonsSection({ options, onAdd }: AddonsSectionProps) {
   if (options.length === 0) {

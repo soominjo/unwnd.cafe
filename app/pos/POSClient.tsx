@@ -952,7 +952,7 @@ function OrderPanel({
                           const scope = item.discounts?.[kind]
                           return scope ? (
                             <p key={kind} className="text-[10px] text-emerald-600 font-semibold mt-0.5 tracking-wide">
-                              {discountBadge(kind, item, scope)} applied
+                              {discountBadge(kind, item, scope, 'short')} applied
                             </p>
                           ) : null
                         })}
@@ -964,21 +964,10 @@ function OrderPanel({
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
-                          onClick={e => { e.stopPropagation(); onOpenItemModal(item.lineId, 'customize') }}
-                          title="Customize (less sweet, 1 shot, etc.)"
-                          className={`w-8 h-8 flex items-center justify-center text-[11px] font-bold rounded-full border transition-colors ${
-                            item.note
-                              ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                              : 'bg-amber-50 border-amber-300 text-amber-600 hover:bg-amber-100 hover:border-amber-500'
-                          } ${modalOpenFor(item.lineId, 'customize') ? 'ring-2 ring-amber-300 ring-offset-1' : ''}`}
-                        >
-                          📝
-                        </button>
-                        <button
                           onClick={e => { e.stopPropagation(); onOpenItemModal(item.lineId, 'addons') }}
-                          title="Add-ons (extra shots, syrups, etc.)"
+                          title="Add-ons and customizations (extra shot, less sweet, etc.)"
                           className={`w-8 h-8 flex items-center justify-center text-base font-bold rounded-full border transition-colors ${
-                            childAddons.length > 0
+                            childAddons.length > 0 || item.note
                               ? 'bg-sky-500 text-white border-sky-500 shadow-sm'
                               : 'bg-sky-50 border-sky-300 text-sky-600 hover:bg-sky-100 hover:border-sky-500'
                           } ${modalOpenFor(item.lineId, 'addons') ? 'ring-2 ring-sky-300 ring-offset-1' : ''}`}

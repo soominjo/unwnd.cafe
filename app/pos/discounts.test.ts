@@ -98,6 +98,12 @@ describe('labels', () => {
     expect(discountBadge('pwd', item({ lineId: 'a', qty: 4 }), 'solo')).toBe('PWD/Senior −20% ×1')
     expect(discountBadge('review', item({ lineId: 'a', qty: 1 }), 'all')).toBe('Google Review −10%')
   })
+
+  it('offers short badge names for the cramped order panel', () => {
+    expect(discountBadge('pwd', item({ lineId: 'a', qty: 4 }), 'solo', 'short')).toBe('PWD/S −20% ×1')
+    expect(discountBadge('review', item({ lineId: 'a', qty: 4 }), 'all', 'short')).toBe('GR −10% ×4')
+    expect(discountBadge('review', item({ lineId: 'a', qty: 1 }), 'all', 'short')).toBe('GR −10%')
+  })
 })
 
 describe('hasLineDiscount', () => {

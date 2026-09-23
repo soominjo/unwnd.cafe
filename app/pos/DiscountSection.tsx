@@ -63,7 +63,13 @@ export default function DiscountSection({ item, addonsTotal, lineRows, onPick }:
               <div key={d.kind} className="flex justify-between items-baseline gap-3 text-sm text-emerald-700 font-semibold">
                 <span>
                   {d.label}
-                  {base !== null && <span className="text-foreground/45 font-normal"> · {rate}% of ₱{base}</span>}
+                  {base !== null && (
+                    <span className="text-foreground/45 font-normal">
+                      {' '}· {rate}% of ₱{base}
+                      {/* This mode does not list the add-ons, so say where the extra pesos in the base came from. */}
+                      {addonsTotal > 0 && ' incl. add-ons'}
+                    </span>
+                  )}
                 </span>
                 <span className="tabular-nums shrink-0">−₱{d.amount}</span>
               </div>

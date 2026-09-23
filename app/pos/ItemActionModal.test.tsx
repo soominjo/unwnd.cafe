@@ -44,76 +44,70 @@ const base = {
   onClose: noop,
 }
 
-const render = (mode: 'customize' | 'addons' | 'discount') =>
-  renderToStaticMarkup(<ItemActionModal {...base} mode={mode} />)
+const render = (mode: 'addons' | 'discount') => renderToStaticMarkup(<ItemActionModal {...base} mode={mode} />)
 
 describe('ItemActionModal', () => {
-  it('shows the item, its unit price × quantity, its add-ons and the order totals in every mode', () => {
-    for (const mode of ['customize', 'addons', 'discount'] as const) {
+  it('names the item and shows a large unit price × quantity in both modes', () => {
+    for (const mode of ['addons', 'discount'] as const) {
       const html = render(mode)
       expect(html).toContain('White Mocha Americano')
       expect(html).toContain('₱150 × 4')
-      expect(html).toContain('Extra Shot')
-      expect(html).toContain('₱950')
-      expect(html).toContain('₱827')
-      expect(html).toContain('−₱123')
     }
   })
 
-  it('keeps the header lean: no discount badges, no line total, no explanation lines', () => {
+  it('discount mode shows only the discount — no add-ons, no note, no customize presets', () => {
     const html = render('discount')
-    expect(html).not.toContain('PWD/Senior −20% ×1')
-    expect(html).not.toContain('Google Review −10% ×4</span>')
-    expect(html).not.toContain('₱600')
-    expect(html).not.toContain('ALL = every unit')
-    expect(render('customize')).not.toContain('Tap a preset')
-    expect(render('addons')).not.toContain('Tap an add-on')
+    expect(html).not.toContain('Extra Shot')
+    expect(html).not.toContain('Espresso Shot')
+    expect(html).not.toContain('Less Sweet')
+    expect(html).not.toContain('No Sugar')
   })
 
-  it('discount mode offers the four chips with the active ones pressed and shows each row’s computation', () => {
+  it('discount mode presses the active chips and shows each row’s computation over the order totals', () => {
     const html = render('discount')
     expect(html).toMatch(/aria-pressed="true"[^>]*>PWD\/S −20% · SOLO/)
     expect(html).toMatch(/aria-pressed="true"[^>]*>GR −10% · ALL/)
     expect(html).toMatch(/aria-pressed="false"[^>]*>PWD\/S −20% · ALL/)
     expect(html).toMatch(/aria-pressed="false"[^>]*>GR −10% · SOLO/)
-    // SOLO: one unit’s share of (150 × 4 + 60) = 165 → 20% = 33. ALL: 10% of 660 = 66.
-    expect(html).toContain('PWD Drink −20% ×1')
+    // SOLO: one unit's share of (150 × 4 + 60) = 165 → 20% = 33. ALL: 10% of 660 = 66.
     expect(html).toContain('20% of ₱165')
     expect(html).toContain('−₱33')
-    expect(html).toContain('Google Review −10% ×4')
     expect(html).toContain('10% of ₱660')
     expect(html).toContain('−₱66')
+    // The add-ons are not listed in this mode, so the base says where its extra pesos came from.
+    expect(html).toContain('incl. add-ons')
+    expect(html).toContain('Subtotal')
+    expect(html).toContain('₱950')
+    expect(html).toContain('−₱123')
+    expect(html).toContain('₱827')
     expect(html).not.toContain('Croissant')
   })
 
-  it('discount mode presses no chip and lists no rows for a line without discounts', () => {
-    const plain = { ...item, discounts: undefined }
-    const html = renderToStaticMarkup(
-      <ItemActionModal {...base} mode="discount" item={plain} discountLines={[]} subtotal={950} grandTotal={950} />
-    )
-    expect(html).not.toContain('aria-pressed="true"')
-    expect(html).toContain('No discount on this item yet')
-    expect(html).not.toContain('Discount</span>')
-  })
-
-  it('customize mode marks the presets already on the note and prefills the free-text part', () => {
-    const html = render('customize')
-    expect(html).toMatch(/aria-pressed="true"[^>]*>Less Sweet/)
-    expect(html).toMatch(/aria-pressed="false"[^>]*>No Sugar/)
-    expect(html).toContain('value="no whip"')
-    expect(html).not.toContain('PWD/S −20%')
-  })
-
-  it('add-ons mode lists the add-ons that can attach to this item', () => {
+  it('add-ons mode carries both the add-ons and the customize presets, with the note prefilled', () => {
     const html = render('addons')
     expect(html).toContain('+30 Espresso Shot')
     expect(html).toContain('+40 Oat Milk')
-    // The Customize presets are not offered here (the header still shows the item's own note).
-    expect(html).not.toContain('No Sugar')
+    expect(html).toContain('Extra Shot')
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Less Sweet/)
+    expect(html).toMatch(/aria-pressed="false"[^>]*>No Sugar/)
+    expect(html).toContain('value="no whip"')
   })
 
-  it('add-ons mode says so when nothing can attach', () => {
+  it('add-ons mode shows the item total with its add-ons, and no discount information', () => {
+    const html = render('addons')
+    // 150 × 4 + 30 × 2 = 660
+    expect(html).toContain('₱660')
+    expect(html).toContain('₱60')
+    expect(html).not.toContain('PWD')
+    expect(html).not.toContain('GR −10%')
+    expect(html).not.toContain('Subtotal')
+    expect(html).not.toContain('−₱123')
+    expect(html).not.toContain('₱827')
+  })
+
+  it('says so when no add-on can attach, and still offers the presets', () => {
     const html = renderToStaticMarkup(<ItemActionModal {...base} mode="addons" addonOptions={[]} />)
     expect(html).toContain('No add-ons available for this item')
+    expect(html).toContain('No Sugar')
   })
 })

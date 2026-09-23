@@ -101,9 +101,19 @@ export function discountRowLabel(kind: LineDiscountKind, item: OrderItem, scope:
   return `${head} ${DISCOUNT_RATE_LABELS[kind]}${unitSuffix(item, scope)}`
 }
 
-/** Line badge in the order panel and the review screen: "PWD/Senior −20% ×1". */
-export function discountBadge(kind: LineDiscountKind, item: OrderItem, scope: LineDiscountScope): string {
-  return `${DISCOUNT_NAMES[kind]} ${DISCOUNT_RATE_LABELS[kind]}${unitSuffix(item, scope)}`
+/**
+ * Line badge: "PWD/Senior −20% ×1" for the customer-facing review screen, or
+ * "PWD/S −20% ×1" where space is tight — the order panel's line rows, which sit
+ * beside the item name and its buttons.
+ */
+export function discountBadge(
+  kind: LineDiscountKind,
+  item: OrderItem,
+  scope: LineDiscountScope,
+  style: 'full' | 'short' = 'full',
+): string {
+  const name = style === 'short' ? DISCOUNT_SHORT_NAMES[kind] : DISCOUNT_NAMES[kind]
+  return `${name} ${DISCOUNT_RATE_LABELS[kind]}${unitSuffix(item, scope)}`
 }
 
 export function hasLineDiscount(item: OrderItem): boolean {
