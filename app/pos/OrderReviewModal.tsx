@@ -1,15 +1,15 @@
 'use client'
 
 import { variantClass, groupOrderItems } from './utils'
-import type { OrderItem, LineDiscount } from './types'
+import { DISCOUNT_LABELS } from './discounts'
+import type { OrderItem, DiscountLine } from './types'
 
 interface OrderReviewModalProps {
   orderItems: OrderItem[]
   itemCount: number
   total: number
   grandTotal: number
-  foodDiscountLines: LineDiscount[]
-  drinkDiscountLines: LineDiscount[]
+  discountLines: DiscountLine[]
   discountAmount: number
   payment: number | null
   notes: string
@@ -29,8 +29,7 @@ export default function OrderReviewModal({
   itemCount,
   total,
   grandTotal,
-  foodDiscountLines,
-  drinkDiscountLines,
+  discountLines,
   discountAmount,
   payment,
   notes,
@@ -94,8 +93,8 @@ export default function OrderReviewModal({
                             {item.variant}
                           </span>
                         )}
-                        {item.pwdDiscounted && (
-                          <span className="text-xs text-emerald-600 font-semibold tracking-wide">PWD/Senior −20%</span>
+                        {item.discount && (
+                          <span className="text-xs text-emerald-600 font-semibold tracking-wide">{DISCOUNT_LABELS[item.discount]}</span>
                         )}
                       </div>
                       {item.note && (
@@ -151,15 +150,9 @@ export default function OrderReviewModal({
                 <span className="uppercase tracking-widest">Subtotal</span>
                 <span className="tabular-nums">₱{total.toFixed(0)}</span>
               </div>
-              {foodDiscountLines.map(d => (
+              {discountLines.map(d => (
                 <div key={d.lineId} className="flex justify-between text-xs text-emerald-600 font-semibold gap-2">
-                  <span className="uppercase tracking-widest truncate">PWD Food −20% ({d.name})</span>
-                  <span className="tabular-nums shrink-0">−₱{d.amount}</span>
-                </div>
-              ))}
-              {drinkDiscountLines.map(d => (
-                <div key={d.lineId} className="flex justify-between text-xs text-emerald-600 font-semibold gap-2">
-                  <span className="uppercase tracking-widest truncate">PWD Drink −20% ({d.name})</span>
+                  <span className="uppercase tracking-widest truncate">{d.label} ({d.name})</span>
                   <span className="tabular-nums shrink-0">−₱{d.amount}</span>
                 </div>
               ))}
