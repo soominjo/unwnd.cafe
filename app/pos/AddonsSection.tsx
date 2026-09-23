@@ -10,7 +10,7 @@ interface AddonsSectionProps {
 }
 
 // The Add-ons section of the per-item modal. The left rule tells drink add-ons
-// (dark) from food add-ons (brown) at a glance, as the old inline row did.
+// (dark) from food add-ons (brown) at a glance.
 export default function AddonsSection({ options, onAdd }: AddonsSectionProps) {
   if (options.length === 0) {
     return <p className="text-sm text-foreground/45">No add-ons available for this item.</p>
@@ -23,7 +23,7 @@ export default function AddonsSection({ options, onAdd }: AddonsSectionProps) {
             key={addon.id}
             onClick={() => onAdd(addon)}
             title={addon.type ? `${addon.type} add-on` : undefined}
-            className={`px-3 py-2.5 text-xs font-semibold border-y border-r rounded-sm transition-all text-left text-foreground/70 hover:text-foreground hover:bg-foreground/4 ${
+            className={`px-3 py-3 text-sm font-semibold border-y border-r rounded-sm transition-all text-left text-foreground/70 hover:text-foreground hover:bg-foreground/4 ${
               addon.type === 'food'
                 ? 'border-l-2 border-l-[#8b5e3c] border-y-foreground/20 border-r-foreground/20 hover:border-y-[#8b5e3c]/45 hover:border-r-[#8b5e3c]/45'
                 : addon.type === 'drink'

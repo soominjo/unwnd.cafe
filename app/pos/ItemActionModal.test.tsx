@@ -86,6 +86,16 @@ describe('ItemActionModal', () => {
     expect(html).not.toContain('Croissant')
   })
 
+  it('discount mode presses no chip and lists no rows for a line without discounts', () => {
+    const plain = { ...item, discounts: undefined }
+    const html = renderToStaticMarkup(
+      <ItemActionModal {...base} mode="discount" item={plain} discountLines={[]} subtotal={950} grandTotal={950} />
+    )
+    expect(html).not.toContain('aria-pressed="true"')
+    expect(html).toContain('No discount on this item yet')
+    expect(html).not.toContain('Discount</span>')
+  })
+
   it('customize mode marks the presets already on the note and prefills the free-text part', () => {
     const html = render('customize')
     expect(html).toMatch(/aria-pressed="true"[^>]*>Less Sweet/)

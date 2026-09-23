@@ -205,7 +205,7 @@ export default function POSClient() {
   }
 
   // A chip tap on one line: the active chip again clears that kind, the other scope switches it,
-  // the other kind stacks. The row stays open so PWD and the review promo combine in two taps.
+  // the other kind stacks. The modal stays open so PWD and the review promo combine in two taps.
   function pickItemDiscount(lineId: string, kind: LineDiscountKind, scope: LineDiscountScope) {
     const next = pickLineDiscount({ items: orderItems, order: orderDiscounts }, lineId, kind, scope)
     setOrderItems(next.items)
@@ -429,7 +429,7 @@ export default function POSClient() {
   ), [dynamicCategories])
 
   // Items filed under the "Add ons" category are the attachable add-ons shown
-  // in the order panel — not orderable menu items in their own right.
+  // in the per-item modal — not orderable menu items in their own right.
   // The 'addon__' id prefix is load-bearing: order-line detection elsewhere
   // (utils.ts isAddonLine — used by groupOrderItems and discounts.ts) matches it.
   // Smart-filtered for the item whose modal is open: only add-ons whose

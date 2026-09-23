@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import type { Addon, DiscountLine, LineDiscountKind, LineDiscountScope, OrderItem } from './types'
 import { variantClass } from './utils'
 import CustomizeSection from './CustomizeSection'
@@ -56,6 +57,15 @@ export default function ItemActionModal({
   const addonsTotal = attachedAddons.reduce((sum, a) => sum + a.price * a.qty, 0)
   const discountAmount = subtotal - grandTotal
 
+  // Escape closes, for the cashier on a keyboard; touch users have the backdrop, ✕ and Done.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -72,8 +82,9 @@ export default function ItemActionModal({
           </p>
           <button
             onClick={onClose}
+            aria-label="Close"
             title="Close"
-            className="text-foreground/50 hover:text-foreground text-xl leading-none w-9 h-9 flex items-center justify-center rounded-full hover:bg-foreground/5 transition-colors"
+            className="text-foreground/50 hover:text-foreground text-xl leading-none w-11 h-11 -mr-2 flex items-center justify-center rounded-full hover:bg-foreground/5 transition-colors"
           >
             ✕
           </button>
@@ -106,7 +117,7 @@ export default function ItemActionModal({
           {/* The section this modal was opened for */}
           <div className="px-5 py-4">
             {mode === 'customize' && (
-              <CustomizeSection note={item.note} onSave={onSaveNote} onPresetChosen={onClose} />
+              <CustomizeSection note={item.note} onSave={onSaveNote} onDone={onClose} />
             )}
             {mode === 'addons' && (
               <AddonsSection options={addonOptions} onAdd={addon => { onAddAddon(addon); onClose() }} />
