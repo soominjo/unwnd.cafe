@@ -65,20 +65,23 @@ export function unitsDiscounted(item: OrderItem, scope: LineDiscountScope): numb
   return scope === 'solo' ? 1 : item.qty
 }
 
-// ALL: the rate off the whole line plus its add-ons. SOLO: the rate off one
-// unit's share of that same base (one drink and its share of the extra shots),
-// whatever the quantity. Whole pesos, half up.
+// What a line discount is taken off. ALL: the whole line plus its add-ons. SOLO:
+// one unit's share of that same base (one drink and its share of the extra
+// shots), whatever the quantity. Divide only for SOLO: (lineBase / qty) * qty is
+// not the identity in floating point and can round a half-peso the wrong way.
+export function lineDiscountBase(item: OrderItem, addonsTotal: number, scope: LineDiscountScope): number {
+  const lineBase = item.price * item.qty + addonsTotal
+  return scope === 'solo' ? lineBase / item.qty : lineBase
+}
+
+/** The rate off the line's base — whole pesos, half up. */
 export function lineDiscountAmount(
   item: OrderItem,
   addonsTotal: number,
   kind: LineDiscountKind,
   scope: LineDiscountScope,
 ): number {
-  const lineBase = item.price * item.qty + addonsTotal
-  // Divide only for SOLO: (lineBase / qty) * qty is not the identity in floating
-  // point and can round a half-peso the wrong way (185 / 11 * 11 = 184.999…).
-  const base = scope === 'solo' ? lineBase / item.qty : lineBase
-  return Math.round(base * DISCOUNT_RATES[kind])
+  return Math.round(lineDiscountBase(item, addonsTotal, scope) * DISCOUNT_RATES[kind])
 }
 
 /** A whole-order row: the rate off the full pre-discount subtotal. */

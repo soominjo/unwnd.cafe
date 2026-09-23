@@ -3,6 +3,7 @@ import type { OrderItem, OrderDiscounts } from './types'
 import {
   attachedAddonsTotal,
   unitsDiscounted,
+  lineDiscountBase,
   lineDiscountAmount,
   orderDiscountAmount,
   discountRowLabel,
@@ -67,6 +68,15 @@ describe('lineDiscountAmount', () => {
   it('never loses a peso to floating point on ALL with an awkward quantity', () => {
     // (10 × 11 + 75) × 0.10 = 18.5 → 19. Dividing by 11 and multiplying back gives 184.999… and would round to 18.
     expect(lineDiscountAmount(item({ lineId: 'a', price: 10, qty: 11 }), 75, 'review', 'all')).toBe(19)
+  })
+})
+
+describe('lineDiscountBase', () => {
+  const four = item({ lineId: 'a', price: 150, qty: 4 })
+
+  it('is the whole line plus add-ons for ALL and one unit’s share for SOLO', () => {
+    expect(lineDiscountBase(four, 60, 'all')).toBe(660)
+    expect(lineDiscountBase(four, 60, 'solo')).toBe(165)
   })
 })
 

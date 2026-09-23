@@ -2,7 +2,6 @@
 
 import type { Addon, DiscountLine, LineDiscountKind, LineDiscountScope, OrderItem } from './types'
 import { variantClass } from './utils'
-import { DISCOUNT_KINDS, discountBadge } from './discounts'
 import CustomizeSection from './CustomizeSection'
 import AddonsSection from './AddonsSection'
 import DiscountSection from './DiscountSection'
@@ -54,16 +53,17 @@ export default function ItemActionModal({
   onClose,
 }: ItemActionModalProps) {
   const lineRows = discountLines.filter(d => d.lineId === item.lineId)
+  const addonsTotal = attachedAddons.reduce((sum, a) => sum + a.price * a.qty, 0)
   const discountAmount = subtotal - grandTotal
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="item-modal-title"
-        className="relative z-[61] bg-white border border-foreground/12 w-full max-w-md rounded-sm shadow-2xl flex flex-col max-h-[90vh]"
+        className="relative z-61 bg-white border border-foreground/12 w-full max-w-md rounded-sm shadow-2xl flex flex-col max-h-[90vh]"
       >
         {/* Header: what this modal is, and the ✕ */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-foreground/10 shrink-0">
@@ -80,18 +80,19 @@ export default function ItemActionModal({
         </div>
 
         <div className="overflow-y-auto">
-          {/* The item: name, variant, unit price × qty, attached add-ons, discounts already on it */}
+          {/* The item: name, variant, and a large unit price × qty. Attached add-ons follow, since
+              they are part of what a discount is taken off. Discounts themselves are shown once,
+              in the Discount section's computation rows, not repeated here. */}
           <div className="px-5 py-4 border-b border-foreground/10">
             <p className="text-lg font-bold leading-tight text-foreground">{item.name}</p>
-            <div className="flex items-center gap-3 mt-1.5 text-xs">
+            <div className="flex items-baseline gap-3 mt-2">
               {item.variant && (
-                <span className={`uppercase tracking-wider font-bold ${variantClass(item.variant)}`}>{item.variant}</span>
+                <span className={`text-xs uppercase tracking-wider font-bold ${variantClass(item.variant)}`}>{item.variant}</span>
               )}
-              <span className="text-foreground/60 tabular-nums">₱{item.price} × {item.qty}</span>
-              <span className="ml-auto font-bold tabular-nums text-foreground">₱{item.price * item.qty}</span>
+              <span className="text-2xl font-semibold tabular-nums text-foreground">₱{item.price} × {item.qty}</span>
             </div>
             {attachedAddons.map(addon => (
-              <div key={addon.lineId} className="flex items-center justify-between mt-1.5 text-xs">
+              <div key={addon.lineId} className="flex items-center justify-between mt-2 text-sm">
                 <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-0.5 font-semibold text-sky-700">
                   <span className="text-sky-500">+</span>
                   {addon.name}
@@ -100,19 +101,6 @@ export default function ItemActionModal({
                 <span className="tabular-nums text-foreground/50">₱{addon.price * addon.qty}</span>
               </div>
             ))}
-            {item.note && (
-              <p className="text-xs text-amber-600 font-semibold tracking-wide mt-2">📝 {item.note}</p>
-            )}
-            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
-              {DISCOUNT_KINDS.map(kind => {
-                const scope = item.discounts?.[kind]
-                return scope ? (
-                  <span key={kind} className="text-xs text-emerald-600 font-semibold tracking-wide">
-                    {discountBadge(kind, item, scope)}
-                  </span>
-                ) : null
-              })}
-            </div>
           </div>
 
           {/* The section this modal was opened for */}
@@ -124,26 +112,26 @@ export default function ItemActionModal({
               <AddonsSection options={addonOptions} onAdd={addon => { onAddAddon(addon); onClose() }} />
             )}
             {mode === 'discount' && (
-              <DiscountSection current={item.discounts} lineRows={lineRows} onPick={onPickDiscount} />
+              <DiscountSection item={item} addonsTotal={addonsTotal} lineRows={lineRows} onPick={onPickDiscount} />
             )}
           </div>
         </div>
 
         {/* Order money, always in view: what the customer will owe with everything applied */}
-        <div className="border-t border-foreground/10 px-5 py-3 space-y-1 text-xs shrink-0">
+        <div className="border-t border-foreground/10 px-5 py-3 space-y-1.5 text-sm shrink-0">
           <div className="flex justify-between text-foreground/55">
-            <span className="uppercase tracking-widest">Subtotal</span>
+            <span className="text-xs uppercase tracking-widest">Subtotal</span>
             <span className="tabular-nums">₱{subtotal}</span>
           </div>
           {discountAmount > 0 && (
             <div className="flex justify-between text-emerald-600 font-semibold">
-              <span className="uppercase tracking-widest">Discounts</span>
+              <span className="text-xs uppercase tracking-widest">Discount</span>
               <span className="tabular-nums">−₱{discountAmount}</span>
             </div>
           )}
           <div className="flex justify-between items-baseline pt-1">
-            <span className="uppercase tracking-widest font-semibold text-foreground/70">Total</span>
-            <span className="font-display font-bold text-2xl tabular-nums text-foreground">₱{grandTotal}</span>
+            <span className="text-xs uppercase tracking-widest font-semibold text-foreground/70">Total</span>
+            <span className="font-display font-bold text-3xl tabular-nums text-foreground">₱{grandTotal}</span>
           </div>
         </div>
 

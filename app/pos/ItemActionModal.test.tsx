@@ -48,12 +48,11 @@ const render = (mode: 'customize' | 'addons' | 'discount') =>
   renderToStaticMarkup(<ItemActionModal {...base} mode={mode} />)
 
 describe('ItemActionModal', () => {
-  it('shows the item, its price line, its add-ons and the order totals in every mode', () => {
+  it('shows the item, its unit price × quantity, its add-ons and the order totals in every mode', () => {
     for (const mode of ['customize', 'addons', 'discount'] as const) {
       const html = render(mode)
       expect(html).toContain('White Mocha Americano')
       expect(html).toContain('₱150 × 4')
-      expect(html).toContain('₱600')
       expect(html).toContain('Extra Shot')
       expect(html).toContain('₱950')
       expect(html).toContain('₱827')
@@ -61,15 +60,28 @@ describe('ItemActionModal', () => {
     }
   })
 
-  it('discount mode offers the four chips with the active ones pressed and lists this line’s rows', () => {
+  it('keeps the header lean: no discount badges, no line total, no explanation lines', () => {
+    const html = render('discount')
+    expect(html).not.toContain('PWD/Senior −20% ×1')
+    expect(html).not.toContain('Google Review −10% ×4</span>')
+    expect(html).not.toContain('₱600')
+    expect(html).not.toContain('ALL = every unit')
+    expect(render('customize')).not.toContain('Tap a preset')
+    expect(render('addons')).not.toContain('Tap an add-on')
+  })
+
+  it('discount mode offers the four chips with the active ones pressed and shows each row’s computation', () => {
     const html = render('discount')
     expect(html).toMatch(/aria-pressed="true"[^>]*>PWD\/S −20% · SOLO/)
     expect(html).toMatch(/aria-pressed="true"[^>]*>GR −10% · ALL/)
     expect(html).toMatch(/aria-pressed="false"[^>]*>PWD\/S −20% · ALL/)
     expect(html).toMatch(/aria-pressed="false"[^>]*>GR −10% · SOLO/)
+    // SOLO: one unit’s share of (150 × 4 + 60) = 165 → 20% = 33. ALL: 10% of 660 = 66.
     expect(html).toContain('PWD Drink −20% ×1')
+    expect(html).toContain('20% of ₱165')
     expect(html).toContain('−₱33')
     expect(html).toContain('Google Review −10% ×4')
+    expect(html).toContain('10% of ₱660')
     expect(html).toContain('−₱66')
     expect(html).not.toContain('Croissant')
   })

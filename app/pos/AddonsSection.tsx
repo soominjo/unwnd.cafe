@@ -17,7 +17,6 @@ export default function AddonsSection({ options, onAdd }: AddonsSectionProps) {
   }
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-foreground/50">Tap an add-on to attach one to this item.</p>
       <div className="grid grid-cols-2 gap-2">
         {options.map(addon => (
           <button

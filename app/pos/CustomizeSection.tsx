@@ -43,7 +43,6 @@ export default function CustomizeSection({ note, onSave, onPresetChosen }: Custo
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-foreground/50">Tap a preset to apply it, or type anything else below.</p>
       <div className="flex flex-wrap gap-2">
         {CUSTOMIZE_PRESETS.map(preset => {
           const active = presets.includes(preset)
