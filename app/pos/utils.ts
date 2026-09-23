@@ -1,5 +1,12 @@
 import type { OrderItem, SaleItem } from './types'
 
+// Add-on lines carry the load-bearing 'addon__' lineId prefix (set where the
+// order panel attaches an add-on) — the one reliable way to tell an add-on line
+// from an orderable menu item, in the live cart and in saved sales alike.
+export function isAddonLine(item: { lineId: string }): boolean {
+  return item.lineId.startsWith('addon__')
+}
+
 export function variantClass(variant: string | null): string {
   if (variant === 'hot') return 'text-red-500'
   if (variant === 'ice') return 'text-sky-500'
@@ -17,8 +24,8 @@ export interface GroupedOrderItems {
 // an add-on with no parentLineId was added standalone (no line selected) and is
 // its own order line rather than a nested attachment.
 export function groupOrderItems(items: OrderItem[]): GroupedOrderItems {
-  const parentItems = items.filter(i => !i.lineId.startsWith('addon__'))
-  const addonItems  = items.filter(i =>  i.lineId.startsWith('addon__'))
+  const parentItems = items.filter(i => !isAddonLine(i))
+  const addonItems  = items.filter(isAddonLine)
 
   const addonsByParent = new Map<string, OrderItem[]>()
   const orphanAddons: OrderItem[] = []
@@ -55,7 +62,7 @@ export function groupSaleItems(items: SaleItem[]): GroupedSaleItems {
   let lastTopLevelLineId: string | null = null
 
   for (const item of items) {
-    const isAddon = item.lineId.startsWith('addon__')
+    const isAddon = isAddonLine(item)
     const parentLineId =
       item.parentLineId && lineIds.has(item.parentLineId) ? item.parentLineId : isAddon ? lastTopLevelLineId : null
 

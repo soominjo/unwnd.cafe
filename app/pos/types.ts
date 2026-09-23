@@ -29,6 +29,9 @@ export interface Addon {
   type?: AddonType | null
 }
 
+/** The one discount an order line can carry: statutory PWD/Senior (20%) or the Google Review promo (10%). */
+export type LineDiscountKind = 'pwd' | 'review'
+
 export interface OrderItem {
   lineId: string
   name: string
@@ -36,6 +39,8 @@ export interface OrderItem {
   price: number
   qty: number
   pwdDiscounted?: boolean
+  /** Which discount this line carries, if any — at most one, since PWD/Senior and promo discounts never stack. */
+  discount?: LineDiscountKind
   parentLineId?: string
   note?: string
   categoryId?: string
@@ -45,6 +50,15 @@ export interface LineDiscount {
   lineId: string
   name: string
   amount: number
+}
+
+/**
+ * A LineDiscount plus what the live UI needs to render it. `name` is the item's
+ * name, `label` the row prefix ("PWD Drink −20%", "Google Review −10%").
+ */
+export interface DiscountLine extends LineDiscount {
+  kind: LineDiscountKind
+  label: string
 }
 
 export interface SaleItem {
