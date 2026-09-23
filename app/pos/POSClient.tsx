@@ -5,12 +5,22 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { MENU } from './menuData'
 import { variantClass, groupOrderItems } from './utils'
-import type { MenuItem, MenuCategory, OrderItem, Variant, Addon, LineDiscount } from './types'
+import type { MenuItem, MenuCategory, OrderItem, Variant, Addon, DiscountLine, LineDiscountKind } from './types'
 import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
 import MenuItemPopup from './MenuItemPopup'
 import CardActions from './CardActions'
 import OrderReviewModal from './OrderReviewModal'
 import CustomizeDrinkRow from './CustomizeDrinkRow'
+import DiscountPickerRow from './DiscountPickerRow'
+import {
+  buildDiscountLines,
+  totalDiscount,
+  toggleLineDiscount,
+  toggleReviewForAll,
+  allEligibleHaveReview,
+  isReviewEligible,
+} from './discounts'
+import { buildSalePayload } from './salePayload'
 import { ADDON_CATEGORY_ID } from './constants'
 
 interface DynamicMenuItem {
@@ -43,6 +53,8 @@ export default function POSClient() {
   const [customizeLineId, setCustomizeLineId]   = useState<string | null>(null)
   // Same idea for the Add-ons row — hidden until the "+" button is tapped.
   const [addonsLineId, setAddonsLineId]         = useState<string | null>(null)
+  // Same idea for the Discount row (PWD/Senior −20% or Google Review −10%) — hidden until the "%" button is tapped.
+  const [discountLineId, setDiscountLineId]     = useState<string | null>(null)
   const [showManageMenu, setShowManageMenu]     = useState(false)
   const [dynamicCategories, setDynamicCategories] = useState<DynamicCategory[]>([])
   const [dynamicItems, setDynamicItems]         = useState<DynamicMenuItem[]>([])
@@ -111,33 +123,13 @@ export default function POSClient() {
     [orderItems]
   )
 
-  // Every PWD/Senior-discounted line (not just one food + one drink) contributes
-  // its own -20% line to the transaction, since a single transaction can bundle
-  // several customers' orders, each presenting their own PWD/Senior ID.
-  const discountedFoodItems = useMemo(
-    () => orderItems.filter(i => i.pwdDiscounted && !i.lineId.startsWith('addon__') && i.variant === null),
-    [orderItems]
-  )
-
-  const discountedDrinkItems = useMemo(
-    () => orderItems.filter(i => i.pwdDiscounted && (i.variant === 'hot' || i.variant === 'ice')),
-    [orderItems]
-  )
-
-  const lineDiscount = useCallback((item: OrderItem): LineDiscount => {
-    const addonTotal = orderItems
-      .filter(i => i.parentLineId === item.lineId)
-      .reduce((sum, i) => sum + i.price * i.qty, 0)
-    return { lineId: item.lineId, name: item.name, amount: Math.round((item.price + addonTotal) * 0.20) }
-  }, [orderItems])
-
-  const foodDiscountLines  = useMemo(() => discountedFoodItems.map(lineDiscount),  [discountedFoodItems, lineDiscount])
-  const drinkDiscountLines = useMemo(() => discountedDrinkItems.map(lineDiscount), [discountedDrinkItems, lineDiscount])
-
-  const pwdFoodDiscount  = useMemo(() => foodDiscountLines.reduce((sum, d) => sum + d.amount, 0),  [foodDiscountLines])
-  const pwdDrinkDiscount = useMemo(() => drinkDiscountLines.reduce((sum, d) => sum + d.amount, 0), [drinkDiscountLines])
-  const discountAmount   = useMemo(() => pwdFoodDiscount + pwdDrinkDiscount, [pwdFoodDiscount, pwdDrinkDiscount])
+  // One row per discounted line (a line carries at most one kind) — a single transaction
+  // can bundle several customers' orders, each with its own PWD/Senior ID or Google review.
+  const discountLines    = useMemo(() => buildDiscountLines(orderItems), [orderItems])
+  const discountAmount   = useMemo(() => totalDiscount(discountLines), [discountLines])
   const grandTotal       = useMemo(() => total - discountAmount, [total, discountAmount])
+  const reviewAllEnabled = useMemo(() => orderItems.some(isReviewEligible), [orderItems])
+  const reviewAllActive  = useMemo(() => allEligibleHaveReview(orderItems), [orderItems])
 
   const addItem = useCallback((item: MenuItem, variant: Variant | null, categoryId: string) => {
     const price =
@@ -198,6 +190,7 @@ export default function POSClient() {
     if (willRemove && selectedLineId === lineId) setSelectedLineId(null)
     if (willRemove && customizeLineId === lineId) setCustomizeLineId(null)
     if (willRemove && addonsLineId === lineId) setAddonsLineId(null)
+    if (willRemove && discountLineId === lineId) setDiscountLineId(null)
   }
 
   // Tapping a drink's 📝 always targets that exact item — selects it (so Add-ons
@@ -213,10 +206,22 @@ export default function POSClient() {
     setAddonsLineId(prev => (prev === lineId ? null : lineId))
   }
 
-  // Each line's discount toggles independently — a single transaction can carry
-  // several PWD/Senior-discounted food and drink lines at once.
-  function toggleItemPwdDiscount(lineId: string) {
-    setOrderItems(prev => prev.map(i => i.lineId === lineId ? { ...i, pwdDiscounted: !i.pwdDiscounted } : i))
+  // Tapping a line's "%" opens/closes its Discount row — same mechanic as Customize and Add-ons.
+  function toggleDiscountPicker(lineId: string) {
+    setSelectedLineId(lineId)
+    setDiscountLineId(prev => (prev === lineId ? null : lineId))
+  }
+
+  // A line carries at most one discount (PWD/Senior and the review promo never stack):
+  // picking the kind it already has clears it. One tap and the row closes.
+  function pickItemDiscount(lineId: string, kind: LineDiscountKind) {
+    setOrderItems(prev => toggleLineDiscount(prev, lineId, kind))
+    setDiscountLineId(null)
+  }
+
+  // Footer shortcut: the review promo on every line that can take it, or off again if they all have it.
+  function toggleReviewDiscountForAll() {
+    setOrderItems(prev => toggleReviewForAll(prev))
   }
 
   function setItemNote(lineId: string, note: string) {
@@ -234,6 +239,7 @@ export default function POSClient() {
     setSelectedLineId(null)
     setCustomizeLineId(null)
     setAddonsLineId(null)
+    setDiscountLineId(null)
   }
 
   async function completeSale() {
@@ -241,23 +247,10 @@ export default function POSClient() {
     setIsSubmitting(true)
     setSubmitError(null)
     try {
-      // Pre-formatted so the persisted record and any later reprint from
-      // sales history show the identical label.
-      const discountLines: LineDiscount[] = [
-        ...foodDiscountLines.map(d => ({ lineId: d.lineId, name: `PWD Food -20% (${d.name})`, amount: d.amount })),
-        ...drinkDiscountLines.map(d => ({ lineId: d.lineId, name: `PWD Drink -20% (${d.name})`, amount: d.amount })),
-      ]
       const res = await fetch('/api/sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          total: grandTotal,
-          paymentAmount: payment ?? grandTotal,
-          items: orderItems,
-          subtotal: total,
-          ...(discountLines.length > 0 ? { discounts: discountLines } : {}),
-          ...(notes.trim() ? { notes: notes.trim() } : {}),
-        }),
+        body: JSON.stringify(buildSalePayload({ items: orderItems, discountLines, subtotal: total, grandTotal, payment, notes })),
       })
       const data = await res.json()
       if (!res.ok || !data.success) {
@@ -443,7 +436,7 @@ export default function POSClient() {
   // Items filed under the "Add ons" category are the attachable add-ons shown
   // in the order panel — not orderable menu items in their own right.
   // The 'addon__' id prefix is load-bearing: order-line detection elsewhere
-  // (OrderPanel, toggleItemPwdDiscount) matches lineId.startsWith('addon__').
+  // (utils.ts isAddonLine — used by groupOrderItems and discounts.ts) matches it.
   // Smart-filtered: when an order line is selected, only add-ons whose
   // `applicableCategories` includes that line's source category (or that have
   // no restriction set at all) are offered — narrows an 11-item add-on list
@@ -602,11 +595,13 @@ export default function POSClient() {
             addons={addonAttachItems}
             total={total}
             grandTotal={grandTotal}
-            foodDiscountLines={foodDiscountLines}
-            drinkDiscountLines={drinkDiscountLines}
+            discountLines={discountLines}
             selectedLineId={selectedLineId}
             customizeLineId={customizeLineId}
             addonsLineId={addonsLineId}
+            discountLineId={discountLineId}
+            reviewAllEnabled={reviewAllEnabled}
+            reviewAllActive={reviewAllActive}
             payment={payment}
             customInput={customInput}
             notes={notes}
@@ -617,7 +612,9 @@ export default function POSClient() {
             onAddAddon={addAddonAndClose}
             onNotesChange={setNotes}
             onSelectItem={setSelectedLineId}
-            onToggleItemDiscount={toggleItemPwdDiscount}
+            onToggleDiscountPicker={toggleDiscountPicker}
+            onPickDiscount={pickItemDiscount}
+            onToggleReviewAll={toggleReviewDiscountForAll}
             onSetItemNote={setItemNote}
             onToggleCustomize={toggleCustomize}
             onToggleAddons={toggleAddons}
@@ -660,11 +657,13 @@ export default function POSClient() {
               addons={addonAttachItems}
               total={total}
               grandTotal={grandTotal}
-              foodDiscountLines={foodDiscountLines}
-              drinkDiscountLines={drinkDiscountLines}
+              discountLines={discountLines}
               selectedLineId={selectedLineId}
               customizeLineId={customizeLineId}
               addonsLineId={addonsLineId}
+              discountLineId={discountLineId}
+              reviewAllEnabled={reviewAllEnabled}
+              reviewAllActive={reviewAllActive}
               payment={payment}
               customInput={customInput}
               notes={notes}
@@ -675,7 +674,9 @@ export default function POSClient() {
               onAddAddon={addAddonAndClose}
               onNotesChange={setNotes}
               onSelectItem={setSelectedLineId}
-              onToggleItemDiscount={toggleItemPwdDiscount}
+              onToggleDiscountPicker={toggleDiscountPicker}
+              onPickDiscount={pickItemDiscount}
+              onToggleReviewAll={toggleReviewDiscountForAll}
               onSetItemNote={setItemNote}
               onToggleCustomize={toggleCustomize}
               onToggleAddons={toggleAddons}
@@ -715,8 +716,7 @@ export default function POSClient() {
           itemCount={itemCount}
           total={total}
           grandTotal={grandTotal}
-          foodDiscountLines={foodDiscountLines}
-          drinkDiscountLines={drinkDiscountLines}
+          discountLines={discountLines}
           discountAmount={discountAmount}
           payment={payment}
           notes={notes}
@@ -877,11 +877,13 @@ function OrderPanel({
   addons,
   total,
   grandTotal,
-  foodDiscountLines,
-  drinkDiscountLines,
+  discountLines,
   selectedLineId,
   customizeLineId,
   addonsLineId,
+  discountLineId,
+  reviewAllEnabled,
+  reviewAllActive,
   payment,
   customInput,
   notes,
@@ -892,7 +894,9 @@ function OrderPanel({
   onAddAddon,
   onNotesChange,
   onSelectItem,
-  onToggleItemDiscount,
+  onToggleDiscountPicker,
+  onPickDiscount,
+  onToggleReviewAll,
   onSetItemNote,
   onToggleCustomize,
   onToggleAddons,
@@ -902,11 +906,13 @@ function OrderPanel({
   addons: Addon[]
   total: number
   grandTotal: number
-  foodDiscountLines: LineDiscount[]
-  drinkDiscountLines: LineDiscount[]
+  discountLines: DiscountLine[]
   selectedLineId: string | null
   customizeLineId: string | null
   addonsLineId: string | null
+  discountLineId: string | null
+  reviewAllEnabled: boolean
+  reviewAllActive: boolean
   payment: number | null
   customInput: string
   notes: string
@@ -917,7 +923,9 @@ function OrderPanel({
   onAddAddon: (addon: Addon) => void
   onNotesChange: (value: string) => void
   onSelectItem: (lineId: string) => void
-  onToggleItemDiscount: (lineId: string) => void
+  onToggleDiscountPicker: (lineId: string) => void
+  onPickDiscount: (lineId: string, kind: LineDiscountKind) => void
+  onToggleReviewAll: () => void
   onSetItemNote: (lineId: string, note: string) => void
   onToggleCustomize: (lineId: string) => void
   onToggleAddons: (lineId: string) => void
@@ -943,7 +951,7 @@ function OrderPanel({
           return (
             <>
               {parentItems.map(item => {
-                const hasDiscount  = !!item.pwdDiscounted
+                const hasDiscount  = item.discount !== undefined
                 const isSelected   = item.lineId === selectedLineId
                 const childAddons  = addonsByParent.get(item.lineId) ?? []
 
@@ -964,9 +972,9 @@ function OrderPanel({
                             {item.variant}
                           </p>
                         )}
-                        {hasDiscount && (
+                        {item.discount && (
                           <p className="text-[10px] text-emerald-600 font-semibold mt-0.5 tracking-wide">
-                            SC/PWD −20% applied
+                            {item.discount === 'pwd' ? 'SC/PWD −20% applied' : 'Google Review −10% applied'}
                           </p>
                         )}
                         {item.note && (
@@ -999,13 +1007,13 @@ function OrderPanel({
                           +
                         </button>
                         <button
-                          onClick={e => { e.stopPropagation(); onToggleItemDiscount(item.lineId) }}
-                          title="Toggle PWD/Senior 20% discount"
+                          onClick={e => { e.stopPropagation(); onToggleDiscountPicker(item.lineId) }}
+                          title="Discount (PWD/Senior 20% or Google Review 10%)"
                           className={`w-8 h-8 flex items-center justify-center text-[10px] font-bold rounded-full border transition-colors ${
                             hasDiscount
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                               : 'bg-emerald-50 border-emerald-300 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-500'
-                          }`}
+                          } ${discountLineId === item.lineId ? 'ring-2 ring-emerald-300 ring-offset-1' : ''}`}
                         >
                           %
                         </button>
@@ -1123,6 +1131,16 @@ function OrderPanel({
         />
       )}
 
+      {/* Discount — hidden until a line's "%" is tapped; PWD/Senior or Google Review, one per line */}
+      {discountLineId && items.find(i => i.lineId === discountLineId) && (
+        <DiscountPickerRow
+          key={discountLineId}
+          itemName={items.find(i => i.lineId === discountLineId)!.name}
+          current={items.find(i => i.lineId === discountLineId)!.discount}
+          onPick={kind => onPickDiscount(discountLineId, kind)}
+        />
+      )}
+
       {/* Customer name — stored as the sale's notes and printed as "Name" on the receipt */}
       <div className="px-6 py-2 border-t border-foreground/10 shrink-0">
         <div className="relative">
@@ -1146,22 +1164,31 @@ function OrderPanel({
       {/* Footer: discount toggle + total + payment + actions */}
       <div className="px-6 pt-3 pb-3 border-t border-foreground/10 shrink-0 space-y-2.5">
 
+        {/* Google Review promo shortcut — one tap puts the 10% on every line that can take it
+            (PWD/Senior lines never stack); tap again to take it off all of them. */}
+        <button
+          onClick={onToggleReviewAll}
+          disabled={!reviewAllEnabled}
+          aria-pressed={reviewAllActive}
+          className={`w-full py-2 text-[10px] font-bold uppercase tracking-widest rounded-sm border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+            reviewAllActive
+              ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+              : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-500'
+          }`}
+        >
+          ⭐ Google Review −10% · {reviewAllActive ? 'applied to all items' : 'all items'}
+        </button>
+
         {/* Discount breakdown — one row per discounted line, visible whenever any line is discounted */}
-        {(foodDiscountLines.length > 0 || drinkDiscountLines.length > 0) && (
+        {discountLines.length > 0 && (
           <div className="space-y-1 px-0.5">
             <div className="flex justify-between items-center">
               <span className="text-[10px] uppercase tracking-widest text-foreground/50 font-semibold">Subtotal</span>
               <span className="text-xs tabular-nums text-foreground/50">₱{total.toFixed(0)}</span>
             </div>
-            {foodDiscountLines.map(d => (
+            {discountLines.map(d => (
               <div key={d.lineId} className="flex justify-between items-center gap-2">
-                <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-semibold truncate">PWD Food −20% ({d.name})</span>
-                <span className="text-xs tabular-nums text-emerald-600 font-bold shrink-0">−₱{d.amount}</span>
-              </div>
-            ))}
-            {drinkDiscountLines.map(d => (
-              <div key={d.lineId} className="flex justify-between items-center gap-2">
-                <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-semibold truncate">PWD Drink −20% ({d.name})</span>
+                <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-semibold truncate">{d.label} ({d.name})</span>
                 <span className="text-xs tabular-nums text-emerald-600 font-bold shrink-0">−₱{d.amount}</span>
               </div>
             ))}

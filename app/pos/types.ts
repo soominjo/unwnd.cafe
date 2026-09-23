@@ -38,7 +38,6 @@ export interface OrderItem {
   variant: Variant | null
   price: number
   qty: number
-  pwdDiscounted?: boolean
   /** Which discount this line carries, if any — at most one, since PWD/Senior and promo discounts never stack. */
   discount?: LineDiscountKind
   parentLineId?: string
