@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getWriteClient } from '@/sanity/lib/writeClient'
 import { client } from '@/sanity/lib/client'
 import { requirePosAuth } from '@/lib/requirePosAuth'
+import { toSaleDiscountDocs } from '@/lib/sales/toSaleDiscountDocs'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,13 +42,16 @@ function isValidIso(s: string): boolean {
 
 const MAX_PRICE = 1_000_000
 const MAX_QTY   = 1_000
+const MAX_ITEMS = 50
+// Every line can carry both discount kinds, plus the two whole-order rows.
+const MAX_DISCOUNTS = MAX_ITEMS * 2 + 2
 
 function isValidSaleInput(body: unknown): body is SaleInput {
   if (!body || typeof body !== 'object') return false
   const b = body as Record<string, unknown>
   if (typeof b.total !== 'number' || !Number.isFinite(b.total) || b.total < 0 || b.total > MAX_PRICE) return false
   if (typeof b.paymentAmount !== 'number' || !Number.isFinite(b.paymentAmount) || b.paymentAmount < 0 || b.paymentAmount > MAX_PRICE) return false
-  if (!Array.isArray(b.items) || b.items.length === 0 || b.items.length > 50) return false
+  if (!Array.isArray(b.items) || b.items.length === 0 || b.items.length > MAX_ITEMS) return false
   if (b.notes !== undefined) {
     const n = b.notes
     if (typeof n !== 'string') return false
@@ -57,7 +61,7 @@ function isValidSaleInput(body: unknown): body is SaleInput {
     if (typeof b.subtotal !== 'number' || !Number.isFinite(b.subtotal) || b.subtotal < 0 || b.subtotal > MAX_PRICE) return false
   }
   if (b.discounts !== undefined) {
-    if (!Array.isArray(b.discounts) || b.discounts.length > 50) return false
+    if (!Array.isArray(b.discounts) || b.discounts.length > MAX_DISCOUNTS) return false
     const discountsValid = b.discounts.every((d: unknown) => {
       if (!d || typeof d !== 'object') return false
       const dd = d as Record<string, unknown>
@@ -113,15 +117,7 @@ export async function POST(request: NextRequest) {
       change,
       ...(subtotal !== undefined ? { subtotal } : {}),
       ...(notes ? { notes: notes.trim() } : {}),
-      ...(discounts && discounts.length > 0 ? {
-        discounts: discounts.map((d) => ({
-          _type:  'saleDiscount',
-          _key:   d.lineId,
-          lineId: d.lineId,
-          name:   d.name,
-          amount: d.amount,
-        })),
-      } : {}),
+      ...(discounts && discounts.length > 0 ? { discounts: toSaleDiscountDocs(discounts) } : {}),
       items: items.map((item) => ({
         _type:   'saleItem',
         _key:    item.lineId,
