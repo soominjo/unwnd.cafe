@@ -204,6 +204,10 @@ export default function POSClient() {
     if (willRemove && customizeLineId === lineId) setCustomizeLineId(null)
     if (willRemove && addonsLineId === lineId) setAddonsLineId(null)
     if (willRemove && discountLineId === lineId) setDiscountLineId(null)
+    // The whole-order discounts belong to this order: when its last line goes they go too,
+    // rather than sitting pressed-but-disabled and applying to the next customer's first item.
+    const emptied = willRemove && orderItems.every(i => i.lineId === lineId || i.parentLineId === lineId)
+    if (emptied) setOrderDiscounts({})
   }
 
   // Tapping a drink's 📝 always targets that exact item — selects it (so Add-ons
@@ -1025,7 +1029,7 @@ function OrderPanel({
                         </button>
                         <button
                           onClick={e => { e.stopPropagation(); onToggleDiscountPicker(item.lineId) }}
-                          title="Discount (PWD/Senior 20% or Google Review 10%)"
+                          title="Discount (PWD/Senior 20%, Google Review 10% — all units or one)"
                           className={`w-8 h-8 flex items-center justify-center text-[10px] font-bold rounded-full border transition-colors ${
                             hasDiscount
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
@@ -1148,7 +1152,7 @@ function OrderPanel({
         />
       )}
 
-      {/* Discount — hidden until a line's "%" is tapped; PWD/Senior or Google Review, one per line */}
+      {/* Discount — hidden until a line's "%" is tapped; PWD/Senior and/or Google Review, ALL or SOLO, for that line */}
       {discountLineId && items.find(i => i.lineId === discountLineId) && (
         <DiscountPickerRow
           key={discountLineId}
@@ -1198,13 +1202,14 @@ function OrderPanel({
                     : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-500'
                 }`}
               >
-                {DISCOUNT_FOOTER_NAMES[kind]} {DISCOUNT_RATE_LABELS[kind]} · Total items
+                <span className="block leading-tight">{DISCOUNT_FOOTER_NAMES[kind]} {DISCOUNT_RATE_LABELS[kind]}</span>
+                <span className="block leading-tight">Total items</span>
               </button>
             )
           })}
         </div>
 
-        {/* Discount breakdown — one row per discounted line, visible whenever any line is discounted */}
+        {/* Discount breakdown — one row per discount (line rows, then Total rows), shown whenever any applies */}
         {discountLines.length > 0 && (
           <div className="space-y-1 px-0.5">
             <div className="flex justify-between items-center">

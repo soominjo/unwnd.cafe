@@ -75,7 +75,9 @@ export function lineDiscountAmount(
   scope: LineDiscountScope,
 ): number {
   const lineBase = item.price * item.qty + addonsTotal
-  const base = (lineBase / item.qty) * unitsDiscounted(item, scope)
+  // Divide only for SOLO: (lineBase / qty) * qty is not the identity in floating
+  // point and can round a half-peso the wrong way (185 / 11 * 11 = 184.999…).
+  const base = scope === 'solo' ? lineBase / item.qty : lineBase
   return Math.round(base * DISCOUNT_RATES[kind])
 }
 
@@ -125,6 +127,8 @@ function lineRows(items: OrderItem[]): DiscountLine[] {
 }
 
 function orderRows(items: OrderItem[], order: OrderDiscounts): DiscountLine[] {
+  // Nothing ordered, nothing to discount — no ₱0 "Total items" rows under an empty list.
+  if (items.length === 0) return []
   const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0)
   return DISCOUNT_KINDS.filter(kind => order[kind]).map((kind): DiscountLine => ({
     lineId: `order:${kind}`,

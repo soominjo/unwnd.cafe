@@ -8,19 +8,19 @@ const items: OrderItem[] = [
   { lineId: 'b', name: 'Croissant', variant: null, price: 100, qty: 1 },
 ]
 
+// A stacked line: both kinds on the latte. (A kind on a line is never also on the total.)
 const discountLines: DiscountLine[] = [
   { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'pwd', scope: 'solo', label: 'PWD Drink −20% ×1' },
   { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'review', scope: 'all', label: 'Google Review −10% ×2' },
-  { lineId: 'order:pwd', name: 'Total items', amount: 80, kind: 'pwd', scope: 'order', label: 'PWD/Senior −20%' },
 ]
 
 const base = {
   orderItems: items,
   itemCount: 3,
   total: 400,
-  grandTotal: 260,
+  grandTotal: 340,
   discountLines,
-  discountAmount: 140,
+  discountAmount: 60,
   payment: 500,
   notes: 'Ana',
   isSubmitting: false,
@@ -30,11 +30,20 @@ const base = {
 }
 
 describe('OrderReviewModal', () => {
-  it('lists every discount row — two for a stacked line and the whole-order row — under the subtotal', () => {
+  it('lists both rows of a stacked line under the subtotal', () => {
     const html = renderToStaticMarkup(<OrderReviewModal {...base} />)
     expect(html).toContain('Subtotal')
     expect(html).toContain('PWD Drink −20% ×1 (Spanish Latte)')
     expect(html).toContain('Google Review −10% ×2 (Spanish Latte)')
+    expect(html).toContain('−₱30')
+  })
+
+  it('lists a whole-order row as "(Total items)"', () => {
+    const plain = items.map(i => ({ ...i, discounts: undefined }))
+    const totalRow: DiscountLine = { lineId: 'order:pwd', name: 'Total items', amount: 80, kind: 'pwd', scope: 'order', label: 'PWD/Senior −20%' }
+    const html = renderToStaticMarkup(
+      <OrderReviewModal {...base} orderItems={plain} discountLines={[totalRow]} discountAmount={80} grandTotal={320} />
+    )
     expect(html).toContain('PWD/Senior −20% (Total items)')
     expect(html).toContain('−₱80')
   })

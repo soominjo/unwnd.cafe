@@ -63,6 +63,11 @@ describe('lineDiscountAmount', () => {
     expect(lineDiscountAmount(one, 0, 'review', 'solo')).toBe(13)
     expect(lineDiscountAmount(one, 0, 'review', 'all')).toBe(13)
   })
+
+  it('never loses a peso to floating point on ALL with an awkward quantity', () => {
+    // (10 × 11 + 75) × 0.10 = 18.5 → 19. Dividing by 11 and multiplying back gives 184.999… and would round to 18.
+    expect(lineDiscountAmount(item({ lineId: 'a', price: 10, qty: 11 }), 75, 'review', 'all')).toBe(19)
+  })
 })
 
 describe('orderDiscountAmount', () => {
@@ -132,6 +137,10 @@ describe('buildDiscountLines', () => {
   it('is empty when nothing is discounted', () => {
     expect(buildDiscountLines([item({ lineId: 'a' })], none)).toEqual([])
   })
+
+  it('emits no whole-order rows for an empty order, even with a Total button still on', () => {
+    expect(buildDiscountLines([], { pwd: true, review: true })).toEqual([])
+  })
 })
 
 describe('totalDiscount', () => {
@@ -179,6 +188,11 @@ describe('pickLineDiscount', () => {
   it('takes the same kind off the whole-order total — a kind applies per line or to the total, not both', () => {
     const withOrder = { ...sel, order: { pwd: true, review: true } as OrderDiscounts }
     expect(pickLineDiscount(withOrder, 'a', 'pwd', 'all').order).toEqual({ review: true })
+  })
+
+  it('leaves the whole-order toggles alone when only clearing a line kind', () => {
+    const withOrder = { ...sel, order: { review: true } as OrderDiscounts }
+    expect(pickLineDiscount(withOrder, 'b', 'pwd', 'solo').order).toEqual({ review: true })
   })
 
   it('does nothing for an unknown line', () => {

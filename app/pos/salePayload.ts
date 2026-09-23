@@ -26,7 +26,7 @@ interface SalePayloadArgs {
 
 // Discount names are pre-formatted here so the persisted record and any later
 // reprint from sales history show the identical label. The API ignores the
-// client-only `discount` field on each item.
+// client-only `discounts` field on each item.
 export function buildSalePayload({ items, discountLines, subtotal, grandTotal, payment, notes }: SalePayloadArgs): SalePayload {
   const discounts: LineDiscount[] = discountLines.map(d => ({ lineId: d.lineId, name: savedDiscountName(d), amount: d.amount }))
   const trimmedNotes = notes.trim()
