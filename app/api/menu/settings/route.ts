@@ -1,30 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { client } from '@/sanity/lib/client'
 import { getWriteClient } from '@/sanity/lib/writeClient'
 import { requirePosAuth } from '@/lib/requirePosAuth'
+import { MENU_SETTINGS_ID as SETTINGS_ID, fetchMenuSettings, type MenuSettings } from '@/lib/posMenu'
 
 export const dynamic = 'force-dynamic'
 
-const SETTINGS_ID = 'menu-settings'
-const fresh = client.withConfig({ useCdn: false })
-
-interface MenuSettings {
-  hiddenItemIds: string[]
-  categoryOrder: string[]
-}
-
-async function fetchSettings(): Promise<MenuSettings> {
-  const doc = await fresh.fetch<{ hiddenItemIds?: string[]; categoryOrder?: string[] } | null>(
-    `*[_type == "menuSettings" && _id == $id][0]{ hiddenItemIds, categoryOrder }`,
-    { id: SETTINGS_ID },
-    { cache: 'no-store' }
-  )
-  return { hiddenItemIds: doc?.hiddenItemIds ?? [], categoryOrder: doc?.categoryOrder ?? [] }
-}
-
 export async function GET() {
   try {
-    const settings = await fetchSettings()
+    const settings = await fetchMenuSettings()
     return NextResponse.json({ success: true, ...settings })
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to fetch settings.' }, { status: 500 })
@@ -75,7 +58,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const writeClient = getWriteClient()
-    const current = await fetchSettings()
+    const current = await fetchMenuSettings()
 
     if (isReorderAction(body)) {
       const updated: MenuSettings = { ...current, categoryOrder: body.categoryOrder }

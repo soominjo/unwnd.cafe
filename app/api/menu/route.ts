@@ -1,42 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { client } from '@/sanity/lib/client'
 import { getWriteClient } from '@/sanity/lib/writeClient'
 import { requirePosAuth } from '@/lib/requirePosAuth'
 import { isValidMenuItemInput } from '@/lib/validateMenuItemInput'
+import { fetchPosMenuItems } from '@/lib/posMenu'
 
 export const dynamic = 'force-dynamic'
 
-const fresh = client.withConfig({ useCdn: false })
-
 export async function GET() {
   try {
-    const items = await fresh.fetch<{
-      _id: string
-      name: string
-      subtitle: string | null
-      category: string
-      priceHot: number | null
-      priceIce: number | null
-      priceFixed: number | null
-      addonType: 'drink' | 'food' | null
-      hiddenFromPos: boolean | null
-      applicableCategories: string[] | null
-    }[]>(
-      `*[_type == "menuItem" && available != false] {
-        _id,
-        name,
-        subtitle,
-        category,
-        priceHot,
-        priceIce,
-        "priceFixed": price,
-        addonType,
-        hiddenFromPos,
-        applicableCategories
-      }`,
-      {},
-      { cache: 'no-store' }
-    )
+    const items = await fetchPosMenuItems()
     return NextResponse.json({ success: true, items })
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to fetch menu items.' }, { status: 500 })

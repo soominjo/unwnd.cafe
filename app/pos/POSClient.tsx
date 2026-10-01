@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback, memo, Fragment, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { MENU } from './menuData'
 import { variantClass, groupOrderItems, addonLineId } from './utils'
 import type {
@@ -34,22 +33,14 @@ import { postSale } from './postSale'
 import { ADDON_CATEGORY_ID } from './constants'
 import type { ReceiptBlock } from '@/lib/printer/receiptDocument'
 import { buildCheckoutReceiptBlocks } from '@/lib/printer/receiptFromSale'
+import type { PosMenu, PosMenuItem } from '@/lib/posMenu'
 
-interface DynamicMenuItem {
-  _id: string
-  name: string
-  subtitle: string | null
-  category: string
-  priceHot: number | null
-  priceIce: number | null
-  priceFixed: number | null
-  addonType: 'drink' | 'food' | null
-  hiddenFromPos: boolean | null
-  applicableCategories: string[] | null
+interface POSClientProps {
+  /** The live menu, read on the server for this page load; null when it could not be read (the built-in menu shows). */
+  initialMenu: PosMenu | null
 }
 
-export default function POSClient() {
-  const router = useRouter()
+export default function POSClient({ initialMenu }: POSClientProps) {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [orderItems, setOrderItems]             = useState<OrderItem[]>([])
   const [showConfirm, setShowConfirm]           = useState(false)
@@ -67,48 +58,18 @@ export default function POSClient() {
   // section it shows; null when closed. One at a time, opened from that line's buttons.
   const [itemModal, setItemModal]               = useState<{ lineId: string; mode: ItemModalMode } | null>(null)
   const [showManageMenu, setShowManageMenu]     = useState(false)
-  const [dynamicCategories, setDynamicCategories] = useState<DynamicCategory[]>([])
-  const [dynamicItems, setDynamicItems]         = useState<DynamicMenuItem[]>([])
-  const [hiddenBuiltInIds, setHiddenBuiltInIds] = useState<string[]>([])
+  // The menu as the server read it for this page load, then kept in step with edits made here.
+  const [dynamicCategories, setDynamicCategories] = useState<DynamicCategory[]>(initialMenu?.categories ?? [])
+  const [dynamicItems, setDynamicItems]         = useState<PosMenuItem[]>(initialMenu?.items ?? [])
+  // Built-in items hidden from the POS; nothing on this page changes the list.
+  const [hiddenBuiltInIds]                      = useState<string[]>(initialMenu?.hiddenItemIds ?? [])
   const [deletingItemId, setDeletingItemId]     = useState<string | null>(null)
   const [deleteError, setDeleteError]           = useState<string | null>(null)
   const [addItemCategory, setAddItemCategory]   = useState<string | null>(null)
   const [editingItem, setEditingItem]           = useState<{ item: MenuItem & { _sanityId: string }; categoryId: string } | null>(null)
-  const [categoryOrder, setCategoryOrder]       = useState<string[]>([])
+  const [categoryOrder, setCategoryOrder]       = useState<string[]>(initialMenu?.categoryOrder ?? [])
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null)
   const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    async function loadMenu() {
-      try {
-        const [catsRes, itemsRes, settingsRes] = await Promise.all([
-          fetch('/api/menu/categories'),
-          fetch('/api/menu'),
-          fetch('/api/menu/settings'),
-        ])
-        if (cancelled) return
-        if (catsRes.ok && itemsRes.ok) {
-          const [catsData, itemsData] = await Promise.all([catsRes.json(), itemsRes.json()])
-          if (!cancelled) {
-            if (catsData.success) setDynamicCategories(catsData.categories ?? [])
-            if (itemsData.success) setDynamicItems(itemsData.items ?? [])
-          }
-        }
-        if (settingsRes.ok) {
-          const settingsData = await settingsRes.json()
-          if (!cancelled && settingsData.success) {
-            setHiddenBuiltInIds(settingsData.hiddenItemIds ?? [])
-            setCategoryOrder(settingsData.categoryOrder ?? [])
-          }
-        }
-      } catch {
-        // fall back to hardcoded MENU silently
-      }
-    }
-    loadMenu()
-    return () => { cancelled = true }
-  }, [])
 
   // Close all modals when the page is restored from the browser's back-forward cache.
   // Without this, any overlay that was open before navigating away blocks all clicks.
@@ -242,9 +203,11 @@ export default function POSClient() {
     bc.postMessage({ type: 'sale-completed' })
     bc.close()
     // With a receipt, its preview opens and the cashier stays here for the next
-    // customer once it is printed or closed. A plain completion moves on to Sales.
+    // customer once it is printed or closed. A plain completion moves on to Sales
+    // as a full page load, like the Sales link: an in-app navigation would let Back
+    // bring this page back with the menu it was first loaded with.
     if (action === 'receipt') setReceiptBlocks(buildCheckoutReceiptBlocks(payload, new Date()))
-    else router.push('/pos/sales')
+    else window.location.assign('/pos/sales')
   }
 
   function handleSetPayment(amount: number | null, raw: string) {
@@ -477,6 +440,23 @@ export default function POSClient() {
         {/* Left: menu */}
         <div className="flex-1 flex flex-col overflow-hidden bg-background">
 
+          {/* The live menu could not be read for this page load. Say so: the built-in menu's prices can be out of date. */}
+          {!initialMenu && (
+            <div role="status" className="flex items-center justify-between gap-3 px-6 py-2.5 bg-amber-50 border-b border-amber-200 shrink-0">
+              <span className="text-xs text-amber-800 font-medium">
+                Could not load the live menu. Showing the built-in menu, whose prices may be out of date.
+              </span>
+              <button
+                onClick={() => {
+                  if (orderItems.length === 0 || window.confirm('Reload the POS? The order in progress will be cleared.')) window.location.reload()
+                }}
+                className="h-9 px-3 shrink-0 rounded-sm border border-amber-300 text-[11px] font-bold uppercase tracking-widest text-amber-800 hover:bg-amber-100 transition-colors"
+              >
+                Reload
+              </button>
+            </div>
+          )}
+
           {/* Category tabs — draggable to reorder */}
           <div className="flex gap-2 px-6 py-4 border-b border-foreground/10 shrink-0 overflow-x-auto scrollbar-none">
             {sortedMenu.map((cat) => (
@@ -500,13 +480,16 @@ export default function POSClient() {
                 {cat.label}
               </button>
             ))}
-            <button
-              onClick={() => setShowManageMenu(true)}
-              title="Manage menu"
-              className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap rounded-sm border border-dashed border-foreground/25 text-foreground/35 hover:border-foreground/55 hover:text-foreground/55 transition-all duration-200 shrink-0"
-            >
-              +
-            </button>
+            {/* Menu editing needs the live menu: on the built-in fallback a new tab would replace all the others */}
+            {initialMenu && (
+              <button
+                onClick={() => setShowManageMenu(true)}
+                title="Manage menu"
+                className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap rounded-sm border border-dashed border-foreground/25 text-foreground/35 hover:border-foreground/55 hover:text-foreground/55 transition-all duration-200 shrink-0"
+              >
+                +
+              </button>
+            )}
           </div>
 
           {/* Delete error banner */}
@@ -553,7 +536,7 @@ export default function POSClient() {
                 />
               ))
             )}
-            {category && (
+            {category && initialMenu && (
               <button
                 onClick={() => setAddItemCategory(category.id)}
                 className="flex flex-col items-center justify-center gap-2 min-h-38 border-2 border-dashed border-foreground/15 hover:border-foreground/35 rounded-xl text-foreground/30 hover:text-foreground/55 transition-all duration-200"
