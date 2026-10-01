@@ -20,6 +20,9 @@ import CardActions from './CardActions'
 import OrderReviewModal, { type CheckoutAction } from './OrderReviewModal'
 import ReceiptPreviewModal from './ReceiptPreviewModal'
 import ItemActionModal, { type ItemModalMode } from './ItemActionModal'
+import ManagerPinModal from './ManagerPinModal'
+import { watchIdle } from './watchIdle'
+import { LockIcon, UnlockIcon } from './sales/icons'
 import {
   DISCOUNT_KINDS,
   buildDiscountLines,
@@ -39,6 +42,9 @@ interface POSClientProps {
   /** The live menu, read on the server for this page load; null when it could not be read (the built-in menu shows). */
   initialMenu: PosMenu | null
 }
+
+/** Manager mode locks itself after this long with no tap or key press. */
+const MANAGER_IDLE_LOCK_MS = 2 * 60 * 1000
 
 export default function POSClient({ initialMenu }: POSClientProps) {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
@@ -70,9 +76,33 @@ export default function POSClient({ initialMenu }: POSClientProps) {
   const [categoryOrder, setCategoryOrder]       = useState<string[]>(initialMenu?.categoryOrder ?? [])
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null)
   const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null)
+  // Manager mode shows edit and delete on the menu items. It takes the POS PIN; Lock,
+  // a reload, two idle minutes or the screen going off hide them again.
+  const [managerUnlocked, setManagerUnlocked]   = useState(false)
+  const [showManagerPin, setShowManagerPin]     = useState(false)
+
+  // Locking also closes an item's edit form, so a form left open cannot be saved by someone else.
+  const lockManager = useCallback(() => {
+    setManagerUnlocked(false)
+    setEditingItem(null)
+  }, [])
+
+  useEffect(() => {
+    if (!managerUnlocked) return
+    const stopWatching = watchIdle(window, MANAGER_IDLE_LOCK_MS, lockManager)
+    function onVisibilityChange() {
+      if (document.visibilityState === 'hidden') lockManager()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      stopWatching()
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [managerUnlocked, lockManager])
 
   // Close all modals when the page is restored from the browser's back-forward cache.
   // Without this, any overlay that was open before navigating away blocks all clicks.
+  // Manager mode locks again too, the same as on a reload.
   useEffect(() => {
     function onPageShow(e: PageTransitionEvent) {
       if (e.persisted) {
@@ -81,11 +111,13 @@ export default function POSClient({ initialMenu }: POSClientProps) {
         setMobileDrawer(false)
         setItemModal(null)
         setReceiptBlocks(null)
+        setShowManagerPin(false)
+        lockManager()
       }
     }
     window.addEventListener('pageshow', onPageShow)
     return () => window.removeEventListener('pageshow', onPageShow)
-  }, [])
+  }, [lockManager])
 
   const total = useMemo(
     () => orderItems.reduce((sum, i) => sum + i.price * i.qty, 0),
@@ -253,6 +285,20 @@ export default function POSClient({ initialMenu }: POSClientProps) {
     } : i))
   }
 
+  // A menu item's edit (✎) and delete (×) buttons: only in manager mode, and only for
+  // items stored in Sanity — the built-in ones have no record to edit or delete.
+  function editItemAction(item: MenuItem, categoryId: string): (() => void) | undefined {
+    const sanityId = item._sanityId
+    if (!managerUnlocked || !sanityId) return undefined
+    return () => setEditingItem({ item: { ...item, _sanityId: sanityId }, categoryId })
+  }
+
+  function deleteItemAction(item: MenuItem): (() => void) | undefined {
+    const sanityId = item._sanityId
+    if (!managerUnlocked || !sanityId) return undefined
+    return () => handleDeleteItem(sanityId)
+  }
+
   async function handleDeleteItem(sanityId: string) {
     setDeleteError(null)
     setDeletingItemId(sanityId)
@@ -414,6 +460,21 @@ export default function POSClient({ initialMenu }: POSClientProps) {
       <header className="bg-foreground flex items-center justify-between px-6 py-4 shrink-0">
         <Link href="/" className="font-logo text-2xl lowercase tracking-tight text-cream hover:text-cream/70 transition-colors">unwnd. pos</Link>
         <div className="flex items-center gap-4">
+          {/* Manager mode: the PIN shows edit and delete on the menu items; tapping again locks them away */}
+          <button
+            onClick={() => (managerUnlocked ? lockManager() : setShowManagerPin(true))}
+            aria-pressed={managerUnlocked}
+            aria-label="Manager mode"
+            title={managerUnlocked ? 'Lock: hide edit and delete on menu items' : 'Manager PIN: show edit and delete on menu items'}
+            className={`h-9 px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] transition-colors ${
+              managerUnlocked
+                ? 'bg-amber-400 text-foreground font-bold hover:bg-amber-300'
+                : 'text-cream/55 hover:text-cream/85 hover:bg-cream/10'
+            }`}
+          >
+            {managerUnlocked ? <UnlockIcon width={14} height={14} /> : <LockIcon width={14} height={14} />}
+            <span className="hidden sm:inline">{managerUnlocked ? 'Lock' : 'Manager'}</span>
+          </button>
           <a
             href="/pos/sales"
             className="hidden lg:block text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 transition-colors"
@@ -519,8 +580,8 @@ export default function POSClient({ initialMenu }: POSClientProps) {
                     price: item.priceFixed!,
                   }, selectedLineId) : undefined}
                   hasSelection={!!selectedLineId}
-                  onEdit={item._sanityId ? () => setEditingItem({ item: { ...item, _sanityId: item._sanityId! }, categoryId: category.id }) : undefined}
-                  onDelete={item._sanityId ? () => handleDeleteItem(item._sanityId!) : undefined}
+                  onEdit={editItemAction(item, category.id)}
+                  onDelete={deleteItemAction(item)}
                   isDeleting={deletingItemId === item._sanityId}
                 />
               ))
@@ -530,8 +591,8 @@ export default function POSClient({ initialMenu }: POSClientProps) {
                   key={item.id}
                   item={item}
                   onAdd={(item, variant) => addItem(item, variant, category.id)}
-                  onEdit={item._sanityId ? () => setEditingItem({ item: { ...item, _sanityId: item._sanityId! }, categoryId: category.id }) : undefined}
-                  onDelete={item._sanityId ? () => handleDeleteItem(item._sanityId!) : undefined}
+                  onEdit={editItemAction(item, category.id)}
+                  onDelete={deleteItemAction(item)}
                   isDeleting={deletingItemId === item._sanityId}
                 />
               ))
@@ -666,6 +727,14 @@ export default function POSClient({ initialMenu }: POSClientProps) {
       {/* ── Customer receipt preview after "Complete + Print Receipt"; closing it stays on /pos ── */}
       {receiptBlocks && (
         <ReceiptPreviewModal blocks={receiptBlocks} onClose={() => setReceiptBlocks(null)} />
+      )}
+
+      {/* ── Manager PIN, before the menu's edit and delete buttons show ── */}
+      {showManagerPin && (
+        <ManagerPinModal
+          onUnlock={() => { setManagerUnlocked(true); setShowManagerPin(false) }}
+          onClose={() => setShowManagerPin(false)}
+        />
       )}
 
       {/* ── Per-item modal: Customize / Add-ons / Discount for one line, above either order panel ── */}

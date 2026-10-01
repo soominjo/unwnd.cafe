@@ -52,4 +52,11 @@ describe('POSClient first paint', () => {
     expect(html).toContain('Add Item')
     expect(html).toContain('title="Manage menu"')
   })
+
+  it('keeps edit and delete off the menu items until a manager unlocks them', () => {
+    const html = firstPaint(live)
+    expect(html).not.toContain('title="Edit item"')
+    expect(html).not.toContain('title="Delete item"')
+    expect(html).toContain('>Manager</span>')
+  })
 })

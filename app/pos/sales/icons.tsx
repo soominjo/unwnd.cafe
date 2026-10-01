@@ -1,8 +1,8 @@
 import type { SVGProps } from 'react'
 
-// Small stroke icons for the sales screen's action buttons. Inline SVG rather
-// than emoji so they render identically on every device and inherit the
-// button's text colour.
+// Small stroke icons for the sales screen's action buttons and the POS header's
+// manager lock. Inline SVG rather than emoji so they render identically on
+// every device and inherit the button's text colour.
 
 type IconProps = SVGProps<SVGSVGElement>
 
@@ -95,6 +95,24 @@ export function ChevronRightIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="m9 18 6-6-6-6" />
+    </Icon>
+  )
+}
+
+export function LockIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </Icon>
+  )
+}
+
+export function UnlockIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 7.75-1.4" />
     </Icon>
   )
 }
