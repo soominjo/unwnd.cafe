@@ -5,6 +5,9 @@ import { DISCOUNT_KINDS, discountBadge } from './discounts'
 import QtyBadge from './QtyBadge'
 import type { OrderItem, DiscountLine } from './types'
 
+/** Which checkout button was tapped: a plain completion, or one that also prints the customer's receipt. */
+export type CheckoutAction = 'plain' | 'receipt'
+
 interface OrderReviewModalProps {
   orderItems: OrderItem[]
   itemCount: number
@@ -14,10 +17,11 @@ interface OrderReviewModalProps {
   discountAmount: number
   payment: number | null
   notes: string
-  isSubmitting: boolean
+  /** The checkout being saved, or null. Every button locks while it saves. */
+  pendingAction: CheckoutAction | null
   submitError: string | null
   onCancel: () => void
-  onComplete: () => void
+  onComplete: (action: CheckoutAction) => void
 }
 
 // Full-height review page (not a floating modal) shown to the customer
@@ -34,13 +38,14 @@ export default function OrderReviewModal({
   discountAmount,
   payment,
   notes,
-  isSubmitting,
+  pendingAction,
   submitError,
   onCancel,
   onComplete,
 }: OrderReviewModalProps) {
   const { parentItems, addonsByParent, orphanAddons } = groupOrderItems(orderItems)
   const short = payment !== null && payment < grandTotal
+  const isSubmitting = pendingAction !== null
 
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
@@ -198,12 +203,20 @@ export default function OrderReviewModal({
                 <p className="text-sm text-red-500 uppercase tracking-widest font-medium text-center">{submitError}</p>
               )}
               <button
-                onClick={onComplete}
+                onClick={() => onComplete('plain')}
                 disabled={isSubmitting}
                 className="w-full bg-foreground text-cream text-base uppercase tracking-widest py-4 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Saving…' : 'Order Complete ✓'}
+                {pendingAction === 'plain' ? 'Saving…' : 'Order Complete ✓'}
               </button>
+              <button
+                onClick={() => onComplete('receipt')}
+                disabled={isSubmitting}
+                className="w-full border border-foreground/20 text-foreground/70 text-sm uppercase tracking-widest py-3 font-semibold hover:border-foreground/35 hover:text-foreground hover:bg-foreground/4 active:scale-[0.99] transition-all rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {pendingAction === 'receipt' ? 'Saving…' : '🖨 Complete + Print Receipt'}
+              </button>
+              <p className="text-xs text-foreground/35 text-center">Only if the customer asks for one</p>
             </div>
           </div>
         </div>

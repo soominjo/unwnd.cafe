@@ -1,7 +1,23 @@
 import { describe, it, expect } from 'vitest'
+import { isValidElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import OrderReviewModal from './OrderReviewModal'
 import type { OrderItem, DiscountLine } from './types'
+
+// The modal uses no hooks, so calling it returns its element tree; this finds a button in it by label.
+function buttonLabelled(node: ReactNode, label: string): { onClick: () => void } | undefined {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const hit = buttonLabelled(child, label)
+      if (hit) return hit
+    }
+    return undefined
+  }
+  if (!isValidElement<{ children?: ReactNode; onClick?: () => void }>(node)) return undefined
+  const { children, onClick } = node.props
+  if (node.type === 'button' && children === label && onClick) return { onClick }
+  return buttonLabelled(children, label)
+}
 
 const items: OrderItem[] = [
   { lineId: 'a', name: 'Spanish Latte', variant: 'ice', price: 150, qty: 2, discounts: { pwd: 'solo', review: 'all' } },
@@ -23,7 +39,7 @@ const base = {
   discountAmount: 60,
   payment: 500,
   notes: 'Ana',
-  isSubmitting: false,
+  pendingAction: null,
   submitError: null,
   onCancel: () => {},
   onComplete: () => {},
@@ -36,6 +52,29 @@ describe('OrderReviewModal', () => {
     expect(html).toContain('PWD Drink −20% ×1 (Spanish Latte)')
     expect(html).toContain('Google Review −10% ×2 (Spanish Latte)')
     expect(html).toContain('−₱30')
+  })
+
+  it('offers Complete + Print Receipt beside Order Complete', () => {
+    const html = renderToStaticMarkup(<OrderReviewModal {...base} />)
+    expect(html).toContain('Order Complete ✓')
+    expect(html).toContain('🖨 Complete + Print Receipt')
+  })
+
+  it('completes plainly from Order Complete and with a receipt from the receipt button', () => {
+    const actions: string[] = []
+    const tree = OrderReviewModal({ ...base, onComplete: action => { actions.push(action) } })
+    buttonLabelled(tree, 'Order Complete ✓')?.onClick()
+    buttonLabelled(tree, '🖨 Complete + Print Receipt')?.onClick()
+    expect(actions).toEqual(['plain', 'receipt'])
+  })
+
+  it('shows Saving… only on the button that was tapped, and locks every way out while the sale saves', () => {
+    const html = renderToStaticMarkup(<OrderReviewModal {...base} pendingAction="receipt" />)
+    expect(html).toContain('Order Complete ✓')
+    expect(html).not.toContain('Complete + Print Receipt')
+    expect(html).toContain('Saving…')
+    // The ✕, Order Complete and the receipt button.
+    expect(html.match(/disabled=""/g)).toHaveLength(3)
   })
 
   it('badges a stacked item with both of its discounts and their unit counts', () => {

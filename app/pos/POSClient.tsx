@@ -18,7 +18,8 @@ import type {
 import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
 import MenuItemPopup from './MenuItemPopup'
 import CardActions from './CardActions'
-import OrderReviewModal from './OrderReviewModal'
+import OrderReviewModal, { type CheckoutAction } from './OrderReviewModal'
+import ReceiptPreviewModal from './ReceiptPreviewModal'
 import ItemActionModal, { type ItemModalMode } from './ItemActionModal'
 import {
   DISCOUNT_KINDS,
@@ -29,7 +30,10 @@ import {
   pickLineDiscount,
 } from './discounts'
 import { buildSalePayload } from './salePayload'
+import { postSale } from './postSale'
 import { ADDON_CATEGORY_ID } from './constants'
+import type { ReceiptBlock } from '@/lib/printer/receiptDocument'
+import { buildCheckoutReceiptBlocks } from '@/lib/printer/receiptFromSale'
 
 interface DynamicMenuItem {
   _id: string
@@ -52,8 +56,11 @@ export default function POSClient() {
   const [mobileDrawer, setMobileDrawer]         = useState(false)
   const [payment, setPayment]                   = useState<number | null>(null)
   const [customInput, setCustomInput]           = useState('')
-  const [isSubmitting, setIsSubmitting]         = useState(false)
+  // Which checkout button is saving the sale, or null when none is.
+  const [pendingAction, setPendingAction]       = useState<CheckoutAction | null>(null)
   const [submitError, setSubmitError]           = useState<string | null>(null)
+  // The customer receipt of a sale just saved with "Complete + Print Receipt", previewed before printing.
+  const [receiptBlocks, setReceiptBlocks]       = useState<ReceiptBlock[] | null>(null)
   const [notes, setNotes]                       = useState('')
   const [selectedLineId, setSelectedLineId]     = useState<string | null>(null)
   // The per-item modal (Customize / Add-ons / Discount): which line it is for and which
@@ -112,6 +119,7 @@ export default function POSClient() {
         setShowManageMenu(false)
         setMobileDrawer(false)
         setItemModal(null)
+        setReceiptBlocks(null)
       }
     }
     window.addEventListener('pageshow', onPageShow)
@@ -216,32 +224,27 @@ export default function POSClient() {
     setItemModal(null)
   }
 
-  async function completeSale() {
-    if (isSubmitting) return
-    setIsSubmitting(true)
+  async function completeSale(action: CheckoutAction) {
+    if (pendingAction) return
+    const payload = buildSalePayload({ items: orderItems, discountLines, subtotal: total, grandTotal, payment, notes })
+    setPendingAction(action)
     setSubmitError(null)
-    try {
-      const res = await fetch('/api/sales', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildSalePayload({ items: orderItems, discountLines, subtotal: total, grandTotal, payment, notes })),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) {
-        setSubmitError(data.error ?? 'Failed to save sale. Try again.')
-        return
-      }
-
-      clearOrder()
-      const bc = new BroadcastChannel('pos-sales-update')
-      bc.postMessage({ type: 'sale-completed' })
-      bc.close()
-      router.push('/pos/sales')
-    } catch {
-      setSubmitError('Network error. Check connection and try again.')
-    } finally {
-      setIsSubmitting(false)
+    const result = await postSale(payload)
+    setPendingAction(null)
+    if (!result.ok) {
+      setSubmitError(result.error)
+      return
     }
+
+    clearOrder()
+    // Lets a Sales tab already open elsewhere pick up the new sale.
+    const bc = new BroadcastChannel('pos-sales-update')
+    bc.postMessage({ type: 'sale-completed' })
+    bc.close()
+    // With a receipt, its preview opens and the cashier stays here for the next
+    // customer once it is printed or closed. A plain completion moves on to Sales.
+    if (action === 'receipt') setReceiptBlocks(buildCheckoutReceiptBlocks(payload, new Date()))
+    else router.push('/pos/sales')
   }
 
   function handleSetPayment(amount: number | null, raw: string) {
@@ -670,11 +673,16 @@ export default function POSClient() {
           discountAmount={discountAmount}
           payment={payment}
           notes={notes}
-          isSubmitting={isSubmitting}
+          pendingAction={pendingAction}
           submitError={submitError}
           onCancel={() => { setShowConfirm(false); setSubmitError(null) }}
           onComplete={completeSale}
         />
+      )}
+
+      {/* ── Customer receipt preview after "Complete + Print Receipt"; closing it stays on /pos ── */}
+      {receiptBlocks && (
+        <ReceiptPreviewModal blocks={receiptBlocks} onClose={() => setReceiptBlocks(null)} />
       )}
 
       {/* ── Per-item modal: Customize / Add-ons / Discount for one line, above either order panel ── */}
