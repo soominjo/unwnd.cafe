@@ -35,8 +35,6 @@ export type LineDiscountKind = 'pwd' | 'review'
 export type LineDiscountScope = 'all' | 'solo'
 /** A line's discounts — each kind at most once, at one scope. */
 export type LineDiscounts = Partial<Record<LineDiscountKind, LineDiscountScope>>
-/** Whole-order discounts on the pre-discount total — a kind applies either here or per line, never both. */
-export type OrderDiscounts = Partial<Record<LineDiscountKind, true>>
 
 export interface OrderItem {
   lineId: string
@@ -59,13 +57,12 @@ export interface LineDiscount {
 
 /**
  * A LineDiscount plus what the live UI needs to render it. `name` is the item's
- * name (or "Total items" for a whole-order row), `label` the row prefix
- * ("PWD Drink −20% ×1", "Google Review −10%").
+ * name, `label` the row prefix ("PWD Drink −20% ×1", "Google Review −10%").
  */
 export interface DiscountLine extends LineDiscount {
   kind: LineDiscountKind
-  /** 'order' for a whole-total row; otherwise how much of the line the row covers. */
-  scope: LineDiscountScope | 'order'
+  /** How much of the line the row covers. */
+  scope: LineDiscountScope
   label: string
 }
 

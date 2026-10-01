@@ -7,7 +7,7 @@ const items: OrderItem[] = [
   { lineId: 'b', name: 'Croissant', variant: null, price: 100, qty: 1 },
 ]
 
-// A stacked line: both kinds on the latte. (A kind on a line is never also on the total.)
+// A stacked line: both kinds on the latte.
 const discountLines: DiscountLine[] = [
   { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'pwd', scope: 'solo', label: 'PWD Drink −20% ×1' },
   { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'review', scope: 'all', label: 'Google Review −10% ×2' },
@@ -28,14 +28,6 @@ describe('buildSalePayload', () => {
     expect(buildSalePayload(args).discounts).toEqual([
       { lineId: 'a', name: 'PWD Drink -20% x1 (Spanish Latte)', amount: 30 },
       { lineId: 'a', name: 'Google Review -10% x2 (Spanish Latte)', amount: 30 },
-    ])
-  })
-
-  it('names a whole-order row after "Total items"', () => {
-    const plain = items.map(i => ({ ...i, discounts: undefined }))
-    const totalRow: DiscountLine = { lineId: 'order:pwd', name: 'Total items', amount: 80, kind: 'pwd', scope: 'order', label: 'PWD/Senior −20%' }
-    expect(buildSalePayload({ ...args, items: plain, discountLines: [totalRow], grandTotal: 320 }).discounts).toEqual([
-      { lineId: 'order:pwd', name: 'PWD/Senior -20% (Total items)', amount: 80 },
     ])
   })
 

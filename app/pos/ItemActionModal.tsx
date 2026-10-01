@@ -21,7 +21,7 @@ interface ItemActionModalProps {
   attachedAddons: OrderItem[]
   /** Add-ons that may attach to this item (already filtered by its category). */
   addonOptions: Addon[]
-  /** The whole order's discount rows; this item's rows are picked out of it. */
+  /** Every discount row in the order (one per kind per line); this item's rows are picked out of it. */
   discountLines: DiscountLine[]
   onPickDiscount: (kind: LineDiscountKind, scope: LineDiscountScope) => void
   onSaveNote: (note: string) => void
@@ -52,8 +52,7 @@ export default function ItemActionModal({
   const menuSubtotal = item.price * item.qty
   const addonsTotal = attachedAddons.reduce((sum, a) => sum + a.price * a.qty, 0)
   const itemTotal = menuSubtotal + addonsTotal
-  // Only this line's own discounts. A whole-order discount belongs to the order,
-  // not to any one item, so it is not folded in here.
+  // Only this line's own discounts.
   const lineDiscount = lineRows.reduce((sum, d) => sum + d.amount, 0)
 
   // Which add-ons are already on the line, so their buttons render filled.

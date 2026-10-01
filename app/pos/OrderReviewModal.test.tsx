@@ -8,7 +8,7 @@ const items: OrderItem[] = [
   { lineId: 'b', name: 'Croissant', variant: null, price: 100, qty: 1 },
 ]
 
-// A stacked line: both kinds on the latte. (A kind on a line is never also on the total.)
+// A stacked line: both kinds on the latte.
 const discountLines: DiscountLine[] = [
   { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'pwd', scope: 'solo', label: 'PWD Drink −20% ×1' },
   { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'review', scope: 'all', label: 'Google Review −10% ×2' },
@@ -36,16 +36,6 @@ describe('OrderReviewModal', () => {
     expect(html).toContain('PWD Drink −20% ×1 (Spanish Latte)')
     expect(html).toContain('Google Review −10% ×2 (Spanish Latte)')
     expect(html).toContain('−₱30')
-  })
-
-  it('lists a whole-order row as "(Total items)"', () => {
-    const plain = items.map(i => ({ ...i, discounts: undefined }))
-    const totalRow: DiscountLine = { lineId: 'order:pwd', name: 'Total items', amount: 80, kind: 'pwd', scope: 'order', label: 'PWD/Senior −20%' }
-    const html = renderToStaticMarkup(
-      <OrderReviewModal {...base} orderItems={plain} discountLines={[totalRow]} discountAmount={80} grandTotal={320} />
-    )
-    expect(html).toContain('PWD/Senior −20% (Total items)')
-    expect(html).toContain('−₱80')
   })
 
   it('badges a stacked item with both of its discounts and their unit counts', () => {

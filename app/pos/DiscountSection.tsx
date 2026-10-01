@@ -58,18 +58,16 @@ export default function DiscountSection({ item, addonsTotal, lineRows, onPick }:
         <div className="space-y-1.5 border-t border-foreground/10 pt-3">
           {lineRows.map(d => {
             const rate = Math.round(DISCOUNT_RATES[d.kind] * 100)
-            const base = d.scope === 'order' ? null : Math.round(lineDiscountBase(item, addonsTotal, d.scope))
+            const base = Math.round(lineDiscountBase(item, addonsTotal, d.scope))
             return (
               <div key={d.kind} className="flex justify-between items-baseline gap-3 text-sm text-emerald-700 font-semibold">
                 <span>
                   {d.label}
-                  {base !== null && (
-                    <span className="text-foreground/45 font-normal">
-                      {' '}· {rate}% of ₱{base}
-                      {/* This mode does not list the add-ons, so say where the extra pesos in the base came from. */}
-                      {addonsTotal > 0 && ' incl. add-ons'}
-                    </span>
-                  )}
+                  <span className="text-foreground/45 font-normal">
+                    {' '}· {rate}% of ₱{base}
+                    {/* This mode does not list the add-ons, so say where the extra pesos in the base came from. */}
+                    {addonsTotal > 0 && ' incl. add-ons'}
+                  </span>
                 </span>
                 <span className="tabular-nums shrink-0">−₱{d.amount}</span>
               </div>

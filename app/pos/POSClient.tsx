@@ -14,7 +14,6 @@ import type {
   DiscountLine,
   LineDiscountKind,
   LineDiscountScope,
-  OrderDiscounts,
 } from './types'
 import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
 import MenuItemPopup from './MenuItemPopup'
@@ -23,14 +22,11 @@ import OrderReviewModal from './OrderReviewModal'
 import ItemActionModal, { type ItemModalMode } from './ItemActionModal'
 import {
   DISCOUNT_KINDS,
-  DISCOUNT_FOOTER_NAMES,
-  DISCOUNT_RATE_LABELS,
   buildDiscountLines,
   totalDiscount,
   discountBadge,
   hasLineDiscount,
   pickLineDiscount,
-  toggleOrderDiscount,
 } from './discounts'
 import { buildSalePayload } from './salePayload'
 import { ADDON_CATEGORY_ID } from './constants'
@@ -63,8 +59,6 @@ export default function POSClient() {
   // The per-item modal (Customize / Add-ons / Discount): which line it is for and which
   // section it shows; null when closed. One at a time, opened from that line's buttons.
   const [itemModal, setItemModal]               = useState<{ lineId: string; mode: ItemModalMode } | null>(null)
-  // Whole-order discounts (the footer "Total items" buttons), by kind.
-  const [orderDiscounts, setOrderDiscounts]     = useState<OrderDiscounts>({})
   const [showManageMenu, setShowManageMenu]     = useState(false)
   const [dynamicCategories, setDynamicCategories] = useState<DynamicCategory[]>([])
   const [dynamicItems, setDynamicItems]         = useState<DynamicMenuItem[]>([])
@@ -134,9 +128,9 @@ export default function POSClient() {
     [orderItems]
   )
 
-  // One row per discount on each line plus the whole-order rows — a single transaction can
-  // bundle several customers' orders, each with its own PWD/Senior ID or Google review.
-  const discountLines  = useMemo(() => buildDiscountLines(orderItems, orderDiscounts), [orderItems, orderDiscounts])
+  // One row per discount on each line — a single transaction can bundle several
+  // customers' orders, each with its own PWD/Senior ID or Google review.
+  const discountLines  = useMemo(() => buildDiscountLines(orderItems), [orderItems])
   const discountAmount = useMemo(() => totalDiscount(discountLines), [discountLines])
   const grandTotal     = useMemo(() => total - discountAmount, [total, discountAmount])
 
@@ -191,10 +185,6 @@ export default function POSClient() {
     })
     if (willRemove && selectedLineId === lineId) setSelectedLineId(null)
     if (willRemove && itemModal?.lineId === lineId) setItemModal(null)
-    // The whole-order discounts belong to this order: when its last line goes they go too,
-    // rather than sitting pressed-but-disabled and applying to the next customer's first item.
-    const emptied = willRemove && orderItems.every(i => i.lineId === lineId || i.parentLineId === lineId)
-    if (emptied) setOrderDiscounts({})
   }
 
   // A line's 📝 / + / % buttons open the per-item modal on that section for that exact
@@ -207,17 +197,7 @@ export default function POSClient() {
   // A chip tap on one line: the active chip again clears that kind, the other scope switches it,
   // the other kind stacks. The modal stays open so PWD and the review promo combine in two taps.
   function pickItemDiscount(lineId: string, kind: LineDiscountKind, scope: LineDiscountScope) {
-    const next = pickLineDiscount({ items: orderItems, order: orderDiscounts }, lineId, kind, scope)
-    setOrderItems(next.items)
-    setOrderDiscounts(next.order)
-  }
-
-  // Footer "Total items" tap: the kind on (or off) the whole pre-discount total. Turning it on
-  // takes that kind off every individual line — a kind applies per line or to the total, never both.
-  function toggleOrderDiscountFor(kind: LineDiscountKind) {
-    const next = toggleOrderDiscount({ items: orderItems, order: orderDiscounts }, kind)
-    setOrderItems(next.items)
-    setOrderDiscounts(next.order)
+    setOrderItems(prev => pickLineDiscount(prev, lineId, kind, scope))
   }
 
   function setItemNote(lineId: string, note: string) {
@@ -234,7 +214,6 @@ export default function POSClient() {
     setNotes('')
     setSelectedLineId(null)
     setItemModal(null)
-    setOrderDiscounts({})
   }
 
   async function completeSale() {
@@ -592,7 +571,6 @@ export default function POSClient() {
             discountLines={discountLines}
             selectedLineId={selectedLineId}
             itemModal={itemModal}
-            orderDiscounts={orderDiscounts}
             payment={payment}
             customInput={customInput}
             notes={notes}
@@ -603,7 +581,6 @@ export default function POSClient() {
             onNotesChange={setNotes}
             onSelectItem={setSelectedLineId}
             onOpenItemModal={openItemModal}
-            onToggleOrderDiscount={toggleOrderDiscountFor}
           />
         </aside>
       </div>
@@ -644,7 +621,6 @@ export default function POSClient() {
               discountLines={discountLines}
               selectedLineId={selectedLineId}
               itemModal={itemModal}
-              orderDiscounts={orderDiscounts}
               payment={payment}
               customInput={customInput}
               notes={notes}
@@ -655,7 +631,6 @@ export default function POSClient() {
               onNotesChange={setNotes}
               onSelectItem={setSelectedLineId}
               onOpenItemModal={openItemModal}
-              onToggleOrderDiscount={toggleOrderDiscountFor}
             />
           </div>
         </div>
@@ -870,7 +845,6 @@ function OrderPanel({
   discountLines,
   selectedLineId,
   itemModal,
-  orderDiscounts,
   payment,
   customInput,
   notes,
@@ -881,7 +855,6 @@ function OrderPanel({
   onNotesChange,
   onSelectItem,
   onOpenItemModal,
-  onToggleOrderDiscount,
 }: {
   items: OrderItem[]
   total: number
@@ -889,7 +862,6 @@ function OrderPanel({
   discountLines: DiscountLine[]
   selectedLineId: string | null
   itemModal: { lineId: string; mode: ItemModalMode } | null
-  orderDiscounts: OrderDiscounts
   payment: number | null
   customInput: string
   notes: string
@@ -900,7 +872,6 @@ function OrderPanel({
   onNotesChange: (value: string) => void
   onSelectItem: (lineId: string) => void
   onOpenItemModal: (lineId: string, mode: ItemModalMode) => void
-  onToggleOrderDiscount: (kind: LineDiscountKind) => void
 }) {
   const modalOpenFor = (lineId: string, mode: ItemModalMode) =>
     itemModal !== null && itemModal.lineId === lineId && itemModal.mode === mode
@@ -1076,34 +1047,10 @@ function OrderPanel({
         </div>
       </div>
 
-      {/* Footer: discount toggle + total + payment + actions */}
+      {/* Footer: discount breakdown + total + payment + actions */}
       <div className="px-6 pt-3 pb-3 border-t border-foreground/10 shrink-0 space-y-2.5">
 
-        {/* Whole-order discounts — each takes its rate off the full pre-discount total, and both can be
-            on at once. Turning one on takes that kind off any individual lines (per line or per total, not both). */}
-        <div className="flex gap-2">
-          {DISCOUNT_KINDS.map(kind => {
-            const active = orderDiscounts[kind] === true
-            return (
-              <button
-                key={kind}
-                onClick={() => onToggleOrderDiscount(kind)}
-                disabled={items.length === 0}
-                aria-pressed={active}
-                className={`flex-1 py-2 px-2 text-[10px] font-bold uppercase tracking-widest rounded-sm border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
-                  active
-                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                    : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-500'
-                }`}
-              >
-                <span className="block leading-tight">{DISCOUNT_FOOTER_NAMES[kind]} {DISCOUNT_RATE_LABELS[kind]}</span>
-                <span className="block leading-tight">Total items</span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Discount breakdown — one row per discount (line rows, then Total rows), shown whenever any applies */}
+        {/* Discount breakdown — one row per discount, shown whenever any applies */}
         {discountLines.length > 0 && (
           <div className="space-y-1 px-0.5">
             <div className="flex justify-between items-center">
