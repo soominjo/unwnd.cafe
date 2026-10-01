@@ -8,6 +8,7 @@ import { buildReceiptBlocksFromSale } from '@/lib/printer/receiptFromSale'
 import { downloadReceiptPdf } from '@/lib/printer/buildReceiptPdf'
 import { buildReceiptPdfFilename } from '@/lib/printer/receiptFilename'
 import ReceiptPreviewModal from '../ReceiptPreviewModal'
+import QtyBadge from '../QtyBadge'
 import { formatPHTime } from './dateRange'
 import { CheckIcon, DownloadIcon, PrinterIcon, TrashIcon } from './icons'
 import { ActionButton, Badge, InlineConfirm, RemoveButton } from './ui'
@@ -220,7 +221,8 @@ function ItemRow({ item, isConfirming, isDeleting, onRequestRemove, onCancelRemo
         </div>
         {item.note && <p className="mt-0.5 text-[11px] text-amber-700">{item.note}</p>}
       </div>
-      <span className="text-xs tabular-nums text-foreground/50">×{item.qty}</span>
+      {/* Every line gets the quantity mark, ×1 included, so the count reads at a glance while preparing. */}
+      <QtyBadge qty={item.qty} className="min-w-11" />
       <span className="w-20 text-right text-sm font-semibold tabular-nums text-foreground">
         ₱{(item.price * item.qty).toLocaleString()}
       </span>

@@ -2,6 +2,7 @@
 
 import { variantClass, groupOrderItems } from './utils'
 import { DISCOUNT_KINDS, discountBadge } from './discounts'
+import QtyBadge from './QtyBadge'
 import type { OrderItem, DiscountLine } from './types'
 
 interface OrderReviewModalProps {
@@ -81,11 +82,7 @@ export default function OrderReviewModal({
                     <div className="min-w-0">
                       <p className="text-base font-semibold leading-tight text-foreground flex items-center flex-wrap gap-x-3 gap-y-1">
                         <span>{item.name}</span>
-                        {item.qty > 1 && (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-400 text-foreground text-sm font-black tabular-nums tracking-wide shadow-sm">
-                            ×{item.qty}
-                          </span>
-                        )}
+                        {item.qty > 1 && <QtyBadge qty={item.qty} />}
                       </p>
                       <div className="flex items-center gap-2 mt-1">
                         {item.variant && (
@@ -131,11 +128,7 @@ export default function OrderReviewModal({
               <div key={addon.lineId} className="flex items-center justify-between gap-4 py-3.5">
                 <span className="text-base font-semibold text-foreground/70 flex items-center flex-wrap gap-x-3 gap-y-1">
                   <span>{addon.name}</span>
-                  {addon.qty > 1 && (
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-400 text-foreground text-sm font-black tabular-nums tracking-wide shadow-sm">
-                      ×{addon.qty}
-                    </span>
-                  )}
+                  {addon.qty > 1 && <QtyBadge qty={addon.qty} />}
                 </span>
                 <span className="text-base tabular-nums font-bold text-foreground shrink-0">
                   ₱{(addon.price * addon.qty).toFixed(0)}
