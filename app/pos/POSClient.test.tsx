@@ -44,19 +44,19 @@ describe('POSClient first paint', () => {
     expect(firstPaint(live)).not.toContain('Showing the built-in menu')
   })
 
-  it('offers no menu editing on the fallback, which has no live menu to add to', () => {
-    const fallback = firstPaint(null)
-    expect(fallback).not.toContain('Add Item')
-    expect(fallback).not.toContain('title="Manage menu"')
-    const html = firstPaint(live)
-    expect(html).toContain('Add Item')
-    expect(html).toContain('title="Manage menu"')
+  it('keeps all menu editing behind the manager PIN, on the live menu and the fallback alike', () => {
+    for (const html of [firstPaint(live), firstPaint(null)]) {
+      expect(html).not.toContain('title="Edit item"')
+      expect(html).not.toContain('title="Delete item"')
+      expect(html).not.toContain('Add Item')
+      expect(html).not.toContain('title="Manage menu"')
+      // Dragging a tab saves a new order for every device, so the tabs only drag in manager mode.
+      expect(html).not.toContain('draggable="true"')
+    }
   })
 
-  it('keeps edit and delete off the menu items until a manager unlocks them', () => {
-    const html = firstPaint(live)
-    expect(html).not.toContain('title="Edit item"')
-    expect(html).not.toContain('title="Delete item"')
-    expect(html).toContain('>Manager</span>')
+  it('offers the Manager unlock only when there is a live menu to edit', () => {
+    expect(firstPaint(live)).toContain('>Manager</span>')
+    expect(firstPaint(null)).not.toContain('>Manager</span>')
   })
 })

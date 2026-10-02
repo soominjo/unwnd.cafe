@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, memo, Fragment, useEffect } from 'react'
+import { useState, useMemo, useCallback, memo, Fragment, useEffect, type DragEvent } from 'react'
 import Link from 'next/link'
 import { MENU } from './menuData'
 import { variantClass, groupOrderItems, addonLineId } from './utils'
@@ -21,6 +21,7 @@ import OrderReviewModal, { type CheckoutAction } from './OrderReviewModal'
 import ReceiptPreviewModal from './ReceiptPreviewModal'
 import ItemActionModal, { type ItemModalMode } from './ItemActionModal'
 import ManagerPinModal from './ManagerPinModal'
+import { canEditMenu } from './canEditMenu'
 import { watchIdle } from './watchIdle'
 import { LockIcon, UnlockIcon } from './sales/icons'
 import {
@@ -76,15 +77,21 @@ export default function POSClient({ initialMenu }: POSClientProps) {
   const [categoryOrder, setCategoryOrder]       = useState<string[]>(initialMenu?.categoryOrder ?? [])
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null)
   const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null)
-  // Manager mode shows edit and delete on the menu items. It takes the POS PIN; Lock,
-  // a reload, two idle minutes or the screen going off hide them again.
+  // Manager mode unlocks every menu edit: adding, editing and deleting items, the
+  // category manager, and dragging tabs to reorder. It takes the POS PIN; Lock, a
+  // reload, two idle minutes or the screen going off lock it again.
   const [managerUnlocked, setManagerUnlocked]   = useState(false)
   const [showManagerPin, setShowManagerPin]     = useState(false)
+  const menuEditable = canEditMenu(managerUnlocked, initialMenu)
 
-  // Locking also closes an item's edit form, so a form left open cannot be saved by someone else.
+  // Locking also closes any menu form left open, so it cannot be saved by someone else.
   const lockManager = useCallback(() => {
     setManagerUnlocked(false)
     setEditingItem(null)
+    setAddItemCategory(null)
+    setShowManageMenu(false)
+    setDraggedCategoryId(null)
+    setDragOverCategoryId(null)
   }, [])
 
   useEffect(() => {
@@ -107,7 +114,6 @@ export default function POSClient({ initialMenu }: POSClientProps) {
     function onPageShow(e: PageTransitionEvent) {
       if (e.persisted) {
         setShowConfirm(false)
-        setShowManageMenu(false)
         setMobileDrawer(false)
         setItemModal(null)
         setReceiptBlocks(null)
@@ -289,14 +295,28 @@ export default function POSClient({ initialMenu }: POSClientProps) {
   // items stored in Sanity — the built-in ones have no record to edit or delete.
   function editItemAction(item: MenuItem, categoryId: string): (() => void) | undefined {
     const sanityId = item._sanityId
-    if (!managerUnlocked || !sanityId) return undefined
+    if (!menuEditable || !sanityId) return undefined
     return () => setEditingItem({ item: { ...item, _sanityId: sanityId }, categoryId })
   }
 
   function deleteItemAction(item: MenuItem): (() => void) | undefined {
     const sanityId = item._sanityId
-    if (!managerUnlocked || !sanityId) return undefined
+    if (!menuEditable || !sanityId) return undefined
     return () => handleDeleteItem(sanityId)
+  }
+
+  // A tab's drag-to-reorder handlers. Dropping saves the new order for every device,
+  // so outside manager mode the tabs do not drag at all.
+  function tabDragProps(categoryId: string) {
+    if (!menuEditable) return {}
+    return {
+      draggable: true,
+      onDragStart: () => setDraggedCategoryId(categoryId),
+      onDragEnter: () => { if (draggedCategoryId && draggedCategoryId !== categoryId) setDragOverCategoryId(categoryId) },
+      onDragOver: (e: DragEvent) => e.preventDefault(),
+      onDragEnd: () => { setDraggedCategoryId(null); setDragOverCategoryId(null) },
+      onDrop: (e: DragEvent) => { e.preventDefault(); handleCategoryDrop(categoryId) },
+    }
   }
 
   async function handleDeleteItem(sanityId: string) {
@@ -460,21 +480,24 @@ export default function POSClient({ initialMenu }: POSClientProps) {
       <header className="bg-foreground flex items-center justify-between px-6 py-4 shrink-0">
         <Link href="/" className="font-logo text-2xl lowercase tracking-tight text-cream hover:text-cream/70 transition-colors">unwnd. pos</Link>
         <div className="flex items-center gap-4">
-          {/* Manager mode: the PIN shows edit and delete on the menu items; tapping again locks them away */}
-          <button
-            onClick={() => (managerUnlocked ? lockManager() : setShowManagerPin(true))}
-            aria-pressed={managerUnlocked}
-            aria-label="Manager mode"
-            title={managerUnlocked ? 'Lock: hide edit and delete on menu items' : 'Manager PIN: show edit and delete on menu items'}
-            className={`h-9 px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] transition-colors ${
-              managerUnlocked
-                ? 'bg-amber-400 text-foreground font-bold hover:bg-amber-300'
-                : 'text-cream/55 hover:text-cream/85 hover:bg-cream/10'
-            }`}
-          >
-            {managerUnlocked ? <UnlockIcon width={14} height={14} /> : <LockIcon width={14} height={14} />}
-            <span className="hidden sm:inline">{managerUnlocked ? 'Lock' : 'Manager'}</span>
-          </button>
+          {/* Manager mode: the PIN unlocks menu editing; tapping again locks it away. Not offered
+              on the built-in fallback menu, which has nothing to edit. */}
+          {initialMenu && (
+            <button
+              onClick={() => (managerUnlocked ? lockManager() : setShowManagerPin(true))}
+              aria-pressed={managerUnlocked}
+              aria-label="Manager mode"
+              title={managerUnlocked ? 'Lock menu editing' : 'Manager PIN: add, edit, delete and reorder the menu'}
+              className={`h-9 px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] transition-colors ${
+                managerUnlocked
+                  ? 'bg-amber-400 text-foreground font-bold hover:bg-amber-300'
+                  : 'text-cream/55 hover:text-cream/85 hover:bg-cream/10'
+              }`}
+            >
+              {managerUnlocked ? <UnlockIcon width={14} height={14} /> : <LockIcon width={14} height={14} />}
+              <span className="hidden sm:inline">{managerUnlocked ? 'Lock' : 'Manager'}</span>
+            </button>
+          )}
           <a
             href="/pos/sales"
             className="hidden lg:block text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 transition-colors"
@@ -518,19 +541,16 @@ export default function POSClient({ initialMenu }: POSClientProps) {
             </div>
           )}
 
-          {/* Category tabs — draggable to reorder */}
+          {/* Category tabs — draggable to reorder in manager mode */}
           <div className="flex gap-2 px-6 py-4 border-b border-foreground/10 shrink-0 overflow-x-auto scrollbar-none">
             {sortedMenu.map((cat) => (
               <button
                 key={cat.id}
-                draggable
+                {...tabDragProps(cat.id)}
                 onClick={() => setActiveCategoryId(cat.id)}
-                onDragStart={() => setDraggedCategoryId(cat.id)}
-                onDragEnter={() => { if (draggedCategoryId && draggedCategoryId !== cat.id) setDragOverCategoryId(cat.id) }}
-                onDragOver={(e) => e.preventDefault()}
-                onDragEnd={() => { setDraggedCategoryId(null); setDragOverCategoryId(null) }}
-                onDrop={(e) => { e.preventDefault(); handleCategoryDrop(cat.id) }}
-                className={`px-5 py-2.5 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap rounded-sm transition-all duration-200 cursor-grab active:cursor-grabbing ${
+                className={`px-5 py-2.5 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap rounded-sm transition-all duration-200 ${
+                  menuEditable ? 'cursor-grab active:cursor-grabbing' : ''
+                } ${
                   (activeCategoryId ?? sortedMenu[0]?.id) === cat.id
                     ? 'bg-foreground text-cream border border-foreground'
                     : 'text-foreground border border-foreground/30 hover:border-foreground/60 bg-transparent'
@@ -541,8 +561,8 @@ export default function POSClient({ initialMenu }: POSClientProps) {
                 {cat.label}
               </button>
             ))}
-            {/* Menu editing needs the live menu: on the built-in fallback a new tab would replace all the others */}
-            {initialMenu && (
+            {/* The category manager (add and delete tabs) is a manager-only edit */}
+            {menuEditable && (
               <button
                 onClick={() => setShowManageMenu(true)}
                 title="Manage menu"
@@ -597,7 +617,7 @@ export default function POSClient({ initialMenu }: POSClientProps) {
                 />
               ))
             )}
-            {category && initialMenu && (
+            {category && menuEditable && (
               <button
                 onClick={() => setAddItemCategory(category.id)}
                 className="flex flex-col items-center justify-center gap-2 min-h-38 border-2 border-dashed border-foreground/15 hover:border-foreground/35 rounded-xl text-foreground/30 hover:text-foreground/55 transition-all duration-200"
@@ -729,7 +749,7 @@ export default function POSClient({ initialMenu }: POSClientProps) {
         <ReceiptPreviewModal blocks={receiptBlocks} onClose={() => setReceiptBlocks(null)} />
       )}
 
-      {/* ── Manager PIN, before the menu's edit and delete buttons show ── */}
+      {/* ── Manager PIN, before any menu editing shows ── */}
       {showManagerPin && (
         <ManagerPinModal
           onUnlock={() => { setManagerUnlocked(true); setShowManagerPin(false) }}

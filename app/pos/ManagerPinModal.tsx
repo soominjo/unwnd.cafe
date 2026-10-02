@@ -10,7 +10,7 @@ interface ManagerPinModalProps {
   onClose: () => void
 }
 
-// Asks for the manager PIN before the menu's edit and delete buttons appear.
+// Asks for the manager PIN before any menu editing unlocks.
 // It is the POS login PIN, checked on the server by the same route as the login.
 export default function ManagerPinModal({ onUnlock, onClose }: ManagerPinModalProps) {
   // Closed while a PIN was being checked: a right answer arriving afterwards must not unlock.
@@ -58,7 +58,7 @@ export default function ManagerPinModal({ onUnlock, onClose }: ManagerPinModalPr
           </button>
         </div>
         <PinPad onComplete={check} />
-        <p className="mt-6 text-center text-xs text-cream/45">Same PIN as the POS login. Unlocks edit and delete on menu items.</p>
+        <p className="mt-6 text-center text-xs text-cream/45">Same PIN as the POS login. Unlocks menu editing: add, edit and delete items, add or remove categories, and reorder tabs.</p>
       </div>
     </div>
   )
