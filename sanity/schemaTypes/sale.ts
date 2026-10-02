@@ -46,6 +46,19 @@ export const sale = defineType({
       type: 'string',
     }),
     defineField({
+      name: 'loyaltyMemberId',
+      title: 'Loyalty card holder',
+      description: 'The _id of the loyaltyMember this order was linked to at checkout.',
+      type: 'string',
+    }),
+    defineField({
+      name: 'loyaltyRewards',
+      title: 'Loyalty rewards used',
+      type: 'array',
+      of: [{ type: 'string' }],
+      options: { list: [{ title: '10% off', value: 'ten' }, { title: 'Free drink', value: 'free' }] },
+    }),
+    defineField({
       name: 'isCompleted',
       title: 'Completed',
       type: 'boolean',

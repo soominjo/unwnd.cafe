@@ -39,6 +39,7 @@ const base = {
   discountAmount: 60,
   payment: 500,
   notes: 'Ana',
+  loyalty: null,
   pendingAction: null,
   submitError: null,
   onCancel: () => {},
@@ -75,6 +76,17 @@ describe('OrderReviewModal', () => {
     expect(html).toContain('Saving…')
     // The ✕, Order Complete and the receipt button.
     expect(html.match(/disabled=""/g)).toHaveLength(3)
+  })
+
+  it('shows a linked card holder their stamps, and nothing for an order without a card', () => {
+    const html = renderToStaticMarkup(
+      <OrderReviewModal {...base} loyalty={{ name: 'Ana', cardNumber: 12, savedOnCard: 4, orderStamps: 2 }} />,
+    )
+    expect(html).toContain('Loyalty card No. 12')
+    expect(html).toContain('+2 stamps this order')
+    expect(html).toContain('6 of 11')
+    expect(html).toContain('data-step=')
+    expect(renderToStaticMarkup(<OrderReviewModal {...base} />)).not.toContain('Loyalty card')
   })
 
   it('badges a stacked item with both of its discounts and their unit counts', () => {

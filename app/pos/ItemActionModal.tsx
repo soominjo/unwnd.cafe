@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import type { Addon, DiscountLine, LineDiscountKind, LineDiscountScope, OrderItem } from './types'
+import type { Addon, DiscountLine, LineDiscountKind, LineDiscountScope, LoyaltyChoice, OrderItem } from './types'
 import { addonLineId, variantClass } from './utils'
 import CustomizeSection from './CustomizeSection'
 import AddonsSection from './AddonsSection'
@@ -23,6 +23,8 @@ interface ItemActionModalProps {
   addonOptions: Addon[]
   /** Every discount row in the order (one per kind per line); this item's rows are picked out of it. */
   discountLines: DiscountLine[]
+  /** The order's loyalty rewards: the 10% locks Google Review; the free drink may be on this line. */
+  loyalty: LoyaltyChoice
   onPickDiscount: (kind: LineDiscountKind, scope: LineDiscountScope) => void
   onSaveNote: (note: string) => void
   onAddAddon: (addon: Addon) => void
@@ -43,6 +45,7 @@ export default function ItemActionModal({
   attachedAddons,
   addonOptions,
   discountLines,
+  loyalty,
   onPickDiscount,
   onSaveNote,
   onAddAddon,
@@ -129,7 +132,14 @@ export default function ItemActionModal({
                 </div>
               </div>
             ) : (
-              <DiscountSection item={item} addonsTotal={addonsTotal} lineRows={lineRows} onPick={onPickDiscount} />
+              <DiscountSection
+                item={item}
+                addonsTotal={addonsTotal}
+                lineRows={lineRows}
+                onPick={onPickDiscount}
+                reviewLocked={loyalty.tenLineId !== null}
+                freeUnits={loyalty.freeLineId === item.lineId ? 1 : 0}
+              />
             )}
           </div>
         </div>

@@ -38,6 +38,7 @@ const base = {
   attachedAddons,
   addonOptions,
   discountLines,
+  loyalty: { tenLineId: null, freeLineId: null },
   onPickDiscount: noop,
   onSaveNote: noop,
   onAddAddon: noop,

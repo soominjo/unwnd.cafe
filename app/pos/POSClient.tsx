@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, memo, Fragment, useEffect, type DragEvent } from 'react'
+import { useState, useMemo, useCallback, memo, Fragment, useEffect, type DragEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import { MENU } from './menuData'
 import { variantClass, groupOrderItems, addonLineId } from './utils'
@@ -13,6 +13,7 @@ import type {
   DiscountLine,
   LineDiscountKind,
   LineDiscountScope,
+  LoyaltyChoice,
 } from './types'
 import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
 import MenuItemPopup from './MenuItemPopup'
@@ -22,15 +23,18 @@ import ReceiptPreviewModal from './ReceiptPreviewModal'
 import ItemActionModal, { type ItemModalMode } from './ItemActionModal'
 import ManagerPinModal from './ManagerPinModal'
 import { canEditMenu } from './canEditMenu'
+import CustomerNameField from './CustomerNameField'
 import { watchIdle } from './watchIdle'
-import { LockIcon, UnlockIcon } from './sales/icons'
+import { LockIcon, StampCardIcon, UnlockIcon } from './sales/icons'
+import LoyaltyCardsModal from './LoyaltyCardsModal'
 import {
-  DISCOUNT_KINDS,
+  NO_LOYALTY,
   buildDiscountLines,
   totalDiscount,
-  discountBadge,
+  lineBadges,
   hasLineDiscount,
   pickLineDiscount,
+  withoutGoogleReview,
 } from './discounts'
 import { buildSalePayload } from './salePayload'
 import { postSale } from './postSale'
@@ -38,16 +42,21 @@ import { ADDON_CATEGORY_ID } from './constants'
 import type { ReceiptBlock } from '@/lib/printer/receiptDocument'
 import { buildCheckoutReceiptBlocks } from '@/lib/printer/receiptFromSale'
 import type { PosMenu, PosMenuItem } from '@/lib/posMenu'
+import { LOYALTY_CARD_CHANGED, addOrderToTotals, cardState, isClassicDrinkLine, loyaltyKey, type CardHolderWithCard } from '@/lib/loyalty'
+import { resolveLoyaltyOrder, sameLoyaltyChoice } from './loyaltyOrder'
+import { refetchCardHolders } from './refetchCardHolders'
 
 interface POSClientProps {
   /** The live menu, read on the server for this page load; null when it could not be read (the built-in menu shows). */
   initialMenu: PosMenu | null
+  /** Loyalty card holders, read on the server with the menu; null when they could not be read (no loyalty this load). */
+  initialCardHolders: CardHolderWithCard[] | null
 }
 
 /** Manager mode locks itself after this long with no tap or key press. */
 const MANAGER_IDLE_LOCK_MS = 2 * 60 * 1000
 
-export default function POSClient({ initialMenu }: POSClientProps) {
+export default function POSClient({ initialMenu, initialCardHolders }: POSClientProps) {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [orderItems, setOrderItems]             = useState<OrderItem[]>([])
   const [showConfirm, setShowConfirm]           = useState(false)
@@ -61,6 +70,15 @@ export default function POSClient({ initialMenu }: POSClientProps) {
   const [receiptBlocks, setReceiptBlocks]       = useState<ReceiptBlock[] | null>(null)
   const [notes, setNotes]                       = useState('')
   const [selectedLineId, setSelectedLineId]     = useState<string | null>(null)
+  // Loyalty: the card holders (null when they could not be loaded; kept in step after each
+  // linked sale), the one this order is linked to, and the rewards the cashier turned on.
+  const [cardHolders, setCardHolders]           = useState<CardHolderWithCard[] | null>(initialCardHolders)
+  const [linkedHolderId, setLinkedHolderId]     = useState<string | null>(null)
+  const [loyaltyPicked, setLoyaltyPicked]       = useState<LoyaltyChoice>(NO_LOYALTY)
+  // "Use 10% off" was tapped and the cashier is picking which classic drink it goes on.
+  const [choosingTen, setChoosingTen]           = useState(false)
+  // The loyalty cards panel, opened from the header over the order on screen.
+  const [showLoyalty, setShowLoyalty]           = useState(false)
   // The per-item modal (Customize / Add-ons / Discount): which line it is for and which
   // section it shows; null when closed. One at a time, opened from that line's buttons.
   const [itemModal, setItemModal]               = useState<{ lineId: string; mode: ItemModalMode } | null>(null)
@@ -118,6 +136,7 @@ export default function POSClient({ initialMenu }: POSClientProps) {
         setItemModal(null)
         setReceiptBlocks(null)
         setShowManagerPin(false)
+        setShowLoyalty(false)
         lockManager()
       }
     }
@@ -135,9 +154,20 @@ export default function POSClient({ initialMenu }: POSClientProps) {
     [orderItems]
   )
 
+  // The linked card holder, while the name field still shows their name, and the rewards
+  // that apply. This order's stamps count straight away, so a reward can be used on it.
+  const loyaltyOrder = useMemo(
+    () => resolveLoyaltyOrder({ holders: cardHolders, linkedHolderId, customerName: notes, items: orderItems, picked: loyaltyPicked }),
+    [cardHolders, linkedHolderId, notes, orderItems, loyaltyPicked],
+  )
+  const { holder: linkedHolder, orderStamps, card: loyaltyCard, applied: loyalty } = loyaltyOrder
+  // A reward stays picked only while it applies. Left picked, it would come back by itself
+  // when the cart changed back, and could replace a Google Review chosen in between.
+  if (!sameLoyaltyChoice(loyalty, loyaltyPicked)) setLoyaltyPicked(loyalty)
+
   // One row per discount on each line — a single transaction can bundle several
   // customers' orders, each with its own PWD/Senior ID or Google review.
-  const discountLines  = useMemo(() => buildDiscountLines(orderItems), [orderItems])
+  const discountLines  = useMemo(() => buildDiscountLines(orderItems, loyalty), [orderItems, loyalty])
   const discountAmount = useMemo(() => totalDiscount(discountLines), [discountLines])
   const grandTotal     = useMemo(() => total - discountAmount, [total, discountAmount])
 
@@ -207,6 +237,45 @@ export default function POSClient({ initialMenu }: POSClientProps) {
     setOrderItems(prev => pickLineDiscount(prev, lineId, kind, scope))
   }
 
+  // Customer name: typing a different name drops the link to a card holder.
+  function changeCustomerName(value: string) {
+    setNotes(value)
+    if (linkedHolder && loyaltyKey(value) !== loyaltyKey(linkedHolder.name)) unlinkCardHolder()
+  }
+
+  function linkCardHolder(holder: CardHolderWithCard) {
+    setNotes(holder.name)
+    setLinkedHolderId(holder._id)
+  }
+
+  function unlinkCardHolder() {
+    setLinkedHolderId(null)
+    setLoyaltyPicked(NO_LOYALTY)
+    setChoosingTen(false)
+  }
+
+  // "Use 10% off": straight onto the order's only classic drink, else the cashier picks one
+  // (or, with none, is told to have the customer add one).
+  function startLoyaltyTen() {
+    if (loyaltyOrder.tenLines.length === 1) pickLoyaltyTen(loyaltyOrder.tenLines[0].lineId)
+    else setChoosingTen(true)
+  }
+
+  // The loyalty 10% is the order's one 10%, so putting it on takes Google Review off every line.
+  function pickLoyaltyTen(lineId: string) {
+    setOrderItems(prev => withoutGoogleReview(prev))
+    setLoyaltyPicked({ ...loyalty, tenLineId: lineId })
+    setChoosingTen(false)
+  }
+
+  function clearLoyaltyTen() {
+    setLoyaltyPicked({ ...loyalty, tenLineId: null })
+  }
+
+  function toggleLoyaltyFree(lineId: string) {
+    setLoyaltyPicked({ ...loyalty, freeLineId: loyalty.freeLineId === lineId ? null : lineId })
+  }
+
   function setItemNote(lineId: string, note: string) {
     setOrderItems(prev => prev.map(i => i.lineId === lineId ? { ...i, note: note.trim() || undefined } : i))
   }
@@ -221,20 +290,31 @@ export default function POSClient({ initialMenu }: POSClientProps) {
     setNotes('')
     setSelectedLineId(null)
     setItemModal(null)
+    unlinkCardHolder()
   }
 
   async function completeSale(action: CheckoutAction) {
     if (pendingAction) return
-    const payload = buildSalePayload({ items: orderItems, discountLines, subtotal: total, grandTotal, payment, notes })
+    const saleLoyalty = linkedHolder ? { memberId: linkedHolder._id, rewards: loyaltyOrder.rewards } : null
+    const payload = buildSalePayload({ items: orderItems, discountLines, subtotal: total, grandTotal, payment, notes, loyalty: saleLoyalty })
     setPendingAction(action)
     setSubmitError(null)
     const result = await postSale(payload)
-    setPendingAction(null)
     if (!result.ok) {
-      setSubmitError(result.error)
+      // Still "saving" while the cards are read again, so the old order can't be sent twice.
+      const message = result.code === LOYALTY_CARD_CHANGED ? await catchUpWithCards(result.error) : result.error
+      setPendingAction(null)
+      setSubmitError(message)
       return
     }
+    setPendingAction(null)
 
+    // Keep the card in step for the next order on this page (a receipt checkout stays here).
+    if (saleLoyalty) {
+      setCardHolders(prev => prev && prev.map(h => (h._id === saleLoyalty.memberId
+        ? { ...h, card: addOrderToTotals(h.card, orderStamps, saleLoyalty.rewards), orderCount: h.orderCount + 1 }
+        : h)))
+    }
     clearOrder()
     // Lets a Sales tab already open elsewhere pick up the new sale.
     const bc = new BroadcastChannel('pos-sales-update')
@@ -244,8 +324,23 @@ export default function POSClient({ initialMenu }: POSClientProps) {
     // customer once it is printed or closed. A plain completion moves on to Sales
     // as a full page load, like the Sales link: an in-app navigation would let Back
     // bring this page back with the menu it was first loaded with.
-    if (action === 'receipt') setReceiptBlocks(buildCheckoutReceiptBlocks(payload, new Date()))
-    else window.location.assign('/pos/sales')
+    if (action === 'receipt') {
+      setReceiptBlocks(buildCheckoutReceiptBlocks(payload, new Date()))
+      // Cards given or used on another device show from the next order.
+      void refetchCardHolders().then(holders => { if (holders) setCardHolders(holders) })
+    } else {
+      window.location.assign('/pos/sales')
+    }
+  }
+
+  // The linked card changed on another device: a reward was used there, or the card was
+  // removed. Reading the cards again makes the order show what the card can use now; the
+  // cart stays as it is, so the cashier checks the total and charges again.
+  async function catchUpWithCards(reason: string): Promise<string> {
+    const holders = await refetchCardHolders()
+    if (!holders) return `${reason} Unlink the card, then charge again.`
+    setCardHolders(holders)
+    return `${reason} The order is updated: check the total, then charge again.`
   }
 
   function handleSetPayment(amount: number | null, raw: string) {
@@ -473,13 +568,39 @@ export default function POSClient({ initialMenu }: POSClientProps) {
       }))
   }, [mergedMenu, modalCategoryId])
 
+  const customerNameField = (
+    <CustomerNameField
+      value={notes}
+      disabled={orderItems.length === 0}
+      onChange={changeCustomerName}
+      holders={cardHolders}
+      linked={linkedHolder}
+      onLink={linkCardHolder}
+      onUnlink={unlinkCardHolder}
+      orderStamps={orderStamps}
+      ten={{
+        lines: loyaltyOrder.tenLines,
+        lineId: loyalty.tenLineId,
+        choosing: choosingTen,
+        onStart: startLoyaltyTen,
+        onPick: pickLoyaltyTen,
+        onCancel: () => setChoosingTen(false),
+        onClear: clearLoyaltyTen,
+      }}
+      hasFreeDrinkLine={orderItems.some(isClassicDrinkLine)}
+      freeActive={loyalty.freeLineId !== null}
+    />
+  )
+  const freeDrinkReady = (loyaltyCard?.freeReady ?? 0) > 0
+
   return (
     <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
 
       {/* ── Header ── */}
       <header className="bg-foreground flex items-center justify-between px-6 py-4 shrink-0">
         <Link href="/" className="font-logo text-2xl lowercase tracking-tight text-cream hover:text-cream/70 transition-colors">unwnd. pos</Link>
-        <div className="flex items-center gap-4">
+        {/* Tighter on phones, where Manager and Loyalty show as icons beside the Order button. */}
+        <div className="flex items-center gap-1 sm:gap-4">
           {/* Manager mode: the PIN unlocks menu editing; tapping again locks it away. Not offered
               on the built-in fallback menu, which has nothing to edit. */}
           {initialMenu && (
@@ -488,7 +609,7 @@ export default function POSClient({ initialMenu }: POSClientProps) {
               aria-pressed={managerUnlocked}
               aria-label="Manager mode"
               title={managerUnlocked ? 'Lock menu editing' : 'Manager PIN: add, edit, delete and reorder the menu'}
-              className={`h-9 px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] transition-colors ${
+              className={`h-9 px-2 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] transition-colors ${
                 managerUnlocked
                   ? 'bg-amber-400 text-foreground font-bold hover:bg-amber-300'
                   : 'text-cream/55 hover:text-cream/85 hover:bg-cream/10'
@@ -498,6 +619,16 @@ export default function POSClient({ initialMenu }: POSClientProps) {
               <span className="hidden sm:inline">{managerUnlocked ? 'Lock' : 'Manager'}</span>
             </button>
           )}
+          {/* Loyalty cards: see a card's stamps and give a card (no PIN); removing one takes the PIN. */}
+          <button
+            onClick={() => setShowLoyalty(true)}
+            aria-label="Loyalty cards"
+            title="Loyalty cards: give a card, see stamps"
+            className="h-9 px-2 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
+          >
+            <StampCardIcon width={14} height={14} />
+            <span className="hidden sm:inline">Loyalty</span>
+          </button>
           <a
             href="/pos/sales"
             className="hidden lg:block text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 transition-colors"
@@ -505,7 +636,7 @@ export default function POSClient({ initialMenu }: POSClientProps) {
             Sales ↗
           </a>
           <button
-            className="lg:hidden flex items-center gap-3 text-sm text-cream/85 hover:text-cream transition-colors py-2 px-4 border border-cream/30 rounded-sm"
+            className="lg:hidden flex items-center gap-2 sm:gap-3 text-sm text-cream/85 hover:text-cream transition-colors py-2 px-3 sm:px-4 border border-cream/30 rounded-sm"
             onClick={() => setMobileDrawer(true)}
           >
             {itemCount > 0 && (
@@ -640,12 +771,14 @@ export default function POSClient({ initialMenu }: POSClientProps) {
             itemModal={itemModal}
             payment={payment}
             customInput={customInput}
-            notes={notes}
+            customerNameField={customerNameField}
+            freeDrinkReady={freeDrinkReady}
+            freeLineId={loyalty.freeLineId}
+            onToggleFree={toggleLoyaltyFree}
             onAdjust={adjustQty}
             onClear={clearOrder}
             onCharge={() => setShowConfirm(true)}
             onSetPayment={handleSetPayment}
-            onNotesChange={setNotes}
             onSelectItem={setSelectedLineId}
             onOpenItemModal={openItemModal}
           />
@@ -690,12 +823,14 @@ export default function POSClient({ initialMenu }: POSClientProps) {
               itemModal={itemModal}
               payment={payment}
               customInput={customInput}
-              notes={notes}
+              customerNameField={customerNameField}
+              freeDrinkReady={freeDrinkReady}
+              freeLineId={loyalty.freeLineId}
+              onToggleFree={toggleLoyaltyFree}
               onAdjust={adjustQty}
               onClear={clearOrder}
               onCharge={() => { setMobileDrawer(false); setShowConfirm(true) }}
               onSetPayment={handleSetPayment}
-              onNotesChange={setNotes}
               onSelectItem={setSelectedLineId}
               onOpenItemModal={openItemModal}
             />
@@ -737,6 +872,7 @@ export default function POSClient({ initialMenu }: POSClientProps) {
           discountAmount={discountAmount}
           payment={payment}
           notes={notes}
+          loyalty={linkedHolder ? { name: linkedHolder.name, cardNumber: linkedHolder.cardNumber, savedOnCard: cardState(linkedHolder.card).onCard, orderStamps } : null}
           pendingAction={pendingAction}
           submitError={submitError}
           onCancel={() => { setShowConfirm(false); setSubmitError(null) }}
@@ -749,10 +885,16 @@ export default function POSClient({ initialMenu }: POSClientProps) {
         <ReceiptPreviewModal blocks={receiptBlocks} onClose={() => setReceiptBlocks(null)} />
       )}
 
+      {/* ── Loyalty cards, over the order on screen; a card given here is suggested in Customer name at once ── */}
+      {showLoyalty && (
+        <LoyaltyCardsModal holders={cardHolders} onHoldersChange={setCardHolders} onClose={() => setShowLoyalty(false)} />
+      )}
+
       {/* ── Manager PIN, before any menu editing shows ── */}
       {showManagerPin && (
         <ManagerPinModal
-          onUnlock={() => { setManagerUnlocked(true); setShowManagerPin(false) }}
+          hint="Same PIN as the POS login. Unlocks menu editing: add, edit and delete items, add or remove categories, and reorder tabs."
+          onSuccess={() => { setManagerUnlocked(true); setShowManagerPin(false) }}
           onClose={() => setShowManagerPin(false)}
         />
       )}
@@ -766,6 +908,7 @@ export default function POSClient({ initialMenu }: POSClientProps) {
           attachedAddons={orderItems.filter(i => i.parentLineId === modalItem.lineId)}
           addonOptions={addonAttachItems}
           discountLines={discountLines}
+          loyalty={loyalty}
           onPickDiscount={(kind, scope) => pickItemDiscount(modalItem.lineId, kind, scope)}
           onSaveNote={note => setItemNote(modalItem.lineId, note)}
           onAddAddon={addon => addAddon(addon, modalItem.lineId)}
@@ -927,12 +1070,14 @@ function OrderPanel({
   itemModal,
   payment,
   customInput,
-  notes,
+  customerNameField,
+  freeDrinkReady,
+  freeLineId,
+  onToggleFree,
   onAdjust,
   onClear,
   onCharge,
   onSetPayment,
-  onNotesChange,
   onSelectItem,
   onOpenItemModal,
 }: {
@@ -944,12 +1089,16 @@ function OrderPanel({
   itemModal: { lineId: string; mode: ItemModalMode } | null
   payment: number | null
   customInput: string
-  notes: string
+  /** The customer name field, with its loyalty card suggestions and stamp bar. */
+  customerNameField: ReactNode
+  /** The linked card has a free drink ready, so Espresso and Non-Coffee lines offer "Make free". */
+  freeDrinkReady: boolean
+  freeLineId: string | null
+  onToggleFree: (lineId: string) => void
   onAdjust: (lineId: string, delta: number) => void
   onClear: () => void
   onCharge: () => void
   onSetPayment: (amount: number | null, raw: string) => void
-  onNotesChange: (value: string) => void
   onSelectItem: (lineId: string) => void
   onOpenItemModal: (lineId: string, mode: ItemModalMode) => void
 }) {
@@ -976,7 +1125,7 @@ function OrderPanel({
           return (
             <>
               {parentItems.map(item => {
-                const hasDiscount  = hasLineDiscount(item)
+                const hasDiscount  = hasLineDiscount(item) || discountLines.some(d => d.lineId === item.lineId)
                 const isSelected   = item.lineId === selectedLineId
                 const childAddons  = addonsByParent.get(item.lineId) ?? []
 
@@ -997,14 +1146,25 @@ function OrderPanel({
                             {item.variant}
                           </p>
                         )}
-                        {DISCOUNT_KINDS.map(kind => {
-                          const scope = item.discounts?.[kind]
-                          return scope ? (
-                            <p key={kind} className="text-[10px] text-emerald-600 font-semibold mt-0.5 tracking-wide">
-                              {discountBadge(kind, item, scope, 'short')} applied
-                            </p>
-                          ) : null
-                        })}
+                        {lineBadges(discountLines, item, 'short').map(badge => (
+                          <p key={badge.kind} className="text-[10px] text-emerald-600 font-semibold mt-0.5 tracking-wide">
+                            {badge.kind === 'free' ? badge.text : `${badge.text} applied`}
+                          </p>
+                        ))}
+                        {freeDrinkReady && isClassicDrinkLine(item) && (
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); onToggleFree(item.lineId) }}
+                            aria-pressed={freeLineId === item.lineId}
+                            className={`mt-1 inline-flex min-h-8 items-center rounded-full border px-3 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                              freeLineId === item.lineId
+                                ? 'bg-emerald-600 border-emerald-600 text-white'
+                                : 'border-dashed border-emerald-500 text-emerald-700 hover:bg-emerald-50'
+                            }`}
+                          >
+                            {freeLineId === item.lineId ? 'Free ✓' : 'Make free'}
+                          </button>
+                        )}
                         {item.note && (
                           <p className="text-[10px] text-amber-600 font-semibold mt-0.5 tracking-wide truncate">
                             📝 {item.note}
@@ -1107,25 +1267,8 @@ function OrderPanel({
         })()}
       </div>
 
-      {/* Customer name — stored as the sale's notes and printed as "Name" on the receipt */}
-      <div className="px-6 py-2 border-t border-foreground/10 shrink-0">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Customer name…"
-            value={notes}
-            disabled={items.length === 0}
-            maxLength={100}
-            onChange={e => onNotesChange(e.target.value)}
-            className={`w-full border border-foreground/13 rounded-sm px-2.5 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/40 disabled:opacity-30 bg-transparent ${notes.length > 70 ? 'pr-7' : ''}`}
-          />
-          {notes.length > 70 && (
-            <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums pointer-events-none ${notes.length >= 95 ? 'text-red-400' : 'text-foreground/30'}`}>
-              {100 - notes.length}
-            </span>
-          )}
-        </div>
-      </div>
+      {/* Customer name, with loyalty card suggestions and the stamp bar */}
+      {customerNameField}
 
       {/* Footer: discount breakdown + total + payment + actions */}
       <div className="px-6 pt-3 pb-3 border-t border-foreground/10 shrink-0 space-y-2.5">

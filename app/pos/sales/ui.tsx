@@ -153,7 +153,8 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   )
 }
 
-export function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+/** An error with one button: Dismiss, unless `actionLabel` names another action (such as "Try again"). */
+export function ErrorBanner({ message, onDismiss, actionLabel = 'Dismiss' }: { message: string; onDismiss: () => void; actionLabel?: string }) {
   return (
     <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
       <span className="flex items-center gap-2">
@@ -161,7 +162,7 @@ export function ErrorBanner({ message, onDismiss }: { message: string; onDismiss
         {message}
       </span>
       <button type="button" onClick={onDismiss} className="text-[11px] font-bold uppercase tracking-widest text-red-600 hover:text-red-800">
-        Dismiss
+        {actionLabel}
       </button>
     </div>
   )

@@ -7,11 +7,13 @@ import {
   lineDiscountAmount,
   discountRowLabel,
   discountBadge,
+  lineBadges,
   hasLineDiscount,
   buildDiscountLines,
   totalDiscount,
   savedDiscountName,
   pickLineDiscount,
+  withoutGoogleReview,
 } from './discounts'
 
 const item = (over: Partial<OrderItem> & { lineId: string }): OrderItem =>
@@ -174,5 +176,96 @@ describe('pickLineDiscount', () => {
 
   it('does nothing for an unknown line', () => {
     expect(pickLineDiscount(items, 'zzz', 'pwd', 'all')).toBe(items)
+  })
+})
+
+describe('loyalty rewards', () => {
+  const latte = item({ lineId: 'latte', name: 'Spanish Latte', variant: 'hot', price: 130, qty: 2, categoryId: 'espresso' })
+  const mocha = item({ lineId: 'mocha', name: 'Tiramisu', variant: 'ice', price: 160, qty: 1, categoryId: 'signature' })
+  const shot = addon('mocha', 30)
+  const off = { tenLineId: null, freeLineId: null }
+
+  it('takes 10% off one unit of the chosen classic drink, with its add-ons paid', () => {
+    const milk = addon('latte', 20)
+    expect(buildDiscountLines([latte, milk, mocha, shot], { tenLineId: 'latte', freeLineId: null })).toEqual([
+      // 10% of one ₱130 latte; the other latte, the milk and the Tiramisu are paid in full
+      { lineId: 'latte', name: 'Spanish Latte', amount: 13, kind: 'loyalty', scope: 'solo', label: 'Loyalty −10% ×1' },
+    ])
+    expect(buildDiscountLines([{ ...latte, qty: 1 }], { tenLineId: 'latte', freeLineId: null })[0].label).toBe('Loyalty −10%')
+  })
+
+  it('never puts the 10% on a Signature or Matcha Series drink', () => {
+    expect(buildDiscountLines([mocha], { tenLineId: 'mocha', freeLineId: null })).toEqual([])
+  })
+
+  it('is the order’s one 10%: no Google Review anywhere while it is on, and PWD/Senior stays', () => {
+    const both = { ...latte, discounts: { pwd: 'solo' as const, review: 'all' as const } }
+    const reviewed = { ...mocha, discounts: { review: 'solo' as const } }
+    expect(buildDiscountLines([both, reviewed], { tenLineId: 'latte', freeLineId: null }).map(r => r.kind)).toEqual(['pwd', 'loyalty'])
+    expect(buildDiscountLines([both, reviewed], off).map(r => r.kind)).toEqual(['pwd', 'review', 'review'])
+  })
+
+  it('puts the 10% and the free drink on two different units of one line', () => {
+    expect(buildDiscountLines([latte], { tenLineId: 'latte', freeLineId: 'latte' }).map(r => [r.kind, r.amount])).toEqual([
+      ['free', 130],
+      ['loyalty', 13],
+    ])
+  })
+
+  it('makes one unit of an Espresso or Non-Coffee line free, with other discounts on the units still paid', () => {
+    const pwdLatte = { ...latte, discounts: { pwd: 'all' as const } }
+    expect(buildDiscountLines([pwdLatte], { tenLineId: null, freeLineId: 'latte' })).toEqual([
+      { lineId: 'latte', name: 'Spanish Latte', amount: 130, kind: 'free', scope: 'solo', label: 'Loyalty free drink' },
+      // PWD 20% of the one latte still paid
+      { lineId: 'latte', name: 'Spanish Latte', amount: 26, kind: 'pwd', scope: 'all', label: 'PWD Drink −20% ×1' },
+    ])
+  })
+
+  it('never makes a Signature or Matcha Series drink free', () => {
+    expect(buildDiscountLines([mocha], { tenLineId: null, freeLineId: 'mocha' })).toEqual([])
+  })
+
+  it('badges each line from its rows, so a badge never counts the free unit or a replaced Google Review', () => {
+    const both = { ...latte, discounts: { pwd: 'all' as const, review: 'all' as const } }
+    const rows = buildDiscountLines([both], { tenLineId: 'latte', freeLineId: 'latte' })
+    expect(lineBadges(rows, both)).toEqual([
+      { kind: 'free', text: 'Free drink · loyalty' },
+      { kind: 'pwd', text: 'PWD/Senior −20% ×1' },
+      { kind: 'loyalty', text: 'Loyalty −10% ×1' },
+    ])
+    expect(lineBadges(rows, both, 'short').map(b => b.text)).toEqual(['Free drink · loyalty', 'PWD/S −20% ×1', 'Loyalty −10% ×1'])
+  })
+
+  it('badges a line with no loyalty reward as before', () => {
+    const pwd = { ...latte, discounts: { pwd: 'all' as const } }
+    expect(lineBadges(buildDiscountLines([pwd]), pwd).map(b => b.text)).toEqual(['PWD/Senior −20% ×2'])
+    expect(lineBadges(buildDiscountLines([mocha]), mocha)).toEqual([])
+  })
+
+  it('leaves out a discount that comes to ₱0 on an order with no loyalty too', () => {
+    const freebie = item({ lineId: 'water', name: 'Water', price: 0, discounts: { pwd: 'all' } })
+    expect(buildDiscountLines([freebie])).toEqual([])
+  })
+
+  it('gives a single drink that is free no 10% as well, as no unit of it is left to pay', () => {
+    const one = { ...latte, qty: 1 }
+    expect(buildDiscountLines([one], { tenLineId: 'latte', freeLineId: 'latte' }).map(r => r.kind)).toEqual(['free'])
+  })
+
+  it('takes the free unit out of the base, add-ons still paid', () => {
+    expect(lineDiscountBase(latte, 20, 'all', 1)).toBe(150)
+    expect(lineDiscountBase(latte, 20, 'solo', 1)).toBe(140)
+    expect(lineDiscountBase({ ...latte, qty: 1 }, 20, 'solo', 1)).toBe(20)
+  })
+
+  it('takes Google Review off every line when the loyalty 10% is turned on', () => {
+    const lines = [
+      { ...latte, discounts: { pwd: 'solo' as const, review: 'all' as const } },
+      { ...mocha, discounts: { review: 'solo' as const } },
+      shot,
+    ]
+    const next = withoutGoogleReview(lines)
+    expect(next.map(i => i.discounts)).toEqual([{ pwd: 'solo' }, undefined, undefined])
+    expect(lines[1].discounts).toEqual({ review: 'solo' })
   })
 })

@@ -26,12 +26,16 @@ interface DiscountSectionProps {
   lineRows: DiscountLine[]
   /** Tapping the active chip clears that kind; the other scope switches it; the other kind stacks. */
   onPick: (kind: LineDiscountKind, scope: LineDiscountScope) => void
+  /** The loyalty 10% is on the order: one 10% per order, so Google Review can't be added. */
+  reviewLocked: boolean
+  /** 1 when one unit of this line is the loyalty free drink; other discounts cover the rest. */
+  freeUnits: number
 }
 
 // The Discount section of the per-item modal. Stays open after a tap (the modal
 // does not close on pick) so PWD/Senior and the review promo can be stacked and
 // the computation below updates live.
-export default function DiscountSection({ item, addonsTotal, lineRows, onPick }: DiscountSectionProps) {
+export default function DiscountSection({ item, addonsTotal, lineRows, onPick, reviewLocked, freeUnits }: DiscountSectionProps) {
   const current: LineDiscounts | undefined = item.discounts
   return (
     <div className="space-y-3">
@@ -43,7 +47,8 @@ export default function DiscountSection({ item, addonsTotal, lineRows, onPick }:
               key={`${kind}-${scope}`}
               onClick={() => onPick(kind, scope)}
               aria-pressed={active}
-              className={`px-3 py-3 text-sm font-semibold rounded-full border transition-colors whitespace-nowrap ${
+              disabled={kind === 'review' && reviewLocked}
+              className={`px-3 py-3 text-sm font-semibold rounded-full border transition-colors whitespace-nowrap disabled:opacity-35 disabled:cursor-not-allowed ${
                 active
                   ? 'bg-emerald-600 text-white border-emerald-600'
                   : 'border-foreground/15 text-foreground/65 hover:border-emerald-400 hover:text-emerald-600'
@@ -54,11 +59,25 @@ export default function DiscountSection({ item, addonsTotal, lineRows, onPick }:
           )
         })}
       </div>
+      {reviewLocked && (
+        <p className="text-xs text-foreground/50">The loyalty 10% is on this order, so Google Review can’t be added too.</p>
+      )}
       {lineRows.length > 0 ? (
         <div className="space-y-1.5 border-t border-foreground/10 pt-3">
           {lineRows.map(d => {
+            if (d.kind === 'free') {
+              return (
+                <div key={d.kind} className="flex justify-between items-baseline gap-3 text-sm text-emerald-700 font-semibold">
+                  <span>
+                    {d.label}
+                    <span className="text-foreground/45 font-normal"> · one {item.name}</span>
+                  </span>
+                  <span className="tabular-nums shrink-0">−₱{d.amount}</span>
+                </div>
+              )
+            }
             const rate = Math.round(DISCOUNT_RATES[d.kind] * 100)
-            const base = Math.round(lineDiscountBase(item, addonsTotal, d.scope))
+            const base = Math.round(lineDiscountBase(item, addonsTotal, d.scope, freeUnits))
             return (
               <div key={d.kind} className="flex justify-between items-baseline gap-3 text-sm text-emerald-700 font-semibold">
                 <span>

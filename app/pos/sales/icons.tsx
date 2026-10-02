@@ -1,8 +1,8 @@
 import type { SVGProps } from 'react'
 
 // Small stroke icons for the sales screen's action buttons and the POS header's
-// manager lock. Inline SVG rather than emoji so they render identically on
-// every device and inherit the button's text colour.
+// manager lock and loyalty button. Inline SVG rather than emoji so they render
+// identically on every device and inherit the button's text colour.
 
 type IconProps = SVGProps<SVGSVGElement>
 
@@ -113,6 +113,18 @@ export function UnlockIcon(props: IconProps) {
     <Icon {...props}>
       <rect x="4" y="11" width="16" height="10" rx="2" />
       <path d="M8 11V7a4 4 0 0 1 7.75-1.4" />
+    </Icon>
+  )
+}
+
+/** A stamp card: a card with a row of stamps. */
+export function StampCardIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <circle cx="7.5" cy="12" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="16.5" cy="12" r="1.5" />
     </Icon>
   )
 }

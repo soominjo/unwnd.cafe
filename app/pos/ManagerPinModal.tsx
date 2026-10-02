@@ -5,15 +5,29 @@ import PinPad from './PinPad'
 import { PIN_CHECK_MESSAGES, verifyPosPin } from './verifyPosPin'
 
 interface ManagerPinModalProps {
-  /** The PIN was right: show the menu's edit and delete buttons. */
-  onUnlock: () => void
+  /** What the PIN is for, under the title. */
+  hint: string
+  /**
+   * Runs once the PIN is entered: resolves null when it worked, or the message to show.
+   * Defaults to checking the PIN with the POS login route.
+   */
+  onPin?: (pin: string) => Promise<string | null>
+  /** It worked. Not called if the dialog was closed while the PIN was being checked. */
+  onSuccess: () => void
   onClose: () => void
 }
 
-// Asks for the manager PIN before any menu editing unlocks.
-// It is the POS login PIN, checked on the server by the same route as the login.
-export default function ManagerPinModal({ onUnlock, onClose }: ManagerPinModalProps) {
-  // Closed while a PIN was being checked: a right answer arriving afterwards must not unlock.
+/** The default check: the PIN is the POS login PIN, compared on the server. */
+async function checkPosPin(pin: string): Promise<string | null> {
+  const result = await verifyPosPin(pin)
+  return result === 'ok' ? null : PIN_CHECK_MESSAGES[result]
+}
+
+// Asks for the manager PIN, the POS login PIN, before a manager-only step: unlocking menu
+// editing on /pos, or giving and removing loyalty cards. The PIN is always checked on the
+// server, by the login route or by the route that makes the change.
+export default function ManagerPinModal({ hint, onPin = checkPosPin, onSuccess, onClose }: ManagerPinModalProps) {
+  // Closed while a PIN was being checked: a right answer arriving afterwards must not act.
   const closed = useRef(false)
   useEffect(() => {
     closed.current = false
@@ -29,10 +43,9 @@ export default function ManagerPinModal({ onUnlock, onClose }: ManagerPinModalPr
   }, [onClose])
 
   async function check(pin: string): Promise<string | null> {
-    const result = await verifyPosPin(pin)
-    if (result !== 'ok') return PIN_CHECK_MESSAGES[result]
-    if (!closed.current) onUnlock()
-    return null
+    const message = await onPin(pin)
+    if (message === null && !closed.current) onSuccess()
+    return message
   }
 
   return (
@@ -58,7 +71,7 @@ export default function ManagerPinModal({ onUnlock, onClose }: ManagerPinModalPr
           </button>
         </div>
         <PinPad onComplete={check} />
-        <p className="mt-6 text-center text-xs text-cream/45">Same PIN as the POS login. Unlocks menu editing: add, edit and delete items, add or remove categories, and reorder tabs.</p>
+        <p className="mt-6 text-center text-xs text-cream/45">{hint}</p>
       </div>
     </div>
   )

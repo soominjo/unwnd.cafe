@@ -23,7 +23,8 @@ const live: PosMenu = {
 }
 
 // What the browser paints before any script runs.
-const firstPaint = (initialMenu: PosMenu | null) => renderToStaticMarkup(<POSClient initialMenu={initialMenu} />)
+const firstPaint = (initialMenu: PosMenu | null) =>
+  renderToStaticMarkup(<POSClient initialMenu={initialMenu} initialCardHolders={[]} />)
 
 describe('POSClient first paint', () => {
   it('already shows the live menu, so nothing swaps in after a reload', () => {
@@ -58,5 +59,13 @@ describe('POSClient first paint', () => {
   it('offers the Manager unlock only when there is a live menu to edit', () => {
     expect(firstPaint(live)).toContain('>Manager</span>')
     expect(firstPaint(null)).not.toContain('>Manager</span>')
+  })
+
+  it('puts Loyalty in the header between Manager and Sales, with or without the live menu', () => {
+    const html = firstPaint(live)
+    const at = (text: string) => html.indexOf(text)
+    expect(at('>Loyalty</span>')).toBeGreaterThan(at('>Manager</span>'))
+    expect(at('>Loyalty</span>')).toBeLessThan(at('Sales ↗'))
+    expect(firstPaint(null)).toContain('>Loyalty</span>')
   })
 })

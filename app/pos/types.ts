@@ -55,15 +55,25 @@ export interface LineDiscount {
   amount: number
 }
 
+/** Every kind of discount row: the two per-line kinds, plus a loyalty card's 10% and free drink. */
+export type DiscountRowKind = LineDiscountKind | 'loyalty' | 'free'
+
 /**
  * A LineDiscount plus what the live UI needs to render it. `name` is the item's
  * name, `label` the row prefix ("PWD Drink −20% ×1", "Google Review −10%").
  */
 export interface DiscountLine extends LineDiscount {
-  kind: LineDiscountKind
+  kind: DiscountRowKind
   /** How much of the line the row covers. */
   scope: LineDiscountScope
   label: string
+}
+
+/** The loyalty rewards on the order on screen: 10% off every item, and which line has a free unit. */
+/** The loyalty rewards on the order: each is one unit of the classic drink line it names, or null when off. */
+export interface LoyaltyChoice {
+  tenLineId: string | null
+  freeLineId: string | null
 }
 
 export interface SaleItem {

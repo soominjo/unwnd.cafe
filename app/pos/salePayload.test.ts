@@ -44,3 +44,28 @@ describe('buildSalePayload', () => {
     expect('notes' in buildSalePayload({ ...args, notes: '   ' })).toBe(false)
   })
 })
+
+describe('buildSalePayload with a loyalty card', () => {
+  it('links the order to the card holder and lists the rewards used', () => {
+    const body = buildSalePayload({ ...args, loyalty: { memberId: 'kylene-id', rewards: ['ten'] } })
+    expect(body.loyaltyMemberId).toBe('kylene-id')
+    expect(body.loyaltyRewards).toEqual(['ten'])
+  })
+
+  it('leaves loyalty out entirely when no card holder is linked', () => {
+    const body = buildSalePayload({ ...args, loyalty: null })
+    expect('loyaltyMemberId' in body).toBe(false)
+    expect('loyaltyRewards' in body).toBe(false)
+  })
+
+  it('saves the loyalty rows under their receipt names', () => {
+    const rows: DiscountLine[] = [
+      { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'loyalty', scope: 'all', label: 'Loyalty −10% ×2' },
+      { lineId: 'b', name: 'Cafe Latte', amount: 120, kind: 'free', scope: 'solo', label: 'Loyalty free drink' },
+    ]
+    expect(buildSalePayload({ ...args, discountLines: rows }).discounts).toEqual([
+      { lineId: 'a', name: 'Loyalty -10% x2 (Spanish Latte)', amount: 30 },
+      { lineId: 'b', name: 'Loyalty free drink (Cafe Latte)', amount: 120 },
+    ])
+  })
+})

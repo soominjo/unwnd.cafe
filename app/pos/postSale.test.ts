@@ -31,6 +31,11 @@ describe('postSale', () => {
     expect(await postSale(payload, refused)).toEqual({ ok: false, error: 'Invalid sale data' })
   })
 
+  it('passes the server’s code through, for a loyalty card that changed on another device', async () => {
+    const changed = respond(409, JSON.stringify({ success: false, code: 'loyalty-card-changed', error: 'This card has no 10% off ready.' }))
+    expect(await postSale(payload, changed)).toEqual({ ok: false, error: 'This card has no 10% off ready.', code: 'loyalty-card-changed' })
+  })
+
   it('falls back to a generic message when the server gives none', async () => {
     expect(await postSale(payload, respond(500, JSON.stringify({ success: false })))).toEqual({
       ok: false,

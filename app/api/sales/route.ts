@@ -3,6 +3,8 @@ import { getWriteClient } from '@/sanity/lib/writeClient'
 import { client } from '@/sanity/lib/client'
 import { requirePosAuth } from '@/lib/requirePosAuth'
 import { toSaleDiscountDocs } from '@/lib/sales/toSaleDiscountDocs'
+import { LOYALTY_CARD_CHANGED, classicUnitsIn, parseSaleLoyalty, rewardProblem, stampsIn, type CardTotals, type SaleLoyalty } from '@/lib/loyalty'
+import { fetchCardTotals } from '@/lib/loyaltyStore'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +36,9 @@ interface SaleInput {
   subtotal?:     number
   discounts?:    SaleDiscountInput[]
   notes?:        string
+  /** Checked by parseSaleLoyalty, not by isValidSaleInput. */
+  loyaltyMemberId?: unknown
+  loyaltyRewards?:  unknown
 }
 
 function isValidIso(s: string): boolean {
@@ -77,13 +82,45 @@ function isValidSaleInput(body: unknown): body is SaleInput {
     if (typeof i.lineId !== 'string' || i.lineId.length > 100) return false
     if (typeof i.name !== 'string' || i.name.length === 0 || i.name.length > 200) return false
     if (typeof i.price !== 'number' || !Number.isFinite(i.price) || i.price < 0 || i.price > MAX_PRICE) return false
-    if (typeof i.qty !== 'number' || !Number.isFinite(i.qty) || i.qty < 1 || i.qty > MAX_QTY) return false
+    // Whole units only: quantities also count loyalty stamps.
+    if (typeof i.qty !== 'number' || !Number.isInteger(i.qty) || i.qty < 1 || i.qty > MAX_QTY) return false
     if (typeof i.variant === 'string' && i.variant.length > 100) return false
     if (i.note !== undefined && (typeof i.note !== 'string' || i.note.length > 200)) return false
     if (i.parentLineId !== undefined && (typeof i.parentLineId !== 'string' || i.parentLineId.length > 100)) return false
     if (i.categoryId !== undefined && (typeof i.categoryId !== 'string' || i.categoryId.length > 100)) return false
     return (typeof i.variant === 'string' || i.variant === null)
   })
+}
+
+/**
+ * A linked card must still exist, and any reward used must really be ready, so two devices
+ * can't spend the same reward. This order's stamps count straight away. Null when the sale
+ * can be saved; otherwise the reply. A card that changed carries LOYALTY_CARD_CHANGED, so
+ * the POS reads the cards again and keeps the order on screen.
+ */
+async function checkSaleLoyalty(loyalty: SaleLoyalty, items: SaleItemInput[]): Promise<NextResponse | null> {
+  // Each reward goes on its own unit of a classic (Espresso or Non-Coffee) drink.
+  if (classicUnitsIn(items) < loyalty.rewards.length) {
+    return NextResponse.json(
+      { success: false, error: 'Each loyalty reward needs its own Espresso or Non-Coffee drink in the order.' },
+      { status: 400 },
+    )
+  }
+  let totals: CardTotals | null
+  try {
+    totals = await fetchCardTotals(loyalty.memberId)
+  } catch (error) {
+    console.error('Loyalty card could not be checked for a sale', { memberId: loyalty.memberId }, error)
+    return NextResponse.json(
+      { success: false, error: 'Could not check the loyalty card. Try again, or unlink it to charge without stamps.' },
+      { status: 503 },
+    )
+  }
+  if (!totals) {
+    return NextResponse.json({ success: false, code: LOYALTY_CARD_CHANGED, error: 'This loyalty card was removed.' }, { status: 409 })
+  }
+  const problem = rewardProblem(totals, stampsIn(items), loyalty.rewards)
+  return problem ? NextResponse.json({ success: false, code: LOYALTY_CARD_CHANGED, error: problem }, { status: 409 }) : null
 }
 
 export async function POST(request: NextRequest) {
@@ -105,8 +142,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid sale data' }, { status: 400 })
   }
 
+  const loyalty = parseSaleLoyalty(body)
+  if (loyalty === 'invalid') {
+    return NextResponse.json({ success: false, error: 'Invalid sale data' }, { status: 400 })
+  }
+
   const { total, paymentAmount, items, notes, subtotal, discounts } = body
   const change = paymentAmount - total
+
+  if (loyalty) {
+    const refused = await checkSaleLoyalty(loyalty, items)
+    if (refused) return refused
+  }
 
   try {
     const writeClient = getWriteClient()
@@ -118,6 +165,7 @@ export async function POST(request: NextRequest) {
       ...(subtotal !== undefined ? { subtotal } : {}),
       ...(notes ? { notes: notes.trim() } : {}),
       ...(discounts && discounts.length > 0 ? { discounts: toSaleDiscountDocs(discounts) } : {}),
+      ...(loyalty ? { loyaltyMemberId: loyalty.memberId, loyaltyRewards: loyalty.rewards } : {}),
       items: items.map((item) => ({
         _type:   'saleItem',
         _key:    item.lineId,
@@ -132,7 +180,8 @@ export async function POST(request: NextRequest) {
       })),
     })
     return NextResponse.json({ success: true, id: doc._id })
-  } catch {
+  } catch (error) {
+    console.error('Sale could not be saved', error)
     return NextResponse.json({ success: false, error: 'Failed to save sale.' }, { status: 500 })
   }
 }

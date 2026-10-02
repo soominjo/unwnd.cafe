@@ -1,9 +1,19 @@
 'use client'
 
 import { variantClass, groupOrderItems } from './utils'
-import { DISCOUNT_KINDS, discountBadge } from './discounts'
+import { lineBadges } from './discounts'
 import QtyBadge from './QtyBadge'
+import LoyaltyBar from './LoyaltyBar'
+import { LOYALTY_CARD_SIZE } from '@/lib/loyalty'
 import type { OrderItem, DiscountLine } from './types'
+
+/** A linked loyalty card, shown to the customer with the stamps this order adds. */
+export interface ReviewLoyalty {
+  name: string
+  cardNumber: number
+  savedOnCard: number
+  orderStamps: number
+}
 
 /** Which checkout button was tapped: a plain completion, or one that also prints the customer's receipt. */
 export type CheckoutAction = 'plain' | 'receipt'
@@ -17,6 +27,7 @@ interface OrderReviewModalProps {
   discountAmount: number
   payment: number | null
   notes: string
+  loyalty: ReviewLoyalty | null
   /** The checkout being saved, or null. Every button locks while it saves. */
   pendingAction: CheckoutAction | null
   submitError: string | null
@@ -38,6 +49,7 @@ export default function OrderReviewModal({
   discountAmount,
   payment,
   notes,
+  loyalty,
   pendingAction,
   submitError,
   onCancel,
@@ -76,6 +88,22 @@ export default function OrderReviewModal({
           </button>
         </div>
 
+        {/* A linked loyalty card: the customer sees the stamps this order adds */}
+        {loyalty && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-6 py-3 border-b border-foreground/10 bg-emerald-50/40 shrink-0">
+            <p className="text-sm font-semibold text-foreground">Loyalty card No. {loyalty.cardNumber}</p>
+            <div className="flex-1 min-w-40 max-w-xs">
+              <LoyaltyBar saved={loyalty.savedOnCard} pending={loyalty.orderStamps} />
+            </div>
+            <p className="text-sm text-foreground/60 tabular-nums">
+              {loyalty.orderStamps > 0 && (
+                <span className="font-semibold text-foreground">+{loyalty.orderStamps} stamp{loyalty.orderStamps === 1 ? '' : 's'} this order · </span>
+              )}
+              {Math.min(loyalty.savedOnCard + loyalty.orderStamps, LOYALTY_CARD_SIZE)} of {LOYALTY_CARD_SIZE}
+            </p>
+          </div>
+        )}
+
         {/* Scrollable body: item list + notes */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-3">
           <div className="divide-y divide-foreground/[0.07]">
@@ -95,12 +123,9 @@ export default function OrderReviewModal({
                             {item.variant}
                           </span>
                         )}
-                        {DISCOUNT_KINDS.map(kind => {
-                          const scope = item.discounts?.[kind]
-                          return scope ? (
-                            <span key={kind} className="text-xs text-emerald-600 font-semibold tracking-wide">{discountBadge(kind, item, scope)}</span>
-                          ) : null
-                        })}
+                        {lineBadges(discountLines, item).map(badge => (
+                          <span key={badge.kind} className="text-xs text-emerald-600 font-semibold tracking-wide">{badge.text}</span>
+                        ))}
                       </div>
                       {item.note && (
                         <p className="text-xs text-amber-600 font-semibold tracking-wide mt-1">📝 {item.note}</p>
