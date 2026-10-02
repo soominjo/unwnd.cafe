@@ -189,6 +189,11 @@ export default function SalesClient() {
     setConfirmId(null)
     try {
       const res = await fetch(`/api/sales/${id}`, { method: 'DELETE' })
+      // Already deleted, on another device say: refresh so its row goes too.
+      if (res.status === 404) {
+        refreshCurrent()
+        return
+      }
       const data = await res.json()
       if (!res.ok || !data.success) {
         setError(data.error ?? 'Failed to delete order.')

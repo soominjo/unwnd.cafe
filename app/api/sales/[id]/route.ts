@@ -24,7 +24,11 @@ export async function DELETE(
 
   try {
     const writeClient = getWriteClient()
-    await writeClient.delete(id)
+    // Orders only: the query keeps this route from deleting a loyalty card holder or any other document.
+    const result = await writeClient.delete({ query: '*[_type == "sale" && _id == $id]', params: { id } })
+    if (result.results.length === 0) {
+      return NextResponse.json({ success: false, error: 'Order not found' }, { status: 404 })
+    }
     return NextResponse.json({ success: true })
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to delete order.' }, { status: 500 })
@@ -63,6 +67,10 @@ export async function PATCH(
   if (body.markCompleted === true) {
     try {
       const writeClient = getWriteClient()
+      const order = await writeClient.getDocument<{ _type: string }>(id)
+      if (!order || order._type !== 'sale') {
+        return NextResponse.json({ success: false, error: 'Order not found' }, { status: 404 })
+      }
       await writeClient.patch(id).set({ isCompleted: true }).commit()
       return NextResponse.json({ success: true })
     } catch {
@@ -80,11 +88,12 @@ export async function PATCH(
     const writeClient = getWriteClient()
 
     const doc = await writeClient.getDocument<{
+      _type: string
       items: Array<{ _key: string; price: number; qty: number }>
       paymentAmount: number
     }>(id)
 
-    if (!doc) {
+    if (!doc || doc._type !== 'sale') {
       return NextResponse.json({ success: false, error: 'Order not found' }, { status: 404 })
     }
 
