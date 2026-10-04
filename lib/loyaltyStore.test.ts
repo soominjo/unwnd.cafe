@@ -43,6 +43,25 @@ describe('fetchCardHolders', () => {
   })
 })
 
+describe('fetchCardHolders, the stamp rules by date', () => {
+  it('asks for each linked sale’s date and when each of its lines was added', async () => {
+    read.mockImplementation(async (query: string) => (query.includes('"loyaltyMember"') ? members : []))
+    await fetchCardHolders()
+    const salesQuery = read.mock.calls.map(call => call[0] as string).find(query => query.includes('"sale"'))
+    expect(salesQuery).toContain('_createdAt')
+    expect(salesQuery).toContain('addedAt')
+  })
+
+  it('counts an Espresso from Oct 5 as half a stamp, and one from before as none', async () => {
+    const sales = [
+      { _createdAt: '2026-10-04T10:00:00Z', loyaltyMemberId: 'ben', loyaltyRewards: null, items: [{ lineId: 'e', qty: 1, categoryId: 'espresso' }] },
+      { _createdAt: '2026-10-05T10:00:00Z', loyaltyMemberId: 'ben', loyaltyRewards: null, items: [{ lineId: 'f', qty: 1, categoryId: 'espresso' }] },
+    ]
+    read.mockImplementation(async (query: string) => (query.includes('"loyaltyMember"') ? members : sales))
+    expect((await fetchCardHolders()).find(h => h._id === 'ben')?.card.earned).toBe(0.5)
+  })
+})
+
 describe('fetchCardTotals', () => {
   it('counts one card holder’s sales, or gives null when there is no such card holder', async () => {
     read.mockResolvedValueOnce({ exists: true, sales: linkedSales.slice(0, 2) })

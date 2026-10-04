@@ -20,7 +20,7 @@ export interface ReceiptChoice extends ReceiptVersion {
   versions?: ReceiptVersion[]
 }
 
-/** A print button of its own, e.g. the receipt alone or both tickets. */
+/** A print button of its own, e.g. the kitchen ticket or the receipt. */
 export interface ReceiptPrint {
   label: string
   /** What the button prints, which can be more than the preview shows. */
@@ -41,8 +41,9 @@ interface ReceiptPreviewModalProps {
    */
   receiptPdf?: ReceiptBlock[]
   /**
-   * Print buttons in place of Print and Download PDF, each printing its own tickets: after a sale,
-   * the receipt alone or both. The preview shows `blocks`.
+   * Print buttons in place of Print and Download PDF, each printing its own ticket: after a sale,
+   * the kitchen ticket and the receipt. The preview stays open after a print, so the other can
+   * be printed too, and marks each one printed; ✕ closes it. The preview shows `blocks`.
    */
   prints?: ReceiptPrint[]
   /** A line under the title, such as that the order is saved and closing this skips printing. */
@@ -71,12 +72,14 @@ export default function ReceiptPreviewModal({ blocks: onlyBlocks, choices, pdfTi
   const [chosen, setChosen] = useState(0)
   // Kept across choices that share versions, such as the staff ticket and both.
   const [version, setVersion] = useState(0)
+  // The print buttons of a sale already printed (by place): each can be printed again.
+  const [printed, setPrinted] = useState<ReadonlySet<number>>(() => new Set())
   const versions = choices?.[chosen]?.versions
   // What is previewed is what prints, unless the preview has print buttons of its own.
   const blocks = shownBlocks(onlyBlocks, choices, chosen, version)
   const printButtons: ReceiptPrint[] = prints ?? [{ label: '🖶 Print to Thermal Printer', blocks }]
   // After a sale this is the last step, so only ✕ closes it, never a stray tap beside it; and
-  // nothing closes it while a print is being prepared, which closes it itself once handed over.
+  // nothing closes it while a print is being prepared.
   const closesOnBackdrop = !prints && pending === null
 
   async function handleDownloadPdf() {
@@ -99,7 +102,9 @@ export default function ReceiptPreviewModal({ blocks: onlyBlocks, choices, pdfTi
     setError(null)
     try {
       await printViaRawBT(printButtons[index].blocks)
-      onClose()
+      // A sale's prints stay open for the other ticket; any other print is done.
+      if (prints) setPrinted(done => new Set(done).add(index))
+      else onClose()
     } catch (err) {
       console.error('Thermal print failed', err)
       setError('Could not prepare the receipt for printing. Try again.')
@@ -122,9 +127,9 @@ export default function ReceiptPreviewModal({ blocks: onlyBlocks, choices, pdfTi
           <button
             onClick={onClose}
             disabled={pending !== null}
-            aria-label={prints ? 'Close without printing' : 'Close'}
-            title={prints ? 'Close without printing' : 'Close'}
-            className="text-foreground/50 hover:text-foreground text-xl leading-none w-8 h-8 flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label={prints ? 'Done: next order' : 'Close'}
+            title={prints ? 'Done: next order' : 'Close'}
+            className="text-foreground/60 hover:text-foreground text-xl leading-none w-10 h-10 -mr-2 flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             ✕
           </button>
@@ -183,11 +188,21 @@ export default function ReceiptPreviewModal({ blocks: onlyBlocks, choices, pdfTi
                 disabled={pending !== null}
                 className={`${PRINT_BUTTON} ${i === 0 ? MAIN_PRINT : OTHER_PRINT}`}
               >
-                {pending === i ? 'Preparing receipt…' : print.label}
+                {pending === i ? 'Preparing…' : print.label}
+                {printed.has(i) && pending !== i && (
+                  <span className="ml-2">
+                    <span className="sr-only">, </span>✓ Printed
+                  </span>
+                )}
               </button>
               {print.hint && <p className="mt-1 text-[10px] text-foreground/50 text-center">{print.hint}</p>}
             </div>
           ))}
+          {prints && (
+            <p className="sr-only" aria-live="polite">
+              {printButtons.filter((_, i) => printed.has(i)).map(print => `${print.label}: sent to the printer.`).join(' ')}
+            </p>
+          )}
           {!prints && (
             <button
               onClick={handleDownloadPdf}

@@ -34,6 +34,16 @@ describe('LoyaltyBar', () => {
     expect(html).toContain('>FREE<')
     expect(html).toContain('plus 2 on a new card')
   })
+
+  it('fills half a step for a half stamp, and says the halves aloud', () => {
+    // 5½ saved, then this order's 1: the 6th step is half saved and half new, the 7th half new.
+    const html = renderToStaticMarkup(<LoyaltyBar saved={5.5} pending={1} />)
+    expect(html).toContain('data-step="saved-new"')
+    expect(html).toContain('data-step="new-empty"')
+    expect(html.match(/data-step="saved"/g)).toHaveLength(5)
+    expect(html).toContain('aria-label="5½ of 11 stamps, plus 1 from this order"')
+    expect(renderToStaticMarkup(<LoyaltyBar saved={10} pending={1.5} />)).toContain('plus ½ on a new card')
+  })
 })
 
 describe('CustomerNameField', () => {
@@ -66,17 +76,25 @@ describe('CustomerNameField', () => {
     expect(field({ value: 'Kylene', linked: kylene, orderStamps: 1 })).toContain('Use 10% off')
   })
 
-  it('after “Use 10% off”, shows the order’s classic drinks to pick one', () => {
+  it('after “Use 10% off”, shows the order’s items it can go on, to pick one', () => {
     const html = field({ value: 'Kylene', linked: kylene, orderStamps: 1, ten: ten({ choosing: true, lines: [latte, chocolate] }) })
-    expect(html).toContain('10% off which drink?')
+    expect(html).toContain('10% off which item?')
     expect(html).toContain('>Cafe Latte · Hot<')
     expect(html).toContain('>Chocolate · Iced<')
     expect(html).not.toContain('Use 10% off')
   })
 
-  it('asks the customer to add a classic drink when the order has none', () => {
+  it('asks the customer to add an item the 10% can go on when the order has none', () => {
     const html = field({ value: 'Kylene', linked: kylene, orderStamps: 1, ten: ten({ choosing: true }) })
-    expect(html).toContain('The 10% off is for one Espresso or Non-Coffee drink. Ask the customer to add one to use it.')
+    expect(html).toContain('The 10% off is for one Espresso, Non-Coffee, Waffle or Snack item. Ask the customer to add one to use it.')
+  })
+
+  it('writes half stamps as ½: on a suggestion, on the card and for this order', () => {
+    expect(field({ value: 'Han', holders: [holder('h', 'Hana', 7, 6.5)] })).toContain('Hana · No. 7 · 6½ stamps')
+    const html = field({ value: 'Kylene', linked: kylene, orderStamps: 1.5 })
+    expect(html).toContain('+1½ stamps this order')
+    expect(html).toContain('6½/11')
+    expect(html).toContain('4½ more for a free drink')
   })
 
   it('shows which drink has the 10% off', () => {
@@ -109,8 +127,10 @@ describe('CustomerNameField', () => {
     expect(html).toContain('+2 more')
   })
 
-  it('says no stamps come from this order, not that the card has none', () => {
-    expect(field({ value: 'Kylene', linked: kylene, orderStamps: 0 })).toContain('No stamps from this order yet')
+  it('says no stamps come from this order, not that the card has none, and what earns them now', () => {
+    expect(field({ value: 'Kylene', linked: kylene, orderStamps: 0 })).toContain(
+      'No stamps from this order yet: Signature, Matcha Series and Meal items earn 1, Espresso, Non-Coffee, Waffle and Snack items ½.',
+    )
   })
 
   it('shows a saved order’s name fixed while items are added to it: no typing, no unlink', () => {

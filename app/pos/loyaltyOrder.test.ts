@@ -10,6 +10,9 @@ const holder = (id: string, name: string, earned: number, usedTen = 0, usedFree 
 const signature: OrderItem = { lineId: 'white-mocha-americano__hot', name: 'White Mocha Americano', variant: 'hot', price: 130, qty: 1, categoryId: 'signature' }
 const latte: OrderItem = { lineId: 'cafe-latte__hot', name: 'Cafe Latte', variant: 'hot', price: 110, qty: 1, categoryId: 'espresso' }
 const chocolate: OrderItem = { lineId: 'chocolate__ice', name: 'Chocolate', variant: 'ice', price: 120, qty: 1, categoryId: 'non-coffee' }
+const waffle: OrderItem = { lineId: 'classic-waffle__fixed', name: 'Classic Waffle', variant: null, price: 150, qty: 1, categoryId: 'waffle' }
+const fries: OrderItem = { lineId: 'fries__fixed', name: 'Fries', variant: null, price: 90, qty: 1, categoryId: 'snack' }
+const riceBowl: OrderItem = { lineId: 'chicken-rice__fixed', name: 'Chicken Rice Bowl', variant: null, price: 180, qty: 1, categoryId: 'meal' }
 // Kylene is on 5 stamps: this order's Signature drink is her sixth, so her 10% is ready.
 const kylene = holder('k', 'Kylene', 5)
 // Ana's card is full: her free drink is ready, and a 10% she has not used.
@@ -28,9 +31,10 @@ describe('resolveLoyaltyOrder', () => {
   })
 
   it('counts this order’s stamps on the card, so a reward can be used on the order that earns it', () => {
+    // The Signature drink is a stamp and the Cafe Latte half of one: 5 + 1½.
     const order = resolve({})
-    expect(order.orderStamps).toBe(1)
-    expect(order.card?.onCard).toBe(6)
+    expect(order.orderStamps).toBe(1.5)
+    expect(order.card?.onCard).toBe(6.5)
     expect(order.card?.tenReady).toBe(1)
   })
 
@@ -85,6 +89,13 @@ describe('resolveLoyaltyOrder', () => {
     const twoLattes = [{ ...latte, qty: 2 }]
     expect(resolve({ ...asAna, items: twoLattes, picked: both, blocked: ['ten'] })).toMatchObject({ applied: { tenLineId: null, freeLineId: latte.lineId }, rewards: ['free'] })
     expect(resolve({ ...asAna, items: twoLattes, picked: both, blocked: ['free'] })).toMatchObject({ applied: { tenLineId: latte.lineId, freeLineId: null }, rewards: ['ten'] })
+  })
+
+  it('offers the 10% on a Waffle or Snack too, never on a Meal, and keeps the free drink for a classic drink', () => {
+    expect(resolve({ items: [signature, waffle, fries, riceBowl] }).tenLines.map(l => l.lineId)).toEqual([waffle.lineId, fries.lineId])
+    const order = resolve({ ...asAna, items: [waffle], picked: { tenLineId: waffle.lineId, freeLineId: waffle.lineId } })
+    expect(order.applied).toEqual({ tenLineId: waffle.lineId, freeLineId: null })
+    expect(order.rewards).toEqual(['ten'])
   })
 
   it('applies nothing without a linked card, and never a reward on a Signature line', () => {

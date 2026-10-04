@@ -4,10 +4,22 @@
 
 export const LOYALTY_CARD_SIZE = 11
 export const LOYALTY_TEN_OFF_AT = 6
-/** Each drink from these categories earns one stamp, hot or iced. */
-export const STAMP_CATEGORY_IDS: readonly string[] = ['signature', 'matcha-series']
-/** The classic drinks: both rewards (10% off at stamp 6, free at 11) go on one unit of one of these. */
+/** When today's stamp rules start: Oct 5, 2026, 12:00 AM in Manila. */
+export const STAMP_RULES_FROM = '2026-10-04T16:00:00Z'
+// What one item earns, hot or iced: a whole stamp, or half (two half-stamp items make one).
+// Add-ons and any other category earn none.
+const STAMPS_PER_ITEM = new Map<string, number>([
+  ['signature', 1], ['matcha-series', 1], ['meal', 1],
+  ['espresso', 0.5], ['non-coffee', 0.5], ['waffle', 0.5], ['snack', 0.5],
+])
+// Before STAMP_RULES_FROM: only Signature and Matcha Series earned, a stamp each. Orders from
+// then keep counting that way, so no card changed when the rules did.
+const STAMPS_PER_ITEM_BEFORE = new Map<string, number>([['signature', 1], ['matcha-series', 1]])
+const STAMP_RULES_FROM_MS = Date.parse(STAMP_RULES_FROM)
+/** The classic drinks: the free drink (at stamp 11) goes on one unit of one of these. */
 export const CLASSIC_DRINK_CATEGORY_IDS: readonly string[] = ['espresso', 'non-coffee']
+/** What the 10% off (at stamp 6) can go on: one unit of a classic drink, a Waffle or a Snack. */
+export const TEN_OFF_CATEGORY_IDS: readonly string[] = ['espresso', 'non-coffee', 'waffle', 'snack']
 
 export type LoyaltyReward = 'ten' | 'free'
 
@@ -18,6 +30,8 @@ export interface StampLine {
   categoryId?: string | null
   parentLineId?: string
   isAddon?: boolean
+  /** When a line was added to a saved order (Add items): it counts by the rules of that time. */
+  addedAt?: string | null
 }
 
 export interface CardTotals {
@@ -52,9 +66,16 @@ function isAddonLine(line: StampLine): boolean {
   return Boolean(line.isAddon || line.parentLineId || line.lineId.startsWith('addon__'))
 }
 
-export function stampsIn(lines: readonly StampLine[]): number {
+/** What one item of a category earns, by the rules of when it was ordered; the order on screen has no date yet. */
+function stampsPerItem(categoryId: string, orderedAt: string | null | undefined): number {
+  const before = orderedAt != null && Date.parse(orderedAt) < STAMP_RULES_FROM_MS
+  return (before ? STAMPS_PER_ITEM_BEFORE : STAMPS_PER_ITEM).get(categoryId) ?? 0
+}
+
+/** The stamps an order's lines earn; a line added to it later counts from when it was added. */
+export function stampsIn(lines: readonly StampLine[], orderedAt?: string | null): number {
   return lines.reduce(
-    (n, l) => n + (!isAddonLine(l) && l.categoryId && STAMP_CATEGORY_IDS.includes(l.categoryId) ? l.qty : 0),
+    (n, l) => n + (isAddonLine(l) || !l.categoryId ? 0 : stampsPerItem(l.categoryId, l.addedAt ?? orderedAt) * l.qty),
     0,
   )
 }
@@ -63,9 +84,25 @@ export function isClassicDrinkLine(line: StampLine): boolean {
   return !isAddonLine(line) && Boolean(line.categoryId && CLASSIC_DRINK_CATEGORY_IDS.includes(line.categoryId))
 }
 
-/** How many classic drinks the order has: each reward takes one. */
+/** How many classic drinks the order has: the free drink takes one. */
 export function classicUnitsIn(lines: readonly StampLine[]): number {
   return lines.reduce((n, l) => n + (isClassicDrinkLine(l) ? l.qty : 0), 0)
+}
+
+export function isTenOffLine(line: StampLine): boolean {
+  return !isAddonLine(line) && Boolean(line.categoryId && TEN_OFF_CATEGORY_IDS.includes(line.categoryId))
+}
+
+/** What the routes answer when an order's rewards have no item of their own to go on. */
+export const REWARDS_NEED_ITEMS =
+  'Each loyalty reward needs its own item: an Espresso or Non-Coffee drink for the free drink, and an Espresso, Non-Coffee, Waffle or Snack item for the 10%.'
+
+/** Whether the order has an item for each reward it uses: a classic drink for the free one, and another unit the 10% can go on. */
+export function rewardsFitOrder(lines: readonly StampLine[], rewards: readonly string[]): boolean {
+  const free = rewards.includes('free') ? 1 : 0
+  if (free > classicUnitsIn(lines)) return false
+  const tenOffUnits = lines.reduce((n, l) => n + (isTenOffLine(l) ? l.qty : 0), 0)
+  return !rewards.includes('ten') || tenOffUnits - free >= 1
 }
 
 // Every 11 stamps fill a card and the next ones start a new card. Each card unlocks one
@@ -84,10 +121,10 @@ export function cardState(totals: CardTotals): LoyaltyCard {
 }
 
 export function cardTotals(
-  sales: readonly { items?: readonly StampLine[] | null; loyaltyRewards?: readonly string[] | null }[],
+  sales: readonly { _createdAt?: string | null; items?: readonly StampLine[] | null; loyaltyRewards?: readonly string[] | null }[],
 ): CardTotals {
   return sales.reduce<CardTotals>(
-    (t, sale) => addOrderToTotals(t, stampsIn(sale.items ?? []), sale.loyaltyRewards ?? []),
+    (t, sale) => addOrderToTotals(t, stampsIn(sale.items ?? [], sale._createdAt), sale.loyaltyRewards ?? []),
     { earned: 0, usedTen: 0, usedFree: 0 },
   )
 }
@@ -145,17 +182,35 @@ export function isNearMiss(typedKey: string, savedKey: string): boolean {
   return editDistance(typedKey, savedKey) <= limit
 }
 
-export function nextMilestone(onCard: number): string {
-  if (onCard < LOYALTY_TEN_OFF_AT) return `${LOYALTY_TEN_OFF_AT - onCard} more for 10% off`
-  return `${LOYALTY_CARD_SIZE - onCard} more for a free drink`
+/** A stamp count as the card shows it, a half as ½: "6", "6½", "½". */
+export function formatStamps(n: number): string {
+  const whole = Math.floor(n)
+  if (n - whole < 0.5) return String(whole)
+  return whole > 0 ? `${whole}½` : '½'
 }
 
-export type BarStep = 'saved' | 'new' | 'empty'
+/** "½ stamp", "1 stamp", "1½ stamps". */
+export function stampCount(n: number): string {
+  return `${formatStamps(n)} ${n > 0 && n <= 1 ? 'stamp' : 'stamps'}`
+}
+
+export function nextMilestone(onCard: number): string {
+  if (onCard < LOYALTY_TEN_OFF_AT) return `${formatStamps(LOYALTY_TEN_OFF_AT - onCard)} more for 10% off`
+  return `${formatStamps(LOYALTY_CARD_SIZE - onCard)} more for a free drink`
+}
+
+export type BarHalf = 'saved' | 'new' | 'empty'
+
+/** One step of the stamp bar, by halves: a half stamp fills one. */
+export interface BarStep {
+  first: BarHalf
+  second: BarHalf
+}
 
 /** The stamp bar's 11 steps: stamps already saved, then this order's, then the rest. */
 export function barSteps(saved: number, pending: number): { steps: BarStep[]; overflow: number } {
-  const steps = Array.from({ length: LOYALTY_CARD_SIZE }, (_, i): BarStep =>
-    i < saved ? 'saved' : i < saved + pending ? 'new' : 'empty')
+  const half = (h: number): BarHalf => (h < saved * 2 ? 'saved' : h < (saved + pending) * 2 ? 'new' : 'empty')
+  const steps = Array.from({ length: LOYALTY_CARD_SIZE }, (_, i): BarStep => ({ first: half(2 * i), second: half(2 * i + 1) }))
   return { steps, overflow: Math.max(0, saved + pending - LOYALTY_CARD_SIZE) }
 }
 

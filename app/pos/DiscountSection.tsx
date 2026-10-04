@@ -9,11 +9,9 @@ import {
   lineDiscountBase,
 } from './discounts'
 
-// A 2 × 2 grid: kinds across, scopes down — ALL on the first row, SOLO on the
-// second — so the two chips for one kind sit in the same column.
+// SOLO only, side by side: each discount covers one unit of the line (one PWD/Senior customer,
+// one review). Lines saved with ALL on older orders keep their rows; the POS no longer offers it.
 const CHIPS: { kind: LineDiscountKind; scope: LineDiscountScope }[] = [
-  { kind: 'pwd', scope: 'all' },
-  { kind: 'review', scope: 'all' },
   { kind: 'pwd', scope: 'solo' },
   { kind: 'review', scope: 'solo' },
 ]
@@ -24,7 +22,7 @@ interface DiscountSectionProps {
   addonsTotal: number
   /** This line's rows from the order breakdown — label and peso amount for each kind on it. */
   lineRows: DiscountLine[]
-  /** Tapping the active chip clears that kind; the other scope switches it; the other kind stacks. */
+  /** Tapping the active chip clears that kind; the other kind stacks. */
   onPick: (kind: LineDiscountKind, scope: LineDiscountScope) => void
   /** The loyalty 10% is on the order: one 10% per order, so Google Review can't be added. */
   reviewLocked: boolean

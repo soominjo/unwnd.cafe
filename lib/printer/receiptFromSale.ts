@@ -1,7 +1,7 @@
 import type { Sale } from '@/app/pos/types'
 import type { SalePayload } from '@/app/pos/salePayload'
 import { saleRounds } from '@/lib/sales/rounds'
-import { buildReceiptDocument, receiptThenStaff, type ReceiptAudience, type ReceiptBlock, type ReceiptDiscountInput } from './receiptDocument'
+import { buildReceiptDocument, type ReceiptAudience, type ReceiptBlock, type ReceiptDiscountInput } from './receiptDocument'
 
 /**
  * What a staff ticket covers: the whole order, or only the items added to it last (Add items
@@ -73,24 +73,22 @@ export function buildCheckoutReceiptBlocks(payload: SalePayload, savedAt: Date, 
   })
 }
 
-/** What the preview after a sale offers to print: the customer's receipt alone, or both tickets. */
+/** What the preview after a sale offers to print, each on its own: the customer's receipt and the kitchen ticket. */
 export interface SalePrints {
   receipt: ReceiptBlock[]
-  /** The receipt, a tear line, then the staff ticket below it, in one print. */
-  both: ReceiptBlock[]
+  /** The staff ticket for the kitchen: items only, no prices. */
+  kitchen: ReceiptBlock[]
 }
 
-/** "Complete + Print": the receipt of a checkout just saved, or both with its staff ticket below. */
+/** "Complete + Print": the receipt and the kitchen ticket of a checkout just saved. */
 export function buildCheckoutPrints(payload: SalePayload, savedAt: Date): SalePrints {
-  const receipt = buildCheckoutReceiptBlocks(payload, savedAt)
-  return { receipt, both: receiptThenStaff(receipt, buildCheckoutReceiptBlocks(payload, savedAt, 'kitchen')) }
+  return { receipt: buildCheckoutReceiptBlocks(payload, savedAt), kitchen: buildCheckoutReceiptBlocks(payload, savedAt, 'kitchen') }
 }
 
 /**
- * "Save + Print" after Add items: the whole order's receipt, or both with a staff ticket of only
- * the items just added below it, so the bar makes only those.
+ * "Save + Print" after Add items: the whole order's receipt, and a kitchen ticket of only the
+ * items just added, so the bar makes only those.
  */
 export function buildAddedItemsPrints(sale: Sale): SalePrints {
-  const receipt = buildReceiptBlocksFromSale(sale, 'customer')
-  return { receipt, both: receiptThenStaff(receipt, buildReceiptBlocksFromSale(sale, 'kitchen', 'latest')) }
+  return { receipt: buildReceiptBlocksFromSale(sale, 'customer'), kitchen: buildReceiptBlocksFromSale(sale, 'kitchen', 'latest') }
 }

@@ -151,3 +151,7 @@ jsdom click-throughs run from the scratchpad).
     address and the notice that came with it.
   - Left for the owner: the POS reads the menu once per page load, and staying on the POS means a
     price changed in Studio reaches it on the next reload.
+- [x] 12. Fourth round (owner, 2026-10-04): the checkout preview prints "Print for kitchen" (the
+  kitchen ticket) and "Print receipt" each on its own, stays open after a print (marked
+  "✓ Printed"), and ✕ goes on to the next order; the Discount panel offers SOLO only. Stamps
+  and the 10% changed too: see the loyalty plan (2026-10-02-loyalty-card-holders.md).

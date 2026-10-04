@@ -8,16 +8,16 @@ import type {
   OrderItem,
 } from './types'
 import { isAddonLine } from './utils'
-import { isClassicDrinkLine } from '@/lib/loyalty'
+import { isClassicDrinkLine, isTenOffLine } from '@/lib/loyalty'
 
 // Discount rules. Two kinds — the statutory PWD/Senior 20% and the Google Review
 // 10% promo — which the owner allows to stack. Each kind is applied per line,
 // to ALL of its units or SOLO to one. Every row is computed on the undiscounted
 // base, so each row on a receipt reads as a plain percentage of what it covers.
 //
-// A loyalty card adds two rewards, each on one unit of a classic (Espresso or
-// Non-Coffee) drink the cashier picks, with any add-ons on it paid: 10% off, and a
-// free drink. The loyalty 10% is the order's one 10%, so no line carries Google
+// A loyalty card adds two rewards, each on one unit of a line the cashier picks, with
+// any add-ons on it paid: 10% off an Espresso, Non-Coffee, Waffle or Snack item, and a
+// free classic (Espresso or Non-Coffee) drink. The loyalty 10% is the order's one 10%, so no line carries Google
 // Review while it is on. Other discounts on a line with a free unit are worked out
 // on the units still paid.
 
@@ -160,7 +160,7 @@ function rateRow(item: OrderItem, addons: number, kind: LineDiscountKind, scope:
   }
 }
 
-/** The loyalty 10%: one unit of the line's drink, its add-ons paid. */
+/** The loyalty 10%: one unit of the line's item, its add-ons paid. */
 function loyaltyTenRow(item: OrderItem): DiscountLine {
   return {
     lineId: item.lineId,
@@ -191,7 +191,7 @@ export function buildDiscountLines(items: OrderItem[], loyalty: LoyaltyChoice = 
     }
     const pwd = item.discounts?.pwd
     if (pwd) rows.push(rateRow(item, addons, 'pwd', pwd, freeUnits))
-    if (classic && loyalty.tenLineId === item.lineId && item.qty > freeUnits) rows.push(loyaltyTenRow(item))
+    if (isTenOffLine(item) && loyalty.tenLineId === item.lineId && item.qty > freeUnits) rows.push(loyaltyTenRow(item))
     const review = item.discounts?.review
     if (review && !loyaltyTenOn) rows.push(rateRow(item, addons, 'review', review, freeUnits))
     return rows.filter(r => r.amount > 0)
@@ -220,7 +220,7 @@ export function withoutGoogleReview(items: OrderItem[]): OrderItem[] {
 }
 
 // Chip tap on one line. Same kind at the same scope → off; same kind at the
-// other scope → switch; another kind → stack.
+// other scope (a line saved with ALL on an older order) → switch; another kind → stack.
 export function pickLineDiscount(
   items: OrderItem[],
   lineId: string,

@@ -1,8 +1,9 @@
 # Loyalty card holders — implementation plan
 
 **Goal:** a stamp card for customers the owner has handed a physical loyalty card. Card holders
-are linked to an order at checkout by name or card number; Signature and Matcha Series drinks
-earn stamps; stamp 6 gives 10% off one classic drink, stamp 11 a free classic drink.
+are linked to an order at checkout by name or card number; their items earn stamps (see
+Stamps); stamp 6 gives 10% off one Espresso, Non-Coffee, Waffle or Snack item, stamp 11 a free
+classic drink.
 
 **Prototype (agreed with the owner, 2026-10-02):** https://claude.ai/artifact/ELvuNn8UWJizGkjCjxkX6a
 
@@ -14,9 +15,9 @@ earn stamps; stamp 6 gives 10% off one classic drink, stamp 11 a free classic dr
 | Linking at checkout | Staff type the name (any capitals) or card number; card holders appear as suggestions; a tap links the order. Only a linked order shows the stamp bar |
 | Other names | Typed as today, saved as the order's name, no stamps, no bar |
 | Stamp UI | A compact 11-step progress bar, 10% marked at 6, FREE at 11 |
-| Stamps | 1 per Signature (`signature`) or Matcha Series (`matcha-series`) drink, hot or iced; nothing for Espresso, Non-Coffee, food or add-ons |
+| Stamps | From Oct 5, 2026, 12:00 AM Manila (owner, 2026-10-04): 1 per Signature, Matcha Series or Meal item; ½ per Espresso, Non-Coffee, Waffle or Snack item, so two make a stamp; none for add-ons. Orders before then keep the first rules (1 per Signature or Matcha Series drink, nothing else), so no card changed; items added to an older order later count by the new rules. Cards show halves ("6½ of 11") |
 | When a reward can be used | On the order that earns it (the cart's stamps count straight away) |
-| 10% off | One unit of one classic (Espresso or Non-Coffee) drink, which staff pick after tapping "Use 10% off"; add-ons on it are paid. With no classic drink in the order, staff are told to ask the customer to add one. Still one 10% per order, so no Google Review on that order (changed on 2026-10-02 from every item) |
+| 10% off | One unit of one Espresso, Non-Coffee, Waffle or Snack item (Waffle and Snack added 2026-10-04), which staff pick after tapping "Use 10% off"; add-ons on it are paid. With none in the order, staff are told to ask the customer to add one. Still one 10% per order, so no Google Review on that order (changed on 2026-10-02 from every item) |
 | Free drink | One unit of any Espresso or Non-Coffee drink, hot or iced; add-ons on it are paid |
 | Unused 10% | Never expires |
 | Same names | Each card gets a number (No. 1, 2, 3…), shown in suggestions; write it on the card |
@@ -39,17 +40,22 @@ earn stamps; stamp 6 gives 10% off one classic drink, stamp 11 a free classic dr
 
 ## Rules module (`lib/loyalty.ts`, shared by server and POS)
 
-- `stampsIn(lines)`, `cardState({ earned, usedTen, usedFree })`, `cardTotals(sales)`.
+- `stampsIn(lines, orderedAt?)`: each line counts by the rules of `line.addedAt ?? orderedAt`
+  (no date: the order on screen, the new rules); `STAMP_RULES_FROM` is the switch-over.
+  `cardState({ earned, usedTen, usedFree })`, `cardTotals(sales)` (each sale by its `_createdAt`).
+  `formatStamps` and `stampCount` write halves as ½.
 - Every 11 stamps fill a card; each card unlocks one 10% at stamp 6 and one free drink at 11.
   Ready = unlocked − used.
 - `matchCardHolders(holders, query)`: by name prefix (case and spacing ignored) or card number.
-- `isClassicDrinkLine(line)`: an Espresso or Non-Coffee line that is not an add-on; both rewards
-  go on one of these. `classicUnitsIn(lines)` counts them, one per unit.
+- `isClassicDrinkLine(line)`: an Espresso or Non-Coffee line that is not an add-on; the free
+  drink goes on one of these. `isTenOffLine(line)`: one the 10% can go on (also Waffle and Snack).
+  `rewardsFitOrder(lines, rewards)`: a classic unit for the free drink, another eligible unit for
+  the 10%.
 
 ## Discounts (`app/pos/discounts.ts`)
 
-- `buildDiscountLines(items, loyalty)` takes `{ tenLineId, freeLineId }`, each naming the classic
-  drink line its reward is on.
+- `buildDiscountLines(items, loyalty)` takes `{ tenLineId, freeLineId }`, each naming the line
+  its reward is on: a classic drink for the free one, also a Waffle or Snack for the 10%.
 - Free drink: one unit of that line's price, row "Loyalty free drink". Other discounts on that
   line are worked out on the units still paid.
 - Loyalty 10%: one `loyalty` row, 10% of one unit of its line's price (add-ons paid). It needs a
@@ -59,7 +65,7 @@ earn stamps; stamp 6 gives 10% off one classic drink, stamp 11 a free classic dr
 ## API
 
 - `POST /api/sales` accepts `loyaltyMemberId` and `loyaltyRewards`. Each reward needs its own
-  classic drink unit in the order (else 400). It checks that the card holder
+  unit in the order (`rewardsFitOrder`, else 400). It checks that the card holder
   exists and that each reward is really ready (counting this order's stamps). A card removed, or
   a reward already used on another device, gets a 409 with `code: 'loyalty-card-changed'`. The
   check and the save are not one transaction, so two sales sent at the same instant could both
@@ -76,9 +82,10 @@ earn stamps; stamp 6 gives 10% off one classic drink, stamp 11 a free classic dr
   linked holder, "Not them? Unlink", the stamp bar, "Use 10% off" and "Make free" on eligible
   lines. The review screen shows the customer their stamps.
   - Names are suggested from two typed characters; a card number at any length.
-  - "Use 10% off" puts the 10% straight on the order's only classic drink, or lists them to pick
-    one ("Cafe Latte · Hot"). With none, it says to ask the customer to add one; a classic drink
-    added then shows up to pick. Once on, the button names the drink, and a tap takes it off.
+  - "Use 10% off" puts the 10% straight on the order's only eligible item, or lists them to pick
+    one ("Cafe Latte · Hot", "Classic Waffle"). With none, it says to ask the customer to add
+    one; an item added then shows up to pick. Once on, the button names the item, and a tap takes
+    it off.
   - A reward turns itself off once it stops applying (a stamp drink or the free line taken off),
     and needs a new tap to come back. The rules are in `app/pos/loyaltyOrder.ts`.
   - Line badges are read from the discount rows, so they always match the breakdown.

@@ -40,15 +40,23 @@ describe('POST /api/sales with a loyalty card', () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ loyaltyMemberId: 'kylene', loyaltyRewards: ['ten'] }))
   })
 
-  it('refuses rewards that have no classic drink of their own to go on', async () => {
+  it('refuses rewards that have no item of their own to go on', async () => {
     fetchCardTotals.mockResolvedValue({ earned: 11, usedTen: 0, usedFree: 0 })
-    // A Signature drink only: the 10% has no Espresso or Non-Coffee drink to go on.
+    // A Signature drink only: the 10% has no Espresso, Non-Coffee, Waffle or Snack item to go on.
     const none = await post(sale({ items: [signature], loyaltyMemberId: 'kylene', loyaltyRewards: ['ten'] }))
     expect(none.status).toBe(400)
-    expect((await none.json()).error).toBe('Each loyalty reward needs its own Espresso or Non-Coffee drink in the order.')
+    expect((await none.json()).error).toBe('Each loyalty reward needs its own item: an Espresso or Non-Coffee drink for the free drink, and an Espresso, Non-Coffee, Waffle or Snack item for the 10%.')
     // One Cafe Latte cannot be both the free drink and the 10% one.
     expect((await post(sale({ items: [latte], loyaltyMemberId: 'kylene', loyaltyRewards: ['ten', 'free'] }))).status).toBe(400)
     expect((await post(sale({ items: [{ ...latte, qty: 2 }], loyaltyMemberId: 'kylene', loyaltyRewards: ['ten', 'free'] }))).status).toBe(200)
+  })
+
+  it('takes the 10% on a Waffle or Snack too, but never makes one the free drink', async () => {
+    const waffle = { lineId: 'classic-waffle__fixed', name: 'Classic Waffle', variant: null, price: 150, qty: 1, categoryId: 'waffle' }
+    const waffleSale = { items: [signature, waffle], subtotal: 310, total: 295, paymentAmount: 300, loyaltyMemberId: 'kylene' }
+    expect((await post(sale({ ...waffleSale, loyaltyRewards: ['ten'] }))).status).toBe(200)
+    fetchCardTotals.mockResolvedValue({ earned: 11, usedTen: 1, usedFree: 0 })
+    expect((await post(sale({ ...waffleSale, loyaltyRewards: ['free'] }))).status).toBe(400)
   })
 
   it('refuses a malformed card link: a draft id, or a reward given twice', async () => {

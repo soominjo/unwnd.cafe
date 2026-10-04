@@ -15,12 +15,15 @@ interface MemberDoc {
 }
 
 interface LinkedSale {
+  /** The stamp rules go by it: without it, every old sale would count by today's rules. */
+  _createdAt: string
   loyaltyMemberId: string
   loyaltyRewards: string[] | null
   items: StampLine[] | null
 }
 
-const LINKED_SALE = `{ loyaltyMemberId, loyaltyRewards, items[]{ lineId, qty, categoryId, isAddon, parentLineId } }`
+// Each sale's date and each line's added date: the stamp rules go by when an item was ordered.
+const LINKED_SALE = `{ _createdAt, loyaltyMemberId, loyaltyRewards, items[]{ lineId, qty, categoryId, isAddon, parentLineId, addedAt } }`
 const NO_STAMPS: CardTotals = { earned: 0, usedTen: 0, usedFree: 0 }
 /** Card numbers come from this counter, which only goes up, so a removed card's number is never given out again. */
 const CARD_COUNTER_ID = 'loyalty-card-counter'

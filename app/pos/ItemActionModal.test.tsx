@@ -49,7 +49,7 @@ const render = (mode: 'addons' | 'discount') => renderToStaticMarkup(<ItemAction
 
 describe('ItemActionModal', () => {
   it('locks Google Review on a line added to an order whose 10% was the loyalty one', () => {
-    const reviewOff = /<button[^>]*disabled=""[^>]*>GR −10% · ALL/
+    const reviewOff = /<button[^>]*disabled=""[^>]*>GR −10% · SOLO/
     expect(render('discount')).not.toMatch(reviewOff)
     expect(renderToStaticMarkup(<ItemActionModal {...base} mode="discount" orderUsedTen />)).toMatch(reviewOff)
   })
@@ -73,9 +73,9 @@ describe('ItemActionModal', () => {
   it('discount mode presses the active chips and shows each row’s computation', () => {
     const html = render('discount')
     expect(html).toMatch(/aria-pressed="true"[^>]*>PWD\/S −20% · SOLO/)
-    expect(html).toMatch(/aria-pressed="true"[^>]*>GR −10% · ALL/)
-    expect(html).toMatch(/aria-pressed="false"[^>]*>PWD\/S −20% · ALL/)
+    // Only SOLO chips are offered; a line saved with ALL (an older order) still shows its row below.
     expect(html).toMatch(/aria-pressed="false"[^>]*>GR −10% · SOLO/)
+    expect(html).not.toContain('· ALL')
     // SOLO: one unit's share of (150 × 4 + 60) = 165 → 20% = 33. ALL: 10% of 660 = 66.
     expect(html).toContain('20% of ₱165')
     expect(html).toContain('−₱33')

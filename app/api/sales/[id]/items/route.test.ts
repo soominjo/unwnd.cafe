@@ -230,6 +230,17 @@ describe('POST /api/sales/[id]/items on a loyalty card holder’s order', () => 
     expect(store.doc('sale-152')!.loyaltyRewards).toEqual(['ten'])
   })
 
+  it('takes the 10% on a Waffle or Snack added to the order, but never makes one the free drink', async () => {
+    store.touch('sale-152', { loyaltyRewards: [] })
+    fetchCardTotals.mockResolvedValue({ earned: 11, usedTen: 0, usedFree: 0 })
+    const waffleNew = { lineId: 'classic-waffle__fixed__ak3j9', name: 'Classic Waffle', variant: null, price: 150, qty: 1, categoryId: 'waffle' }
+    const tenOnWaffle = { lineId: waffleNew.lineId, name: 'Loyalty -10% (Classic Waffle)', amount: 15 }
+    expect((await add('sale-152', { rev: revOf('sale-152'), items: [waffleNew], loyaltyRewards: ['free'] })).status).toBe(400)
+    const res = await add('sale-152', { rev: revOf('sale-152'), items: [waffleNew], discounts: [tenOnWaffle], loyaltyRewards: ['ten'] })
+    expect(res.status).toBe(200)
+    expect(store.doc('sale-152')!.loyaltyRewards).toEqual(['ten'])
+  })
+
   it('says the card changed when the reward is no longer ready, or the card is gone', async () => {
     fetchCardTotals.mockResolvedValueOnce({ earned: 10, usedTen: 1, usedFree: 1 })
     const spent = await add('sale-152', { rev: revOf('sale-152'), items: [signatureNew, americanoNew], discounts: [free], loyaltyRewards: ['free'] })

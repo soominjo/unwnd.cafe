@@ -37,6 +37,15 @@ describe('CardHolderList', () => {
     expect(html.match(/data-step=/g)).toHaveLength(33)
   })
 
+  it('writes half stamps as ½ on the list and when removing a card', () => {
+    const halfway = [holder('h', 'Hana', 7, 6.5)]
+    const html = renderToStaticMarkup(
+      <CardHolderList holders={halfway} confirmingId="h" removingId={null} removeError={null} onRequestRemove={noop} onCancelRemove={noop} onConfirmRemove={noop} />,
+    )
+    expect(html).toContain('6½/11')
+    expect(html).toContain('Its 6½ stamps and the 10% off ready will be lost.')
+  })
+
   it('asks before removing a card, saying what would be lost', () => {
     expect(list()).not.toContain('Remove Kylene’s card No. 12?')
     expect(list('k')).toContain('Remove Kylene’s card No. 12? Its 5 stamps will be lost.')

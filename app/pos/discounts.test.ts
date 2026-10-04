@@ -212,6 +212,16 @@ describe('loyalty rewards', () => {
     expect(buildDiscountLines([mocha], { tenLineId: 'mocha', freeLineId: null })).toEqual([])
   })
 
+  it('takes the 10% off one unit of a Waffle or Snack too, but not a Meal, and never makes a waffle the free drink', () => {
+    const waffle = item({ lineId: 'waffle', name: 'Classic Waffle', variant: null, price: 150, qty: 2, categoryId: 'waffle' })
+    const riceBowl = item({ lineId: 'rice', name: 'Chicken Rice Bowl', variant: null, price: 180, categoryId: 'meal' })
+    expect(buildDiscountLines([waffle], { tenLineId: 'waffle', freeLineId: null })).toEqual([
+      { lineId: 'waffle', name: 'Classic Waffle', amount: 15, kind: 'loyalty', scope: 'solo', label: 'Loyalty −10% ×1' },
+    ])
+    expect(buildDiscountLines([riceBowl], { tenLineId: 'rice', freeLineId: null })).toEqual([])
+    expect(buildDiscountLines([waffle], { tenLineId: null, freeLineId: 'waffle' })).toEqual([])
+  })
+
   it('is the order’s one 10%: no Google Review anywhere while it is on, and PWD/Senior stays', () => {
     const both = { ...latte, discounts: { pwd: 'solo' as const, review: 'all' as const } }
     const reviewed = { ...mocha, discounts: { review: 'solo' as const } }

@@ -71,8 +71,7 @@ export interface DiscountLine extends LineDiscount {
   label: string
 }
 
-/** The loyalty rewards on the order on screen: 10% off every item, and which line has a free unit. */
-/** The loyalty rewards on the order: each is one unit of the classic drink line it names, or null when off. */
+/** The loyalty rewards on the order: each is one unit of the line it names, or null when off. */
 export interface LoyaltyChoice {
   tenLineId: string | null
   freeLineId: string | null

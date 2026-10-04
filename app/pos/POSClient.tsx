@@ -77,7 +77,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   // The sale, or the items added to a saved order, is being saved: the review locks until it is.
   const [saving, setSaving]                     = useState(false)
   const [submitError, setSubmitError]           = useState<string | null>(null)
-  // What a sale just saved can print: its receipt alone, or both with the staff ticket below.
+  // What a sale just saved can print, each on its own: the kitchen ticket and the receipt.
   const [salePrints, setSalePrints]             = useState<SalePrints | null>(null)
   // "Add items" on Sales: the saved order the cart's lines go onto, or null for a new order.
   // Its name and card stay as saved; a line added to it ends with lineSuffix, so none shares
@@ -96,7 +96,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   const [cardHolders, setCardHolders]           = useState<CardHolderWithCard[] | null>(initialCardHolders)
   const [linkedHolderId, setLinkedHolderId]     = useState<string | null>(initialOpenOrder?.loyaltyMemberId ?? null)
   const [loyaltyPicked, setLoyaltyPicked]       = useState<LoyaltyChoice>(NO_LOYALTY)
-  // "Use 10% off" was tapped and the cashier is picking which classic drink it goes on.
+  // "Use 10% off" was tapped and the cashier is picking which item it goes on.
   const [choosingTen, setChoosingTen]           = useState(false)
   // The loyalty cards panel, opened from the header over the order on screen.
   const [showLoyalty, setShowLoyalty]           = useState(false)
@@ -257,8 +257,8 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     setItemModal({ lineId, mode })
   }
 
-  // A chip tap on one line: the active chip again clears that kind, the other scope switches it,
-  // the other kind stacks. The modal stays open so PWD and the review promo combine in two taps.
+  // A chip tap on one line: the active chip again clears that kind, the other kind stacks. The
+  // modal stays open so PWD and the review promo combine in two taps.
   function pickItemDiscount(lineId: string, kind: LineDiscountKind, scope: LineDiscountScope) {
     setOrderItems(prev => pickLineDiscount(prev, lineId, kind, scope))
   }
@@ -280,7 +280,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     setChoosingTen(false)
   }
 
-  // "Use 10% off": straight onto the order's only classic drink, else the cashier picks one
+  // "Use 10% off": straight onto the order's only item it can go on, else the cashier picks one
   // (or, with none, is told to have the customer add one).
   function startLoyaltyTen() {
     if (loyaltyOrder.tenLines.length === 1) pickLoyaltyTen(loyaltyOrder.tenLines[0].lineId)
@@ -353,8 +353,8 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     const bc = new BroadcastChannel('pos-sales-update')
     bc.postMessage({ type: 'sale-completed' })
     bc.close()
-    // Its preview prints the receipt alone or both tickets, and ✕ there skips printing; the
-    // cashier stays here for the next customer either way.
+    // Its preview prints the kitchen ticket and the receipt, each on its own, and ✕ there goes on
+    // to the next customer; the cashier stays here either way.
     setSalePrints(buildCheckoutPrints(payload, new Date()))
     // Cards given or used on another device show from the next order.
     void refetchCardHolders().then(holders => { if (holders) setCardHolders(holders) })
@@ -428,7 +428,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     bc.postMessage({ type: 'sale-updated' })
     bc.close()
     setShowConfirm(false)
-    // The whole order's receipt, or both with a staff ticket of only the drinks just added.
+    // The whole order's receipt, and a kitchen ticket of only the items just added.
     setSalePrints(buildAddedItemsPrints(sale))
     setNewOrderAfterReceipt(true)
   }
@@ -1016,16 +1016,16 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
         />
       )}
 
-      {/* ── After a save: print the receipt or both, or ✕ to skip printing. Closing it stays on
-          /pos, starting a new order after items were added to a saved one ── */}
+      {/* ── After a save: print the kitchen ticket and the receipt, then ✕ for the next order. Closing
+          it stays on /pos, starting a new order after items were added to a saved one ── */}
       {salePrints && (
         <ReceiptPreviewModal
           blocks={salePrints.receipt}
           prints={[
+            { label: '🖶 Print for kitchen', blocks: salePrints.kitchen, hint: 'Items only, no prices.' },
             { label: '🖶 Print receipt', blocks: salePrints.receipt },
-            { label: '🖶 Print both', blocks: salePrints.both, hint: 'Receipt on top, staff ticket below.' },
           ]}
-          notice="Saved. Print it, or close this to skip printing."
+          notice="Saved. Print what you need, then ✕ for the next order."
           onClose={closeReceipt}
         />
       )}
@@ -1343,7 +1343,7 @@ function OrderPanel({
                         </button>
                         <button
                           onClick={e => { e.stopPropagation(); onOpenItemModal(item.lineId, 'discount') }}
-                          title="Discount (PWD/Senior 20%, Google Review 10% — all units or one)"
+                          title="Discount (PWD/Senior 20%, Google Review 10% — one unit)"
                           className={`w-8 h-8 flex items-center justify-center text-[10px] font-bold rounded-full border transition-colors ${
                             hasDiscount
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'

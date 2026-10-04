@@ -5,7 +5,7 @@ import { variantClass, groupOrderItems, groupSaleItems } from './utils'
 import { lineBadges } from './discounts'
 import QtyBadge from './QtyBadge'
 import LoyaltyBar from './LoyaltyBar'
-import { LOYALTY_CARD_SIZE } from '@/lib/loyalty'
+import { LOYALTY_CARD_SIZE, formatStamps, stampCount } from '@/lib/loyalty'
 import type { OrderItem, DiscountLine } from './types'
 import type { OpenOrder } from './addToOrder'
 import { formatPHClock } from './sales/dateRange'
@@ -33,7 +33,7 @@ interface OrderReviewModalProps {
   saving: boolean
   submitError: string | null
   onCancel: () => void
-  /** Saves the order, then opens its print preview: the receipt or both, or ✕ to skip printing. */
+  /** Saves the order, then opens its print preview: the kitchen ticket and the receipt, or ✕ to skip printing. */
   onComplete: () => void
   /** Adding to a saved order: its lines show above the new ones, and its total is part of what is due. */
   savedOrder?: OpenOrder | null
@@ -121,9 +121,9 @@ export default function OrderReviewModal({
             </div>
             <p className="text-sm text-foreground/60 tabular-nums">
               {loyalty.orderStamps > 0 && (
-                <span className="font-semibold text-foreground">+{loyalty.orderStamps} stamp{loyalty.orderStamps === 1 ? '' : 's'} this order · </span>
+                <span className="font-semibold text-foreground">+{stampCount(loyalty.orderStamps)} this order · </span>
               )}
-              {Math.min(loyalty.savedOnCard + loyalty.orderStamps, LOYALTY_CARD_SIZE)} of {LOYALTY_CARD_SIZE}
+              {formatStamps(Math.min(loyalty.savedOnCard + loyalty.orderStamps, LOYALTY_CARD_SIZE))} of {LOYALTY_CARD_SIZE}
             </p>
           </div>
         )}
@@ -276,7 +276,7 @@ export default function OrderReviewModal({
                   <p className="text-xs text-foreground/45 text-center">
                     {savedOrder
                       ? `Saves onto the ${savedAt} order: no new order is made. A preview then prints, or closing it skips printing.`
-                      : 'After saving, a preview prints the receipt or both; closing it skips printing.'}
+                      : 'After saving, a preview prints the kitchen ticket and the receipt; closing it skips printing.'}
                   </p>
                 </>
               )}

@@ -101,25 +101,21 @@ describe('buildCheckoutReceiptBlocks', () => {
   })
 })
 
-const tearAt = (blocks: { kind: string }[]) => blocks.findIndex(b => b.kind === 'tear')
-
 describe('buildCheckoutPrints', () => {
-  it('offers the customer’s receipt alone, and both: the receipt, a tear, then the staff ticket below it', () => {
-    const { receipt, both } = buildCheckoutPrints(payload, savedAt)
+  it('offers the customer’s receipt and the kitchen ticket, each printed on its own', () => {
+    const { receipt, kitchen } = buildCheckoutPrints(payload, savedAt)
     expect(receipt).toEqual(buildCheckoutReceiptBlocks(payload, savedAt))
-    expect(both.filter(b => b.kind === 'tear')).toHaveLength(1)
-    expect(both.slice(0, tearAt(both))).toEqual(receipt)
-    expect(both.slice(tearAt(both) + 1)).toEqual(buildReceiptBlocksFromSale(stored, 'kitchen'))
-    // The staff ticket carries no prices; the receipt does.
-    expect(both.slice(tearAt(both) + 1).some(b => b.kind === 'total')).toBe(false)
+    expect(kitchen).toEqual(buildReceiptBlocksFromSale(stored, 'kitchen'))
+    // The kitchen ticket carries no prices and no tear line; the receipt has its totals.
+    expect(kitchen.some(b => b.kind === 'total' || b.kind === 'tear')).toBe(false)
+    expect(receipt.some(b => b.kind === 'total')).toBe(true)
   })
 })
 
 describe('buildAddedItemsPrints', () => {
-  it('offers the whole order’s receipt, and both with the staff ticket of only the items just added below it', () => {
-    const { receipt, both } = buildAddedItemsPrints(withAdded)
+  it('offers the whole order’s receipt, and a kitchen ticket of only the items just added', () => {
+    const { receipt, kitchen } = buildAddedItemsPrints(withAdded)
     expect(receipt).toEqual(buildReceiptBlocksFromSale(withAdded, 'customer'))
-    expect(both.slice(0, tearAt(both))).toEqual(receipt)
-    expect(both.slice(tearAt(both) + 1)).toEqual(buildReceiptBlocksFromSale(withAdded, 'kitchen', 'latest'))
+    expect(kitchen).toEqual(buildReceiptBlocksFromSale(withAdded, 'kitchen', 'latest'))
   })
 })

@@ -8,8 +8,10 @@ import {
   cardHolderNameProblem,
   cardState,
   cleanCardHolderName,
+  formatStamps,
   loyaltyKey,
   nextMilestone,
+  stampCount,
   type CardHolderWithCard,
 } from '@/lib/loyalty'
 import LoyaltyBar from '../LoyaltyBar'
@@ -241,7 +243,7 @@ interface CardHolderListProps {
 function removeMessage(h: CardHolderWithCard): string {
   const card = cardState(h.card)
   const lost = [
-    card.onCard > 0 ? plural(card.onCard, 'stamp') : null,
+    card.onCard > 0 ? stampCount(card.onCard) : null,
     card.tenReady > 0 ? 'the 10% off ready' : null,
     card.freeReady > 0 ? 'the free drink ready' : null,
   ].filter((part): part is string => part !== null)
@@ -276,7 +278,7 @@ export function CardHolderList({
             </span>
             <span className="col-span-full flex items-center gap-2 sm:col-span-1">
               <span className="flex-1"><LoyaltyBar saved={card.onCard} pending={0} compact /></span>
-              <span className="text-xs font-bold tabular-nums text-foreground">{card.onCard}/{LOYALTY_CARD_SIZE}</span>
+              <span className="text-xs font-bold tabular-nums text-foreground">{formatStamps(card.onCard)}/{LOYALTY_CARD_SIZE}</span>
             </span>
             <span className="col-span-full flex flex-wrap gap-1 sm:col-span-1">
               {card.tenReady > 0 && <Badge tone="success">10% off ready</Badge>}

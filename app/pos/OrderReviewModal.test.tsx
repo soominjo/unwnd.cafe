@@ -56,12 +56,12 @@ describe('OrderReviewModal', () => {
     expect(html).toContain('−₱30')
   })
 
-  it('completes with one button, Complete + Print: a preview then prints the receipt or both, or closes without printing', () => {
+  it('completes with one button, Complete + Print: a preview then prints the kitchen ticket and the receipt, or closes without printing', () => {
     const html = renderToStaticMarkup(<OrderReviewModal {...base} />)
     expect(html).toContain('🖨 Complete + Print')
     expect(html).not.toContain('Order Complete')
     // Not "✕": the review has a ✕ of its own, which cancels.
-    expect(html).toContain('After saving, a preview prints the receipt or both; closing it skips printing.')
+    expect(html).toContain('After saving, a preview prints the kitchen ticket and the receipt; closing it skips printing.')
     let completed = 0
     buttonLabelled(OrderReviewModal({ ...base, onComplete: () => { completed += 1 } }), '🖨 Complete + Print')?.onClick()
     expect(completed).toBe(1)
@@ -84,6 +84,17 @@ describe('OrderReviewModal', () => {
     expect(html).toContain('6 of 11')
     expect(html).toContain('data-step=')
     expect(renderToStaticMarkup(<OrderReviewModal {...base} />)).not.toContain('Loyalty card')
+  })
+
+  it('writes half stamps as ½ for the customer', () => {
+    const html = renderToStaticMarkup(
+      <OrderReviewModal {...base} loyalty={{ name: 'Ana', cardNumber: 12, savedOnCard: 4, orderStamps: 2.5 }} />,
+    )
+    expect(html).toContain('+2½ stamps this order')
+    expect(html).toContain('6½ of 11')
+    expect(renderToStaticMarkup(
+      <OrderReviewModal {...base} loyalty={{ name: 'Ana', cardNumber: 12, savedOnCard: 4, orderStamps: 0.5 }} />,
+    )).toContain('+½ stamp this order')
   })
 
   it('badges a stacked item with both of its discounts and their unit counts', () => {

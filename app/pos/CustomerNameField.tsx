@@ -4,10 +4,12 @@ import {
   LOYALTY_CARD_SIZE,
   addOrderToTotals,
   cardState,
+  formatStamps,
   isNearMiss,
   loyaltyKey,
   matchCardHolders,
   nextMilestone,
+  stampCount,
   type CardHolderWithCard,
   type LoyaltyReward,
 } from '@/lib/loyalty'
@@ -15,13 +17,13 @@ import LoyaltyBar from './LoyaltyBar'
 import { MAX_NOTES_LENGTH } from '@/lib/sales/validateSaleInput'
 import type { OrderItem, Variant } from './types'
 
-/** The loyalty 10%: one unit of one classic drink in the order, which the cashier picks. */
+/** The loyalty 10%: one unit of one item in the order it can go on, which the cashier picks. */
 export interface LoyaltyTenControls {
-  /** The order's Espresso and Non-Coffee drinks the 10% can go on. */
+  /** The order's Espresso, Non-Coffee, Waffle and Snack items the 10% can go on. */
   lines: readonly OrderItem[]
-  /** The drink the 10% is on, or null. */
+  /** The item the 10% is on, or null. */
   lineId: string | null
-  /** The cashier tapped "Use 10% off" and is picking the drink. */
+  /** The cashier tapped "Use 10% off" and is picking the item. */
   choosing: boolean
   onStart: () => void
   onPick: (lineId: string) => void
@@ -55,9 +57,8 @@ const CARD_NUMBER_TYPED = /^(?:no\.?\s*|#)?\d+$/i
 /** One letter would list nearly every card holder, so names are suggested from two. Card numbers are looked up at any length. */
 const MIN_NAME_QUERY_LENGTH = 2
 const MAX_SUGGESTIONS = 4
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 const VARIANT_NAMES: Record<Variant, string> = { hot: 'Hot', ice: 'Iced' }
-const drinkLabel = (line: OrderItem) => (line.variant ? `${line.name} · ${VARIANT_NAMES[line.variant]}` : line.name)
+const itemLabel = (line: OrderItem) => (line.variant ? `${line.name} · ${VARIANT_NAMES[line.variant]}` : line.name)
 const TEN_BUTTON = 'rounded-sm px-3 py-1.5 text-xs font-bold tracking-widest transition-colors'
 
 // Customer name, stored as the sale's notes and printed as "Name" on the receipt. As it is
@@ -137,7 +138,7 @@ function Suggestions({ value, holders, onLink }: { value: string; holders: CardH
                 exact ? 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700' : 'border-foreground/15 text-foreground hover:border-emerald-500'
               }`}
             >
-              {h.name} · No. {h.cardNumber} · {plural(cardState(h.card).onCard, 'stamp')}{exact ? ' · tap to add stamps' : ''}
+              {h.name} · No. {h.cardNumber} · {stampCount(cardState(h.card).onCard)}{exact ? ' · tap to add stamps' : ''}
             </button>
           )
         })}
@@ -182,7 +183,7 @@ function LinkedCard(props: CustomerNameFieldProps & { linked: CardHolderWithCard
           <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-700">✓ Card No. {linked.cardNumber}</span>
         </p>
         <span className="font-display text-sm font-semibold tabular-nums text-foreground">
-          {Math.min(saved.onCard + orderStamps, LOYALTY_CARD_SIZE)}/{LOYALTY_CARD_SIZE}
+          {formatStamps(Math.min(saved.onCard + orderStamps, LOYALTY_CARD_SIZE))}/{LOYALTY_CARD_SIZE}
         </span>
       </div>
       <LoyaltyBar saved={saved.onCard} pending={orderStamps} />
@@ -191,11 +192,11 @@ function LinkedCard(props: CustomerNameFieldProps & { linked: CardHolderWithCard
         <span aria-live="polite" className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
           {orderStamps > 0 ? (
             <>
-              <span className="rounded-full bg-amber-400 px-2 py-0.5 font-bold text-foreground">+{plural(orderStamps, 'stamp')} this order</span>
+              <span className="rounded-full bg-amber-400 px-2 py-0.5 font-bold text-foreground">+{stampCount(orderStamps)} this order</span>
               <span>{nextMilestone(withOrder.onCard)}</span>
             </>
           ) : (
-            <span>No stamps from this order yet: Signature and Matcha Series drinks earn them.</span>
+            <span>No stamps from this order yet: Signature, Matcha Series and Meal items earn 1, Espresso, Non-Coffee, Waffle and Snack items ½.</span>
           )}
         </span>
         {!locked && (
@@ -230,14 +231,15 @@ function LinkedCard(props: CustomerNameFieldProps & { linked: CardHolderWithCard
   )
 }
 
-// The 10% goes on one unit of one classic drink. "Use 10% off" puts it straight on the only
-// one in the order, or lists them to pick from; with none, staff ask the customer to add one.
+// The 10% goes on one unit of one Espresso, Non-Coffee, Waffle or Snack item. "Use 10% off"
+// puts it straight on the only one in the order, or lists them to pick from; with none, staff
+// ask the customer to add one.
 function TenOff({ ten }: { ten: LoyaltyTenControls }) {
   const applied = ten.lineId === null ? undefined : ten.lines.find(l => l.lineId === ten.lineId)
   if (applied) {
     return (
       <button type="button" onClick={ten.onClear} aria-pressed="true" title="Tap to take the 10% off again" className={`${TEN_BUTTON} bg-emerald-100 text-emerald-800`}>
-        {`✓ 10% off · ${drinkLabel(applied)}`}
+        {`✓ 10% off · ${itemLabel(applied)}`}
       </button>
     )
   }
@@ -251,14 +253,14 @@ function TenOff({ ten }: { ten: LoyaltyTenControls }) {
   if (ten.lines.length === 0) {
     return (
       <p role="status" className="flex flex-wrap items-center gap-x-2 text-[11px] font-semibold text-amber-800">
-        <span>The 10% off is for one Espresso or Non-Coffee drink. Ask the customer to add one to use it.</span>
+        <span>The 10% off is for one Espresso, Non-Coffee, Waffle or Snack item. Ask the customer to add one to use it.</span>
         <button type="button" onClick={ten.onCancel} className="inline-flex min-h-6 items-center px-1 underline underline-offset-2">OK</button>
       </p>
     )
   }
   return (
-    <div role="group" aria-label="Pick the drink for 10% off" className="flex flex-wrap items-center gap-1.5">
-      <span className="text-[11px] font-semibold text-emerald-800">10% off which drink?</span>
+    <div role="group" aria-label="Pick the item for 10% off" className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] font-semibold text-emerald-800">10% off which item?</span>
       {ten.lines.map(line => (
         <button
           key={line.lineId}
@@ -266,7 +268,7 @@ function TenOff({ ten }: { ten: LoyaltyTenControls }) {
           onClick={() => ten.onPick(line.lineId)}
           className="inline-flex min-h-8 items-center rounded-full border border-emerald-500 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-50"
         >
-          {drinkLabel(line)}
+          {itemLabel(line)}
         </button>
       ))}
       <button type="button" onClick={ten.onCancel} className="inline-flex min-h-6 items-center px-1 text-[11px] text-foreground/55 underline underline-offset-2 hover:text-foreground">

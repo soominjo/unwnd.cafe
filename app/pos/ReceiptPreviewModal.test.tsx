@@ -64,23 +64,24 @@ describe('ReceiptPreviewModal', () => {
     const html = renderToStaticMarkup(
       <ReceiptPreviewModal
         blocks={whole}
-        prints={[{ label: '🖶 Print receipt', blocks: whole }, { label: '🖶 Print both', blocks: both, hint: 'Receipt on top, staff ticket below.' }]}
+        prints={[{ label: '🖶 Print receipt', blocks: whole }, { label: '🖶 Print for kitchen', blocks: both, hint: 'Items only, no prices.' }]}
         onClose={noop}
       />,
     )
     expect(html).toContain('🖶 Print receipt</button>')
-    expect(html).toContain('🖶 Print both</button>')
-    expect(html).toContain('Receipt on top, staff ticket below.')
+    expect(html).toContain('🖶 Print for kitchen</button>')
+    expect(html).toContain('Items only, no prices.')
     expect(html).not.toContain('Print to Thermal Printer')
     expect(html).not.toContain('Download')
   })
 
-  it('says the order is saved when it opens after a sale, and that closing it skips printing', () => {
+  it('says the order is saved when it opens after a sale, and that ✕ goes on to the next order', () => {
     const html = renderToStaticMarkup(
-      <ReceiptPreviewModal blocks={whole} prints={[{ label: 'Print receipt', blocks: whole }]} notice="Saved. Print it, or close this to skip printing." onClose={noop} />,
+      <ReceiptPreviewModal blocks={whole} prints={[{ label: 'Print receipt', blocks: whole }]} notice="Saved. Print what you need, then ✕ for the next order." onClose={noop} />,
     )
-    expect(html).toMatch(/role="status"[^>]*>Saved\. Print it, or close this to skip printing\.</)
-    expect(html).toContain('aria-label="Close without printing"')
+    expect(html).toContain('role="status"')
+    expect(html).toContain('Saved. Print what you need, then ✕ for the next order.')
+    expect(html).toContain('aria-label="Done: next order"')
     expect(renderToStaticMarkup(<ReceiptPreviewModal blocks={whole} onClose={noop} />)).toContain('aria-label="Close"')
   })
 

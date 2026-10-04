@@ -2,6 +2,7 @@ import {
   addOrderToTotals,
   cardState,
   isClassicDrinkLine,
+  isTenOffLine,
   loyaltyKey,
   stampsIn,
   type CardHolderWithCard,
@@ -30,7 +31,7 @@ export interface LoyaltyOrder {
   card: LoyaltyCard | null
   /** The picked rewards that still apply: still ready, and their drink still in the order. */
   applied: LoyaltyChoice
-  /** The classic drink lines the 10% can go on: each has a unit that is not the free drink. */
+  /** The lines the 10% can go on (Espresso, Non-Coffee, Waffle, Snack): each has a unit that is not the free drink. */
   tenLines: OrderItem[]
   /** The rewards the sale records as used. */
   rewards: LoyaltyReward[]
@@ -46,7 +47,7 @@ export function resolveLoyaltyOrder({ holders, linkedHolderId, customerName, ite
     ? picked.freeLineId
     : null
   // The free drink goes first: the 10% needs a unit of its drink still to pay.
-  const tenLines = items.filter(i => isClassicDrinkLine(i) && i.qty > (i.lineId === freeLineId ? 1 : 0))
+  const tenLines = items.filter(i => isTenOffLine(i) && i.qty > (i.lineId === freeLineId ? 1 : 0))
   const tenLineId = !blocked.includes('ten') && (card?.tenReady ?? 0) > 0 && tenLines.some(i => i.lineId === picked.tenLineId)
     ? picked.tenLineId
     : null

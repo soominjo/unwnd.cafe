@@ -7,11 +7,20 @@ const latte: OrderItem = { lineId: 'latte', name: 'Spanish Latte', variant: 'hot
 const noop = () => {}
 
 describe('DiscountSection', () => {
-  it('locks the Google Review chips while the loyalty 10% is on the order, and says why', () => {
+  it('offers SOLO only: PWD/Senior or Google Review on one unit of the line, never ALL', () => {
+    const html = renderToStaticMarkup(
+      <DiscountSection item={latte} addonsTotal={0} lineRows={[]} onPick={noop} reviewLocked={false} freeUnits={0} />,
+    )
+    expect(html).toContain('PWD/S −20% · SOLO')
+    expect(html).toContain('GR −10% · SOLO')
+    expect(html).not.toContain('· ALL')
+  })
+
+  it('locks the Google Review chip while the loyalty 10% is on the order, and says why', () => {
     const html = renderToStaticMarkup(
       <DiscountSection item={latte} addonsTotal={0} lineRows={[]} onPick={noop} reviewLocked freeUnits={0} />,
     )
-    expect(html.match(/disabled=""/g)).toHaveLength(2)
+    expect(html.match(/disabled=""/g)).toHaveLength(1)
     expect(html).toContain('The loyalty 10% is on this order')
   })
 

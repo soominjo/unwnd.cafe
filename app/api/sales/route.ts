@@ -13,7 +13,7 @@ import {
   type SaleDiscountInput,
   type SaleItemInput,
 } from '@/lib/sales/validateSaleInput'
-import { LOYALTY_CARD_CHANGED, classicUnitsIn, parseSaleLoyalty, rewardProblem, stampsIn, type CardTotals, type SaleLoyalty } from '@/lib/loyalty'
+import { LOYALTY_CARD_CHANGED, REWARDS_NEED_ITEMS, parseSaleLoyalty, rewardProblem, rewardsFitOrder, stampsIn, type CardTotals, type SaleLoyalty } from '@/lib/loyalty'
 import { fetchCardTotals } from '@/lib/loyaltyStore'
 
 export const dynamic = 'force-dynamic'
@@ -54,12 +54,10 @@ function isValidSaleInput(body: unknown): body is SaleInput {
  * the POS reads the cards again and keeps the order on screen.
  */
 async function checkSaleLoyalty(loyalty: SaleLoyalty, items: SaleItemInput[]): Promise<NextResponse | null> {
-  // Each reward goes on its own unit of a classic (Espresso or Non-Coffee) drink.
-  if (classicUnitsIn(items) < loyalty.rewards.length) {
-    return NextResponse.json(
-      { success: false, error: 'Each loyalty reward needs its own Espresso or Non-Coffee drink in the order.' },
-      { status: 400 },
-    )
+  // Each reward goes on its own unit: the free drink on a classic drink, the 10% on another
+  // Espresso, Non-Coffee, Waffle or Snack item.
+  if (!rewardsFitOrder(items, loyalty.rewards)) {
+    return NextResponse.json({ success: false, error: REWARDS_NEED_ITEMS }, { status: 400 })
   }
   let totals: CardTotals | null
   try {
