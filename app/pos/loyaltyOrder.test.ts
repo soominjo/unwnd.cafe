@@ -80,6 +80,13 @@ describe('resolveLoyaltyOrder', () => {
     expect(order.rewards).toEqual(['free'])
   })
 
+  it('applies no reward the order used already, while items are added to it', () => {
+    const both = { tenLineId: latte.lineId, freeLineId: latte.lineId }
+    const twoLattes = [{ ...latte, qty: 2 }]
+    expect(resolve({ ...asAna, items: twoLattes, picked: both, blocked: ['ten'] })).toMatchObject({ applied: { tenLineId: null, freeLineId: latte.lineId }, rewards: ['free'] })
+    expect(resolve({ ...asAna, items: twoLattes, picked: both, blocked: ['free'] })).toMatchObject({ applied: { tenLineId: latte.lineId, freeLineId: null }, rewards: ['ten'] })
+  })
+
   it('applies nothing without a linked card, and never a reward on a Signature line', () => {
     expect(resolve({ linkedHolderId: null, picked: { tenLineId: latte.lineId, freeLineId: latte.lineId } }).applied).toEqual(NO_LOYALTY)
     expect(resolve({ ...asAna, picked: { tenLineId: signature.lineId, freeLineId: signature.lineId } }).applied).toEqual(NO_LOYALTY)

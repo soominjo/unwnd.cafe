@@ -14,11 +14,12 @@ import type {
   LineDiscountKind,
   LineDiscountScope,
   LoyaltyChoice,
+  Sale,
 } from './types'
 import ManageMenuModal, { type DynamicCategory } from './ManageMenuModal'
 import MenuItemPopup from './MenuItemPopup'
 import CardActions from './CardActions'
-import OrderReviewModal, { type CheckoutAction } from './OrderReviewModal'
+import OrderReviewModal from './OrderReviewModal'
 import ReceiptPreviewModal from './ReceiptPreviewModal'
 import ItemActionModal, { type ItemModalMode } from './ItemActionModal'
 import ManagerPinModal from './ManagerPinModal'
@@ -39,41 +40,61 @@ import {
 import { buildSalePayload } from './salePayload'
 import { postSale } from './postSale'
 import { ADDON_CATEGORY_ID } from './constants'
-import type { ReceiptBlock } from '@/lib/printer/receiptDocument'
-import { buildCheckoutReceiptBlocks } from '@/lib/printer/receiptFromSale'
+import { buildAddedItemsPrints, buildCheckoutPrints, type SalePrints } from '@/lib/printer/receiptFromSale'
 import type { PosMenu, PosMenuItem } from '@/lib/posMenu'
 import { LOYALTY_CARD_CHANGED, addOrderToTotals, cardState, isClassicDrinkLine, loyaltyKey, type CardHolderWithCard } from '@/lib/loyalty'
+import { ORDER_CHANGED, ORDER_COMPLETED, ORDER_GONE } from '@/lib/sales/addItems'
+import type { OpenSaleProblem } from '@/lib/sales/loadOpenSale'
 import { resolveLoyaltyOrder, sameLoyaltyChoice } from './loyaltyOrder'
 import { refetchCardHolders } from './refetchCardHolders'
+import { blockedRewards, buildAddItemsBody, nameAfterRefresh, newLineSuffix, openOrderFromSale, reviewLockedBy, savedState, type OpenOrder } from './addToOrder'
+import { postAddItems } from './postAddItems'
+import { leaveFor } from './navigation'
+import { AddingBanner, OpenOrderNotice } from './AddingBanner'
+import SavedOrderLines from './SavedOrderLines'
 
 interface POSClientProps {
   /** The live menu, read on the server for this page load; null when it could not be read (the built-in menu shows). */
   initialMenu: PosMenu | null
   /** Loyalty card holders, read on the server with the menu; null when they could not be read (no loyalty this load). */
   initialCardHolders: CardHolderWithCard[] | null
+  /** The pending order "Add items" on Sales opened (/pos?edit=…): new lines are saved onto it. */
+  initialOpenOrder?: OpenOrder | null
+  /** Why the order "Add items" asked for could not be opened; the POS starts a new order instead. */
+  openOrderProblem?: OpenSaleProblem | null
 }
 
 /** Manager mode locks itself after this long with no tap or key press. */
 const MANAGER_IDLE_LOCK_MS = 2 * 60 * 1000
 
-export default function POSClient({ initialMenu, initialCardHolders }: POSClientProps) {
+export default function POSClient({ initialMenu, initialCardHolders, initialOpenOrder = null, openOrderProblem = null }: POSClientProps) {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [orderItems, setOrderItems]             = useState<OrderItem[]>([])
   const [showConfirm, setShowConfirm]           = useState(false)
   const [mobileDrawer, setMobileDrawer]         = useState(false)
   const [payment, setPayment]                   = useState<number | null>(null)
   const [customInput, setCustomInput]           = useState('')
-  // Which checkout button is saving the sale, or null when none is.
-  const [pendingAction, setPendingAction]       = useState<CheckoutAction | null>(null)
+  // The sale, or the items added to a saved order, is being saved: the review locks until it is.
+  const [saving, setSaving]                     = useState(false)
   const [submitError, setSubmitError]           = useState<string | null>(null)
-  // The customer receipt of a sale just saved with "Complete + Print Receipt", previewed before printing.
-  const [receiptBlocks, setReceiptBlocks]       = useState<ReceiptBlock[] | null>(null)
-  const [notes, setNotes]                       = useState('')
+  // What a sale just saved can print: its receipt alone, or both with the staff ticket below.
+  const [salePrints, setSalePrints]             = useState<SalePrints | null>(null)
+  // "Add items" on Sales: the saved order the cart's lines go onto, or null for a new order.
+  // Its name and card stay as saved; a line added to it ends with lineSuffix, so none shares
+  // an id with a saved line. The cart holds only the new lines.
+  const [openOrder, setOpenOrder]               = useState<OpenOrder | null>(initialOpenOrder)
+  const [openProblem, setOpenProblem]           = useState<OpenSaleProblem | null>(openOrderProblem)
+  const [lineSuffix, setLineSuffix]             = useState(() => (initialOpenOrder ? newLineSuffix() : ''))
+  // The order was completed or deleted while items were being added: offer a new order.
+  const [addRefused, setAddRefused]             = useState(false)
+  // A receipt printed after adding items: closing it starts a new order.
+  const [newOrderAfterReceipt, setNewOrderAfterReceipt] = useState(false)
+  const [notes, setNotes]                       = useState(initialOpenOrder?.name ?? '')
   const [selectedLineId, setSelectedLineId]     = useState<string | null>(null)
   // Loyalty: the card holders (null when they could not be loaded; kept in step after each
   // linked sale), the one this order is linked to, and the rewards the cashier turned on.
   const [cardHolders, setCardHolders]           = useState<CardHolderWithCard[] | null>(initialCardHolders)
-  const [linkedHolderId, setLinkedHolderId]     = useState<string | null>(null)
+  const [linkedHolderId, setLinkedHolderId]     = useState<string | null>(initialOpenOrder?.loyaltyMemberId ?? null)
   const [loyaltyPicked, setLoyaltyPicked]       = useState<LoyaltyChoice>(NO_LOYALTY)
   // "Use 10% off" was tapped and the cashier is picking which classic drink it goes on.
   const [choosingTen, setChoosingTen]           = useState(false)
@@ -134,7 +155,7 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
         setShowConfirm(false)
         setMobileDrawer(false)
         setItemModal(null)
-        setReceiptBlocks(null)
+        setSalePrints(null)
         setShowManagerPin(false)
         setShowLoyalty(false)
         lockManager()
@@ -154,11 +175,14 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
     [orderItems]
   )
 
+  // Adding to a saved order: each reward is once per order, so the ones it used are off.
+  const blocked = useMemo(() => (openOrder ? blockedRewards(openOrder) : []), [openOrder])
+
   // The linked card holder, while the name field still shows their name, and the rewards
   // that apply. This order's stamps count straight away, so a reward can be used on it.
   const loyaltyOrder = useMemo(
-    () => resolveLoyaltyOrder({ holders: cardHolders, linkedHolderId, customerName: notes, items: orderItems, picked: loyaltyPicked }),
-    [cardHolders, linkedHolderId, notes, orderItems, loyaltyPicked],
+    () => resolveLoyaltyOrder({ holders: cardHolders, linkedHolderId, customerName: notes, items: orderItems, picked: loyaltyPicked, blocked }),
+    [cardHolders, linkedHolderId, notes, orderItems, loyaltyPicked, blocked],
   )
   const { holder: linkedHolder, orderStamps, card: loyaltyCard, applied: loyalty } = loyaltyOrder
   // A reward stays picked only while it applies. Left picked, it would come back by itself
@@ -170,13 +194,15 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
   const discountLines  = useMemo(() => buildDiscountLines(orderItems, loyalty), [orderItems, loyalty])
   const discountAmount = useMemo(() => totalDiscount(discountLines), [discountLines])
   const grandTotal     = useMemo(() => total - discountAmount, [total, discountAmount])
+  // What the customer owes: the whole order while items are added to a saved one.
+  const amountDue      = (openOrder?.total ?? 0) + grandTotal
 
   const addItem = useCallback((item: MenuItem, variant: Variant | null, categoryId: string) => {
     const price =
       variant === 'ice' ? item.priceIce! :
       variant === 'hot' ? item.priceHot! :
       item.priceFixed!
-    const lineId = `${item.id}__${variant ?? 'fixed'}`
+    const lineId = `${item.id}__${variant ?? 'fixed'}${lineSuffix}`
     setOrderItems(prev => {
       const existing = prev.find(i => i.lineId === lineId)
       if (existing) {
@@ -185,13 +211,13 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
       return [...prev, { lineId, name: item.name, variant, price, qty: 1, categoryId }]
     })
     setSelectedLineId(lineId)
-  }, [])
+  }, [lineSuffix])
 
   // Attaches the add-on to the given line (the item whose Add-ons modal is open). With
   // no parent the add-on becomes its own standalone order line, rendered by OrderPanel's
-  // "orphan add-ons" branch.
+  // "orphan add-ons" branch. An attached add-on's id already carries its line's suffix.
   function addAddon(addon: Addon, parentLineId: string | null) {
-    const lineId = addonLineId(addon.id, parentLineId)
+    const lineId = parentLineId ? addonLineId(addon.id, parentLineId) : `${addonLineId(addon.id, null)}${lineSuffix}`
     setOrderItems(prev => {
       const existing = prev.find(i => i.lineId === lineId)
       if (existing) {
@@ -287,50 +313,51 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
     setPayment(null)
     setCustomInput('')
     setSubmitError(null)
-    setNotes('')
     setSelectedLineId(null)
     setItemModal(null)
     unlinkCardHolder()
+    // Adding to a saved order clears only the new lines: its name and card stay.
+    setNotes(openOrder?.name ?? '')
+    setLinkedHolderId(openOrder?.loyaltyMemberId ?? null)
   }
 
-  async function completeSale(action: CheckoutAction) {
-    if (pendingAction) return
+  async function completeSale() {
+    if (saving) return
+    if (openOrder) return saveToOrder(openOrder)
     const saleLoyalty = linkedHolder ? { memberId: linkedHolder._id, rewards: loyaltyOrder.rewards } : null
     const payload = buildSalePayload({ items: orderItems, discountLines, subtotal: total, grandTotal, payment, notes, loyalty: saleLoyalty })
-    setPendingAction(action)
+    setSaving(true)
     setSubmitError(null)
     const result = await postSale(payload)
     if (!result.ok) {
       // Still "saving" while the cards are read again, so the old order can't be sent twice.
       const message = result.code === LOYALTY_CARD_CHANGED ? await catchUpWithCards(result.error) : result.error
-      setPendingAction(null)
+      setSaving(false)
       setSubmitError(message)
       return
     }
-    setPendingAction(null)
+    setSaving(false)
 
-    // Keep the card in step for the next order on this page (a receipt checkout stays here).
+    // Keep the card in step for the next order on this page: the cashier stays here.
     if (saleLoyalty) {
       setCardHolders(prev => prev && prev.map(h => (h._id === saleLoyalty.memberId
         ? { ...h, card: addOrderToTotals(h.card, orderStamps, saleLoyalty.rewards), orderCount: h.orderCount + 1 }
         : h)))
     }
     clearOrder()
+    // A new order made after an order could not be opened, or could no longer take items, still
+    // has that order's ?edit= in the address and may show its notice: both go with the sale.
+    window.history.replaceState(null, '', '/pos')
+    setOpenProblem(null)
     // Lets a Sales tab already open elsewhere pick up the new sale.
     const bc = new BroadcastChannel('pos-sales-update')
     bc.postMessage({ type: 'sale-completed' })
     bc.close()
-    // With a receipt, its preview opens and the cashier stays here for the next
-    // customer once it is printed or closed. A plain completion moves on to Sales
-    // as a full page load, like the Sales link: an in-app navigation would let Back
-    // bring this page back with the menu it was first loaded with.
-    if (action === 'receipt') {
-      setReceiptBlocks(buildCheckoutReceiptBlocks(payload, new Date()))
-      // Cards given or used on another device show from the next order.
-      void refetchCardHolders().then(holders => { if (holders) setCardHolders(holders) })
-    } else {
-      window.location.assign('/pos/sales')
-    }
+    // Its preview prints the receipt alone or both tickets, and ✕ there skips printing; the
+    // cashier stays here for the next customer either way.
+    setSalePrints(buildCheckoutPrints(payload, new Date()))
+    // Cards given or used on another device show from the next order.
+    void refetchCardHolders().then(holders => { if (holders) setCardHolders(holders) })
   }
 
   // The linked card changed on another device: a reward was used there, or the card was
@@ -338,9 +365,100 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
   // cart stays as it is, so the cashier checks the total and charges again.
   async function catchUpWithCards(reason: string): Promise<string> {
     const holders = await refetchCardHolders()
-    if (!holders) return `${reason} Unlink the card, then charge again.`
+    // A saved order's card stays linked while adding (no Unlink), but its reward can come off.
+    if (!holders) return openOrder ? `${reason} Turn the reward off, then save again.` : `${reason} Unlink the card, then charge again.`
     setCardHolders(holders)
-    return `${reason} The order is updated: check the total, then charge again.`
+    return `${reason} The order is updated: check the total, then ${openOrder ? 'save' : 'charge'} again.`
+  }
+
+  // "Add items": the cart's lines go onto the saved order, never a second sale. A refusal keeps
+  // the cart on screen: the order changed elsewhere (its saved part is shown again), or it was
+  // completed or deleted (the cart can become a new order instead).
+  async function saveToOrder(order: OpenOrder) {
+    const body = buildAddItemsBody({ order, items: orderItems, discountLines, payment, name: notes, rewards: loyaltyOrder.rewards })
+    setSaving(true)
+    setSubmitError(null)
+    const result = await postAddItems(order.id, body)
+    if (result.ok) return afterAdding(result.sale)
+    // An earlier save of these lines went through and only its reply was lost.
+    const earlier = result.sale ? savedState(result.sale, body) : 'not'
+    if (result.sale && earlier === 'saved') return afterAdding(result.sale)
+    if (result.sale && earlier === 'partly') return showEarlierSave(result.sale, result.code)
+    if (result.code === ORDER_CHANGED && result.sale) {
+      refreshOpenOrder(result.sale)
+      setSaving(false)
+      setSubmitError('This order changed on another device. Check it, then save again.')
+      return
+    }
+    if (result.code === ORDER_COMPLETED || result.code === ORDER_GONE) setAddRefused(true)
+    const message = result.code === LOYALTY_CARD_CHANGED ? await catchUpWithCards(result.error) : result.error
+    setSaving(false)
+    setSubmitError(message)
+  }
+
+  // The order as another device left it. A name it was given there is the one it keeps.
+  function refreshOpenOrder(sale: Sale) {
+    const fresh = openOrderFromSale(sale)
+    const savedName = openOrder?.name ?? ''
+    setOpenOrder(fresh)
+    setNotes(typed => nameAfterRefresh(savedName, typed, fresh.name))
+  }
+
+  // An earlier save went through with other amounts than the cart now has (its reply was lost,
+  // then the cart changed). The order shows what was saved and the cart is emptied, so nothing
+  // is saved twice; lines added from here get a new suffix, clear of the saved ones.
+  function showEarlierSave(sale: Sale, code: string | undefined) {
+    if (code === ORDER_CHANGED) refreshOpenOrder(sale)
+    else setAddRefused(true)
+    setOrderItems([])
+    setSelectedLineId(null)
+    setItemModal(null)
+    setLoyaltyPicked(NO_LOYALTY)
+    setLineSuffix(newLineSuffix())
+    setSaving(false)
+    setSubmitError(code === ORDER_CHANGED
+      ? 'An earlier save of these items went through, with other amounts. The order now shows what was saved: add anything still missing.'
+      : 'An earlier save of these items went through, then the order was completed. Check it on Sales.')
+  }
+
+  function afterAdding(sale: Sale) {
+    setSaving(false)
+    // Lets a Sales tab already open elsewhere show the order as it now is.
+    const bc = new BroadcastChannel('pos-sales-update')
+    bc.postMessage({ type: 'sale-updated' })
+    bc.close()
+    setShowConfirm(false)
+    // The whole order's receipt, or both with a staff ticket of only the drinks just added.
+    setSalePrints(buildAddedItemsPrints(sale))
+    setNewOrderAfterReceipt(true)
+  }
+
+  // The order can no longer take items: the cart, with the customer's name and card, is
+  // charged as a new order instead.
+  function makeNewOrder() {
+    setOpenOrder(null)
+    setAddRefused(false)
+    setSubmitError(null)
+    setShowConfirm(false)
+  }
+
+  // After items were added to a saved order and its receipt printed, the POS goes on to a new
+  // order where it is: a page load here could cut short the print just handed to RawBT.
+  function closeReceipt() {
+    setSalePrints(null)
+    if (!newOrderAfterReceipt) return
+    setNewOrderAfterReceipt(false)
+    setOpenOrder(null)
+    setOrderItems([])
+    setPayment(null)
+    setCustomInput('')
+    setSubmitError(null)
+    setSelectedLineId(null)
+    setItemModal(null)
+    setNotes('')
+    unlinkCardHolder()
+    window.history.replaceState(null, '', '/pos')
+    void refetchCardHolders().then(holders => { if (holders) setCardHolders(holders) })
   }
 
   function handleSetPayment(amount: number | null, raw: string) {
@@ -568,12 +686,17 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
       }))
   }, [mergedMenu, modalCategoryId])
 
+  // Adding to a saved order: its name can be typed or changed, with no card linked while adding;
+  // an order on a loyalty card keeps the card holder's name and card, fixed.
+  const onCard = openOrder?.loyaltyMemberId != null
   const customerNameField = (
     <CustomerNameField
       value={notes}
       disabled={orderItems.length === 0}
       onChange={changeCustomerName}
-      holders={cardHolders}
+      holders={openOrder && !onCard ? [] : cardHolders}
+      locked={onCard}
+      blocked={blocked}
       linked={linkedHolder}
       onLink={linkCardHolder}
       onUnlink={unlinkCardHolder}
@@ -591,7 +714,7 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
       freeActive={loyalty.freeLineId !== null}
     />
   )
-  const freeDrinkReady = (loyaltyCard?.freeReady ?? 0) > 0
+  const freeDrinkReady = !blocked.includes('free') && (loyaltyCard?.freeReady ?? 0) > 0
 
   return (
     <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
@@ -629,11 +752,12 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
             <StampCardIcon width={14} height={14} />
             <span className="hidden sm:inline">Loyalty</span>
           </button>
+          {/* Sales at every width: a sale no longer opens it by itself. */}
           <a
             href="/pos/sales"
-            className="hidden lg:block text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 transition-colors"
+            className="h-9 px-2 sm:px-3 flex items-center rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
           >
-            Sales ↗
+            Sales<span className="hidden sm:inline">&nbsp;↗</span>
           </a>
           <button
             className="lg:hidden flex items-center gap-2 sm:gap-3 text-sm text-cream/85 hover:text-cream transition-colors py-2 px-3 sm:px-4 border border-cream/30 rounded-sm"
@@ -648,6 +772,10 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
           </button>
         </div>
       </header>
+
+      {/* ── Adding to a saved order ("Add items" on Sales), or why that order could not be opened ── */}
+      {openOrder && <AddingBanner order={openOrder} newItems={itemCount} onCancel={() => leaveFor('/pos/sales')} />}
+      {!openOrder && openProblem && <OpenOrderNotice problem={openProblem} onDismiss={() => setOpenProblem(null)} />}
 
       {/* ── Body ── */}
       <div className="flex flex-1 overflow-hidden">
@@ -766,6 +894,8 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
             items={orderItems}
             total={total}
             grandTotal={grandTotal}
+            savedOrder={openOrder}
+            amountDue={amountDue}
             discountLines={discountLines}
             selectedLineId={selectedLineId}
             itemModal={itemModal}
@@ -795,7 +925,7 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
             <span className="bg-cream text-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
               {itemCount}
             </span>
-            View Order · ₱{grandTotal.toFixed(0)}
+            View Order · ₱{amountDue.toFixed(0)}
           </button>
         </div>
       )}
@@ -818,6 +948,8 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
               items={orderItems}
               total={total}
               grandTotal={grandTotal}
+              savedOrder={openOrder}
+              amountDue={amountDue}
               discountLines={discountLines}
               selectedLineId={selectedLineId}
               itemModal={itemModal}
@@ -873,16 +1005,29 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
           payment={payment}
           notes={notes}
           loyalty={linkedHolder ? { name: linkedHolder.name, cardNumber: linkedHolder.cardNumber, savedOnCard: cardState(linkedHolder.card).onCard, orderStamps } : null}
-          pendingAction={pendingAction}
+          saving={saving}
           submitError={submitError}
-          onCancel={() => { setShowConfirm(false); setSubmitError(null) }}
+          onCancel={() => { setShowConfirm(false); if (!addRefused) setSubmitError(null) }}
           onComplete={completeSale}
+          savedOrder={openOrder}
+          refusal={addRefused ? { actionLabel: 'Make it a new order', onAction: makeNewOrder } : null}
+          onNotesChange={changeCustomerName}
+          nameFixed={linkedHolder !== null || onCard}
         />
       )}
 
-      {/* ── Customer receipt preview after "Complete + Print Receipt"; closing it stays on /pos ── */}
-      {receiptBlocks && (
-        <ReceiptPreviewModal blocks={receiptBlocks} onClose={() => setReceiptBlocks(null)} />
+      {/* ── After a save: print the receipt or both, or ✕ to skip printing. Closing it stays on
+          /pos, starting a new order after items were added to a saved one ── */}
+      {salePrints && (
+        <ReceiptPreviewModal
+          blocks={salePrints.receipt}
+          prints={[
+            { label: '🖶 Print receipt', blocks: salePrints.receipt },
+            { label: '🖶 Print both', blocks: salePrints.both, hint: 'Receipt on top, staff ticket below.' },
+          ]}
+          notice="Saved. Print it, or close this to skip printing."
+          onClose={closeReceipt}
+        />
       )}
 
       {/* ── Loyalty cards, over the order on screen; a card given here is suggested in Customer name at once ── */}
@@ -909,6 +1054,7 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
           addonOptions={addonAttachItems}
           discountLines={discountLines}
           loyalty={loyalty}
+          orderUsedTen={openOrder !== null && reviewLockedBy(openOrder)}
           onPickDiscount={(kind, scope) => pickItemDiscount(modalItem.lineId, kind, scope)}
           onSaveNote={note => setItemNote(modalItem.lineId, note)}
           onAddAddon={addon => addAddon(addon, modalItem.lineId)}
@@ -1065,6 +1211,8 @@ function OrderPanel({
   items,
   total,
   grandTotal,
+  savedOrder,
+  amountDue,
   discountLines,
   selectedLineId,
   itemModal,
@@ -1084,6 +1232,10 @@ function OrderPanel({
   items: OrderItem[]
   total: number
   grandTotal: number
+  /** The saved order the cart's lines are being added to, shown locked above them; null for a new order. */
+  savedOrder: OpenOrder | null
+  /** What the customer owes: the grand total, plus the saved order's total while adding to one. */
+  amountDue: number
   discountLines: DiscountLine[]
   selectedLineId: string | null
   itemModal: { lineId: string; mode: ItemModalMode } | null
@@ -1110,20 +1262,26 @@ function OrderPanel({
 
       {/* Panel header */}
       <div className="px-6 py-3 border-b border-foreground/10 shrink-0">
-        <p className="text-[10px] uppercase tracking-[0.28em] text-foreground/60 font-semibold">Current Order</p>
+        <p className="text-[10px] uppercase tracking-[0.28em] text-foreground/60 font-semibold">{savedOrder ? 'Adding to order' : 'Current Order'}</p>
       </div>
 
-      {/* Order items */}
+      {/* Order items. While adding, the new lines lead, where the cashier is working, and the
+          saved order's locked lines follow; a linked card's panel leaves this list little room. */}
       <div className="flex-1 overflow-y-auto px-6 py-2">
         {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center pt-12 gap-2">
-            <p className="text-foreground/20 text-4xl font-light">—</p>
-            <p className="text-foreground/40 text-sm">No items added yet</p>
-          </div>
+          savedOrder ? (
+            <p className="pt-3 text-sm text-foreground/45">Tap a drink to add it to this order.</p>
+          ) : (
+            <div className="flex flex-col items-center justify-center pt-12 gap-2">
+              <p className="text-foreground/20 text-4xl font-light">—</p>
+              <p className="text-foreground/40 text-sm">No items added yet</p>
+            </div>
+          )
         ) : (() => {
           const { parentItems, addonsByParent, orphanAddons } = groupOrderItems(items)
           return (
             <>
+              {savedOrder && <p className="pt-2 text-[10px] uppercase tracking-[0.25em] font-semibold text-sky-700">Adding now</p>}
               {parentItems.map(item => {
                 const hasDiscount  = hasLineDiscount(item) || discountLines.some(d => d.lineId === item.lineId)
                 const isSelected   = item.lineId === selectedLineId
@@ -1265,6 +1423,7 @@ function OrderPanel({
             </>
           )
         })()}
+        {savedOrder && <SavedOrderLines order={savedOrder} />}
       </div>
 
       {/* Customer name, with loyalty card suggestions and the stamp bar */}
@@ -1277,7 +1436,7 @@ function OrderPanel({
         {discountLines.length > 0 && (
           <div className="space-y-1 px-0.5">
             <div className="flex justify-between items-center">
-              <span className="text-[10px] uppercase tracking-widest text-foreground/50 font-semibold">Subtotal</span>
+              <span className="text-[10px] uppercase tracking-widest text-foreground/50 font-semibold">{savedOrder ? 'New items' : 'Subtotal'}</span>
               <span className="text-xs tabular-nums text-foreground/50">₱{total.toFixed(0)}</span>
             </div>
             {discountLines.map(d => (
@@ -1289,10 +1448,22 @@ function OrderPanel({
           </div>
         )}
 
-        {/* Total */}
+        {/* Total: while adding, the saved order and the new lines, then the whole order due */}
+        {savedOrder && (
+          <div className="space-y-1 px-0.5">
+            <div className="flex justify-between items-center text-xs tabular-nums text-foreground/55">
+              <span className="text-[10px] uppercase tracking-widest font-semibold">Already ordered</span>
+              <span>₱{savedOrder.total.toFixed(0)}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs tabular-nums text-sky-700 font-semibold">
+              <span className="text-[10px] uppercase tracking-widest">Adding now</span>
+              <span>₱{grandTotal.toFixed(0)}</span>
+            </div>
+          </div>
+        )}
         <div className="flex justify-between items-center">
-          <span className="text-xs uppercase tracking-widest text-foreground/60 font-semibold">Total</span>
-          <span className="font-display font-semibold text-4xl tabular-nums text-foreground">₱{grandTotal.toFixed(0)}</span>
+          <span className="text-xs uppercase tracking-widest text-foreground/60 font-semibold">{savedOrder ? 'Total due' : 'Total'}</span>
+          <span className="font-display font-semibold text-4xl tabular-nums text-foreground">₱{amountDue.toFixed(0)}</span>
         </div>
 
         {/* Payment presets */}
@@ -1333,16 +1504,16 @@ function OrderPanel({
 
         {/* Change / Short indicator */}
         {payment !== null && items.length > 0 && (
-          payment >= grandTotal ? (
+          payment >= amountDue ? (
             <div className="flex items-baseline justify-between">
               <span className="text-[10px] uppercase tracking-[0.25em] text-foreground/60 font-semibold">Change</span>
               <span className="font-display font-semibold text-2xl tracking-tight text-foreground tabular-nums">
-                ₱{(payment - grandTotal).toFixed(0)}
+                ₱{(payment - amountDue).toFixed(0)}
               </span>
             </div>
           ) : (
             <p className="text-xs text-red-500 uppercase tracking-widest font-semibold">
-              Short ₱{(grandTotal - payment).toFixed(0)}
+              Short ₱{(amountDue - payment).toFixed(0)}
             </p>
           )
         )}
@@ -1361,7 +1532,7 @@ function OrderPanel({
             disabled={items.length === 0}
             className="flex-1 bg-foreground text-cream text-sm uppercase tracking-widest py-3.5 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all disabled:opacity-30 disabled:cursor-not-allowed rounded-sm"
           >
-            Charge ₱{grandTotal.toFixed(0)}
+            {savedOrder ? `Review · ₱${amountDue.toFixed(0)}` : `Charge ₱${grandTotal.toFixed(0)}`}
           </button>
         </div>
       </div>

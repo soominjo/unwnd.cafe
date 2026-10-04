@@ -1,11 +1,15 @@
 'use client'
 
-import { variantClass, groupOrderItems } from './utils'
+import { useRef, useState } from 'react'
+import { variantClass, groupOrderItems, groupSaleItems } from './utils'
 import { lineBadges } from './discounts'
 import QtyBadge from './QtyBadge'
 import LoyaltyBar from './LoyaltyBar'
 import { LOYALTY_CARD_SIZE } from '@/lib/loyalty'
 import type { OrderItem, DiscountLine } from './types'
+import type { OpenOrder } from './addToOrder'
+import { formatPHClock } from './sales/dateRange'
+import { MAX_NOTES_LENGTH } from '@/lib/sales/validateSaleInput'
 
 /** A linked loyalty card, shown to the customer with the stamps this order adds. */
 export interface ReviewLoyalty {
@@ -14,9 +18,6 @@ export interface ReviewLoyalty {
   savedOnCard: number
   orderStamps: number
 }
-
-/** Which checkout button was tapped: a plain completion, or one that also prints the customer's receipt. */
-export type CheckoutAction = 'plain' | 'receipt'
 
 interface OrderReviewModalProps {
   orderItems: OrderItem[]
@@ -28,12 +29,23 @@ interface OrderReviewModalProps {
   payment: number | null
   notes: string
   loyalty: ReviewLoyalty | null
-  /** The checkout being saved, or null. Every button locks while it saves. */
-  pendingAction: CheckoutAction | null
+  /** The order is being saved: every way out locks until it is. */
+  saving: boolean
   submitError: string | null
   onCancel: () => void
-  onComplete: (action: CheckoutAction) => void
+  /** Saves the order, then opens its print preview: the receipt or both, or ✕ to skip printing. */
+  onComplete: () => void
+  /** Adding to a saved order: its lines show above the new ones, and its total is part of what is due. */
+  savedOrder?: OpenOrder | null
+  /** The order can no longer take the items: what the cashier can do instead. */
+  refusal?: { actionLabel: string; onAction: () => void } | null
+  /** Lets the cashier add or fix the customer's name right before saving; without it the name only shows. */
+  onNotesChange?: (value: string) => void
+  /** The order is on a loyalty card: its name is the card holder's and stays as it is. */
+  nameFixed?: boolean
 }
+
+const NAME_CHIP = 'inline-block max-w-full truncate bg-[#d4ede1] text-[#1f5c3c] text-sm font-semibold px-4 py-1.5 rounded-full'
 
 // Full-height review page (not a floating modal) shown to the customer
 // before the cashier taps charge, laid out as a single centered column.
@@ -50,14 +62,22 @@ export default function OrderReviewModal({
   payment,
   notes,
   loyalty,
-  pendingAction,
+  saving,
   submitError,
   onCancel,
   onComplete,
+  savedOrder = null,
+  refusal = null,
+  onNotesChange,
+  nameFixed = false,
 }: OrderReviewModalProps) {
   const { parentItems, addonsByParent, orphanAddons } = groupOrderItems(orderItems)
-  const short = payment !== null && payment < grandTotal
-  const isSubmitting = pendingAction !== null
+  // What the customer owes: the whole order when items are being added to a saved one.
+  const totalDue = (savedOrder?.total ?? 0) + grandTotal
+  const short = payment !== null && payment < totalDue
+  const savedAt = savedOrder ? formatPHClock(savedOrder.createdAt) : ''
+  // Nothing new to put on a saved order (its cart was emptied after an earlier save went through).
+  const nothingToSave = savedOrder !== null && orderItems.length === 0
 
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
@@ -68,19 +88,23 @@ export default function OrderReviewModal({
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-[0.3em] text-foreground/55 font-semibold">Review Your Order</p>
             <p className="text-foreground/45 text-sm mt-1">
-              {itemCount} item{itemCount !== 1 ? 's' : ''} · {orderItems.length} line{orderItems.length !== 1 ? 's' : ''}
+              {savedOrder
+                ? `Adding to the ${savedAt} order · ${itemCount} new item${itemCount !== 1 ? 's' : ''}`
+                : `${itemCount} item${itemCount !== 1 ? 's' : ''} · ${orderItems.length} line${orderItems.length !== 1 ? 's' : ''}`}
             </p>
           </div>
-          {notes.trim() && (
+          {onNotesChange && !nameFixed ? (
             <div className="flex-1 flex justify-center min-w-0">
-              <span className="inline-block max-w-full truncate bg-[#d4ede1] text-[#1f5c3c] text-sm font-semibold px-4 py-1.5 rounded-full">
-                {notes.trim()}
-              </span>
+              <ReviewNameField name={notes} onChange={onNotesChange} />
+            </div>
+          ) : notes.trim() && (
+            <div className="flex-1 flex justify-center min-w-0">
+              <span className={NAME_CHIP}>{notes.trim()}</span>
             </div>
           )}
           <button
             onClick={onCancel}
-            disabled={isSubmitting}
+            disabled={saving}
             title="Cancel"
             className="text-foreground/50 hover:text-foreground text-xl leading-none w-10 h-10 flex items-center justify-center rounded-full hover:bg-foreground/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           >
@@ -106,6 +130,7 @@ export default function OrderReviewModal({
 
         {/* Scrollable body: item list + notes */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-3">
+          {savedOrder && <SavedPart order={savedOrder} savedAt={savedAt} />}
           <div className="divide-y divide-foreground/[0.07]">
             {parentItems.map(item => {
               const addons = addonsByParent.get(item.lineId) ?? []
@@ -191,8 +216,13 @@ export default function OrderReviewModal({
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-foreground/55 font-semibold">Total Due</p>
                 <p className="font-display font-bold text-5xl tracking-tight text-foreground tabular-nums mt-1">
-                  ₱{grandTotal.toFixed(0)}
+                  ₱{totalDue.toFixed(0)}
                 </p>
+                {savedOrder && (
+                  <p className="text-sm text-foreground/55 tabular-nums mt-1">
+                    {`Already ordered ₱${savedOrder.total.toFixed(0)} · added now ₱${grandTotal.toFixed(0)}`}
+                  </p>
+                )}
               </div>
 
               <div className="border-t border-foreground/10 pt-4 flex items-baseline gap-8">
@@ -208,14 +238,14 @@ export default function OrderReviewModal({
                   <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-red-500 font-semibold">Short</p>
                     <p className="text-2xl text-red-500 font-bold tabular-nums mt-1">
-                      ₱{(grandTotal - payment).toFixed(0)}
+                      ₱{(totalDue - payment).toFixed(0)}
                     </p>
                   </div>
                 ) : (
                   <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-foreground/55 font-semibold">Change</p>
                     <p className="font-display font-semibold text-3xl tracking-tight text-foreground tabular-nums mt-1">
-                      ₱{(payment - grandTotal).toFixed(0)}
+                      ₱{(payment - totalDue).toFixed(0)}
                     </p>
                   </div>
                 )}
@@ -227,25 +257,136 @@ export default function OrderReviewModal({
               {submitError && (
                 <p className="text-sm text-red-500 uppercase tracking-widest font-medium text-center">{submitError}</p>
               )}
-              <button
-                onClick={() => onComplete('plain')}
-                disabled={isSubmitting}
-                className="w-full bg-foreground text-cream text-base uppercase tracking-widest py-4 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {pendingAction === 'plain' ? 'Saving…' : 'Order Complete ✓'}
-              </button>
-              <button
-                onClick={() => onComplete('receipt')}
-                disabled={isSubmitting}
-                className="w-full border border-foreground/20 text-foreground/70 text-sm uppercase tracking-widest py-3 font-semibold hover:border-foreground/35 hover:text-foreground hover:bg-foreground/4 active:scale-[0.99] transition-all rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {pendingAction === 'receipt' ? 'Saving…' : '🖨 Complete + Print Receipt'}
-              </button>
-              <p className="text-xs text-foreground/35 text-center">Only if the customer asks for one</p>
+              {refusal ? (
+                <button
+                  onClick={refusal.onAction}
+                  className="w-full bg-foreground text-cream text-base uppercase tracking-widest py-4 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm"
+                >
+                  {refusal.actionLabel}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => onComplete()}
+                    disabled={saving || nothingToSave}
+                    className="w-full bg-foreground text-cream text-base uppercase tracking-widest py-4 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {saving ? 'Saving…' : savedOrder ? '🖨 Save + Print' : '🖨 Complete + Print'}
+                  </button>
+                  <p className="text-xs text-foreground/45 text-center">
+                    {savedOrder
+                      ? `Saves onto the ${savedAt} order: no new order is made. A preview then prints, or closing it skips printing.`
+                      : 'After saving, a preview prints the receipt or both; closing it skips printing.'}
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// The customer's name at the top of the review: a forgotten one is added here, or a wrong one
+// fixed, without going back to the order panel. It changes the same name field as the panel.
+function ReviewNameField({ name, onChange }: { name: string; onChange: (value: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  // Set on Done, so focus returns to the name's button rather than the page.
+  const refocus = useRef(false)
+  const shown = name.trim()
+
+  function focusOnReturn(button: HTMLButtonElement | null) {
+    if (!button || !refocus.current) return
+    refocus.current = false
+    button.focus()
+  }
+
+  if (editing) {
+    return (
+      <form
+        className="flex items-center gap-2 min-w-0"
+        onSubmit={e => {
+          e.preventDefault()
+          refocus.current = true
+          setEditing(false)
+        }}
+      >
+        <input
+          autoFocus
+          aria-label="Customer name"
+          placeholder="Customer name"
+          value={name}
+          maxLength={MAX_NOTES_LENGTH}
+          onChange={e => onChange(e.target.value)}
+          className="min-w-0 w-56 rounded-full border border-foreground/25 px-4 py-1.5 text-sm text-foreground focus:outline-none focus:border-foreground/50"
+        />
+        <button type="submit" className="h-9 px-3 rounded-full bg-foreground text-cream text-xs font-bold uppercase tracking-widest shrink-0">
+          Done
+        </button>
+      </form>
+    )
+  }
+  if (!shown) {
+    return (
+      <button
+        ref={focusOnReturn}
+        type="button"
+        onClick={() => setEditing(true)}
+        className="h-9 px-4 rounded-full border border-dashed border-foreground/30 text-sm font-semibold text-foreground/60 hover:border-foreground/50 hover:text-foreground"
+      >
+        + Add name
+      </button>
+    )
+  }
+  return (
+    <span className="inline-flex max-w-full min-w-0 items-center gap-1.5">
+      <span className={NAME_CHIP}>{shown}</span>
+      <button
+        ref={focusOnReturn}
+        type="button"
+        onClick={() => setEditing(true)}
+        aria-label="Edit the customer’s name"
+        className="h-9 px-3 shrink-0 rounded-full text-xs font-bold uppercase tracking-widest text-foreground/55 hover:text-foreground hover:bg-foreground/5"
+      >
+        Edit
+      </button>
+    </span>
+  )
+}
+
+// The saved part of an order items are being added to: quieter than the new lines below it,
+// which are what the customer is checking now.
+function SavedPart({ order, savedAt }: { order: OpenOrder; savedAt: string }) {
+  const { topLevel, addonsByParent } = groupSaleItems(order.items)
+  return (
+    <div className="pb-3">
+      <p className="pt-1 pb-1 text-xs uppercase tracking-[0.25em] text-foreground/45 font-semibold">Already ordered · {savedAt}</p>
+      {topLevel.map(item => (
+        <div key={item.lineId} className="py-1.5 text-foreground/55">
+          <div className="flex items-start justify-between gap-4">
+            <p className="text-sm leading-tight flex items-center flex-wrap gap-x-2">
+              <span>{item.name}</span>
+              {item.variant && <span className={`text-[11px] uppercase tracking-wider font-bold ${variantClass(item.variant)}`}>{item.variant}</span>}
+              {item.qty > 1 && <span className="text-xs font-bold tabular-nums">×{item.qty}</span>}
+            </p>
+            <span className="text-sm tabular-nums shrink-0">₱{(item.price * item.qty).toFixed(0)}</span>
+          </div>
+          {(addonsByParent.get(item.lineId) ?? []).map(addon => (
+            <div key={addon.lineId} className="flex justify-between gap-4 pl-3 text-xs">
+              <span>+ {addon.name}{addon.qty > 1 ? ` ×${addon.qty}` : ''}</span>
+              <span className="tabular-nums">₱{(addon.price * addon.qty).toFixed(0)}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+      {order.discounts.map(d => (
+        <div key={`${d.lineId}:${d.name}`} className="flex justify-between gap-4 text-xs text-emerald-600/80 font-semibold">
+          <span className="truncate">{d.name}</span>
+          <span className="tabular-nums shrink-0">−₱{d.amount}</span>
+        </div>
+      ))}
+      <p className="pt-4 text-xs uppercase tracking-[0.25em] text-sky-700 font-semibold">Adding now</p>
     </div>
   )
 }

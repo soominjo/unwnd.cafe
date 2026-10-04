@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { OrderItem } from './types'
+import { rewardOfSavedDiscount } from '@/lib/loyalty'
 import {
   attachedAddonsTotal,
   unitsDiscounted,
@@ -147,6 +148,19 @@ describe('savedDiscountName', () => {
       .toBe('PWD Drink -20% x1 (Latte)')
     expect(savedDiscountName({ lineId: 'b', name: 'Croissant', amount: 10, kind: 'review', scope: 'all', label: 'Google Review −10%' }))
       .toBe('Google Review -10% (Croissant)')
+  })
+
+  it('names loyalty rows so the server can read their reward back (rewardOfSavedDiscount)', () => {
+    const lattes = item({ lineId: 'cafe-latte__hot', name: 'Cafe Latte', variant: 'hot', price: 110, qty: 2, categoryId: 'espresso', discounts: { pwd: 'solo' } })
+    const rows = buildDiscountLines([lattes], { tenLineId: lattes.lineId, freeLineId: lattes.lineId })
+    expect(rows.map(r => [savedDiscountName(r), rewardOfSavedDiscount(savedDiscountName(r))])).toEqual([
+      ['Loyalty free drink (Cafe Latte)', 'free'],
+      ['PWD Drink -20% x1 (Cafe Latte)', null],
+      ['Loyalty -10% x1 (Cafe Latte)', 'ten'],
+    ])
+    const one = item({ lineId: 'cafe-latte__hot', name: 'Cafe Latte', variant: 'hot', price: 110, qty: 1, categoryId: 'espresso', discounts: { review: 'all' } })
+    expect(rewardOfSavedDiscount(savedDiscountName(buildDiscountLines([one], { tenLineId: one.lineId, freeLineId: null })[0]))).toBe('ten')
+    expect(rewardOfSavedDiscount(savedDiscountName(buildDiscountLines([one])[0]))).toBeNull()
   })
 })
 

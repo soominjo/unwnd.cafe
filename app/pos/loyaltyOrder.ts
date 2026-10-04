@@ -19,6 +19,8 @@ export interface LoyaltyOrderInput {
   items: readonly OrderItem[]
   /** The rewards the cashier turned on. */
   picked: LoyaltyChoice
+  /** Rewards this order can't use: while adding to a saved order, the ones it used already. */
+  blocked?: readonly LoyaltyReward[]
 }
 
 export interface LoyaltyOrder {
@@ -36,16 +38,18 @@ export interface LoyaltyOrder {
 
 // The loyalty side of the order on screen. POSClient keeps the picked rewards equal to
 // the applied ones, so a reward that stops applying has to be tapped again to come back.
-export function resolveLoyaltyOrder({ holders, linkedHolderId, customerName, items, picked }: LoyaltyOrderInput): LoyaltyOrder {
+export function resolveLoyaltyOrder({ holders, linkedHolderId, customerName, items, picked, blocked = [] }: LoyaltyOrderInput): LoyaltyOrder {
   const holder = holders?.find(h => h._id === linkedHolderId && loyaltyKey(h.name) === loyaltyKey(customerName)) ?? null
   const orderStamps = stampsIn(items)
   const card = holder ? cardState(addOrderToTotals(holder.card, orderStamps, [])) : null
-  const freeLineId = (card?.freeReady ?? 0) > 0 && items.some(i => i.lineId === picked.freeLineId && isClassicDrinkLine(i))
+  const freeLineId = !blocked.includes('free') && (card?.freeReady ?? 0) > 0 && items.some(i => i.lineId === picked.freeLineId && isClassicDrinkLine(i))
     ? picked.freeLineId
     : null
   // The free drink goes first: the 10% needs a unit of its drink still to pay.
   const tenLines = items.filter(i => isClassicDrinkLine(i) && i.qty > (i.lineId === freeLineId ? 1 : 0))
-  const tenLineId = (card?.tenReady ?? 0) > 0 && tenLines.some(i => i.lineId === picked.tenLineId) ? picked.tenLineId : null
+  const tenLineId = !blocked.includes('ten') && (card?.tenReady ?? 0) > 0 && tenLines.some(i => i.lineId === picked.tenLineId)
+    ? picked.tenLineId
+    : null
   const rewards: LoyaltyReward[] = [...(tenLineId ? ['ten' as const] : []), ...(freeLineId ? ['free' as const] : [])]
   return { holder, orderStamps, card, applied: { tenLineId, freeLineId }, tenLines, rewards }
 }

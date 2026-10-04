@@ -25,6 +25,8 @@ interface ItemActionModalProps {
   discountLines: DiscountLine[]
   /** The order's loyalty rewards: the 10% locks Google Review; the free drink may be on this line. */
   loyalty: LoyaltyChoice
+  /** The saved order this line is being added to used the loyalty 10%, its one 10%: Google Review stays locked. */
+  orderUsedTen?: boolean
   onPickDiscount: (kind: LineDiscountKind, scope: LineDiscountScope) => void
   onSaveNote: (note: string) => void
   onAddAddon: (addon: Addon) => void
@@ -46,6 +48,7 @@ export default function ItemActionModal({
   addonOptions,
   discountLines,
   loyalty,
+  orderUsedTen = false,
   onPickDiscount,
   onSaveNote,
   onAddAddon,
@@ -137,7 +140,7 @@ export default function ItemActionModal({
                 addonsTotal={addonsTotal}
                 lineRows={lineRows}
                 onPick={onPickDiscount}
-                reviewLocked={loyalty.tenLineId !== null}
+                reviewLocked={orderUsedTen || loyalty.tenLineId !== null}
                 freeUnits={loyalty.freeLineId === item.lineId ? 1 : 0}
               />
             )}

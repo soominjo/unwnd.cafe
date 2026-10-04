@@ -18,6 +18,9 @@ export interface OrderActions {
   onCancelDeleteItem: () => void
   onConfirmDeleteItem: (orderId: string, lineId: string) => void
   onCompleteOrder: (id: string) => void
+  onAddItems: (id: string) => void
+  /** Names the order (empty clears it): resolves to null when done, else to why it wasn't saved. */
+  onRenameOrder: (id: string, name: string) => Promise<string | null>
 }
 
 interface OrdersViewProps {
@@ -97,6 +100,8 @@ export default function OrdersView(props: OrdersViewProps) {
             onCancelDeleteItem={actions.onCancelDeleteItem}
             onConfirmDeleteItem={(lineId) => actions.onConfirmDeleteItem(order._id, lineId)}
             onCompleteOrder={() => actions.onCompleteOrder(order._id)}
+            onAddItems={() => actions.onAddItems(order._id)}
+            onRename={(name) => actions.onRenameOrder(order._id, name)}
           />
         ))}
       </div>

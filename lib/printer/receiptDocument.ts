@@ -15,6 +15,8 @@ export type ReceiptBlock =
   | { kind: 'spacer'; lines?: number }
   | { kind: 'qr'; url: string; caption: string }
   | { kind: 'footer'; text: string }
+  /** Where two tickets of one print come apart: a gap with a tear line (and a cut, given a cutter). */
+  | { kind: 'tear' }
 
 export interface ReceiptItemInput {
   name: string
@@ -52,11 +54,17 @@ export interface ReceiptInput {
   shop?: ShopDetails
   /** Defaults to 'customer'. */
   audience?: ReceiptAudience
+  /**
+   * Set on a staff ticket of items added to an order after its checkout: the order's first
+   * time. The ticket is headed ADDED TO ORDER, so the kitchen makes only these.
+   */
+  addedTo?: Date
 }
 
 const RECEIPT_TIME_ZONE = 'Asia/Manila'
 const DEFAULT_FOOTER = 'Thank you for visiting!'
 const KITCHEN_TICKET_TITLE = 'KITCHEN TICKET'
+const ADDED_TICKET_TITLE = 'ADDED TO ORDER'
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('en-US', {
@@ -82,9 +90,10 @@ export function assertNeverBlock(block: never): never {
   throw new Error(`Unhandled receipt block kind: ${(block as ReceiptBlock).kind}`)
 }
 
-function headerBlocks(shop: ShopDetails, audience: ReceiptAudience): ReceiptBlock[] {
+function headerBlocks(shop: ShopDetails, audience: ReceiptAudience, addedTo?: Date): ReceiptBlock[] {
   if (audience === 'kitchen') {
-    return [{ kind: 'footer', text: KITCHEN_TICKET_TITLE }, { kind: 'rule', style: 'double' }]
+    const added: ReceiptBlock[] = addedTo ? [{ kind: 'footer', text: ADDED_TICKET_TITLE }] : []
+    return [{ kind: 'footer', text: KITCHEN_TICKET_TITLE }, ...added, { kind: 'rule', style: 'double' }]
   }
   return [
     // The logo carries the brand; the shop name only prints if the bitmap can't be rendered.
@@ -99,10 +108,12 @@ function detailBlocks(input: ReceiptInput): ReceiptBlock[] {
   const itemCount = input.items.reduce((sum, item) => sum + (item.isAddon ? 0 : item.qty), 0)
   const name = input.customerName?.trim()
   const nameRow: ReceiptBlock[] = name ? [{ kind: 'detail', label: 'Name', value: name }] : []
+  const orderRow: ReceiptBlock[] = input.addedTo ? [{ kind: 'detail', label: 'Order from', value: formatTime(input.addedTo) }] : []
   return [
     ...nameRow,
     { kind: 'detail', label: 'Date', value: formatDate(input.timestamp) },
     { kind: 'detail', label: 'Time', value: formatTime(input.timestamp) },
+    ...orderRow,
     { kind: 'detail', label: 'Items', value: String(itemCount) },
     { kind: 'rule' },
   ]
@@ -155,11 +166,23 @@ function footerBlocks(input: ReceiptInput, shop: ShopDetails, audience: ReceiptA
   ]
 }
 
+/** What the line between two tickets of one print says: ASCII, for the printer's code page. */
+export const TEAR_LABEL = 'tear here'
+
+/**
+ * The customer's receipt and the staff ticket as one print, with a gap between them to tear the
+ * paper at. The receipt comes first, for the customer at the counter; the staff ticket below it
+ * goes to the bar.
+ */
+export function receiptThenStaff(receipt: readonly ReceiptBlock[], staff: readonly ReceiptBlock[]): ReceiptBlock[] {
+  return [...receipt, { kind: 'tear' }, ...staff]
+}
+
 export function buildReceiptDocument(input: ReceiptInput): ReceiptBlock[] {
   const shop = input.shop ?? UNWND_SHOP
   const audience = input.audience ?? 'customer'
   return [
-    ...headerBlocks(shop, audience),
+    ...headerBlocks(shop, audience, input.addedTo),
     ...detailBlocks(input),
     ...itemBlocks(input.items, audience),
     ...(audience === 'kitchen' ? [] : totalBlocks(input)),

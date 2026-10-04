@@ -188,6 +188,18 @@ export function parseSaleLoyalty(body: { loyaltyMemberId?: unknown; loyaltyRewar
   return { memberId, rewards: rewards as LoyaltyReward[] }
 }
 
+// A saved discount row is named by savedDiscountName (app/pos/discounts.ts): its label, then
+// the drink in brackets. The loyalty rows' labels start these ways.
+const SAVED_REWARD_ROWS: readonly (readonly [prefix: string, reward: LoyaltyReward])[] = [
+  ['Loyalty -10%', 'ten'],
+  ['Loyalty free drink', 'free'],
+]
+
+/** The loyalty reward a saved discount row stands for, read from its name; null for any other row. */
+export function rewardOfSavedDiscount(name: string): LoyaltyReward | null {
+  return SAVED_REWARD_ROWS.find(([prefix]) => name.startsWith(prefix))?.[1] ?? null
+}
+
 /** Why a reward on this order can't be used (its stamps count straight away), or null when they all can. */
 export function rewardProblem(totals: CardTotals, orderStamps: number, rewards: readonly LoyaltyReward[]): string | null {
   const card = cardState({ ...totals, earned: totals.earned + orderStamps })

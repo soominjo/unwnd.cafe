@@ -115,6 +115,11 @@ export function todayPH(): string {
   return `${ph.getUTCFullYear()}-${pad(ph.getUTCMonth() + 1)}-${pad(ph.getUTCDate())}`
 }
 
+/** The time of day in the Philippines, e.g. "2:14 PM". */
+export function formatPHClock(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-PH', { timeZone: PH_TIME_ZONE, hour: 'numeric', minute: '2-digit' })
+}
+
 export function formatPHTime(iso: string): string {
   return new Date(iso).toLocaleString('en-PH', {
     timeZone: PH_TIME_ZONE,

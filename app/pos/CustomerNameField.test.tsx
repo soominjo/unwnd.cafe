@@ -112,4 +112,28 @@ describe('CustomerNameField', () => {
   it('says no stamps come from this order, not that the card has none', () => {
     expect(field({ value: 'Kylene', linked: kylene, orderStamps: 0 })).toContain('No stamps from this order yet')
   })
+
+  it('shows a saved order’s name fixed while items are added to it: no typing, no unlink', () => {
+    const html = field({ value: 'Kylene', linked: kylene, orderStamps: 1, locked: true })
+    expect(html).not.toContain('<input')
+    expect(html).toContain('Kylene')
+    expect(html).not.toContain('Unlink')
+    expect(html).toContain('+1 stamp this order')
+    const plain = field({ value: 'Juan', holders: [], locked: true })
+    expect(plain).not.toContain('<input')
+    expect(plain).toContain('Juan')
+  })
+
+  it('keeps a reward the order used already for the next order, and says so', () => {
+    // Ana's card is full: a 10% and a free drink ready.
+    const ana = holder('a', 'Ana', 9, 11)
+    const tenUsed = field({ value: 'Ana', linked: ana, locked: true, blocked: ['ten'] })
+    expect(tenUsed).not.toContain('Use 10% off')
+    expect(tenUsed).toContain('10% off is ready for their next order: this order has its 10% already.')
+    expect(tenUsed).toContain('Free drink ready')
+    const freeUsed = field({ value: 'Ana', linked: ana, locked: true, blocked: ['free'], hasFreeDrinkLine: true })
+    expect(freeUsed).toContain('Use 10% off')
+    expect(freeUsed).not.toContain('tap “Make free”')
+    expect(freeUsed).toContain('A free drink is ready for their next order: this order used one already.')
+  })
 })

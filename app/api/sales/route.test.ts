@@ -91,6 +91,33 @@ describe('POST /api/sales', () => {
     expect((await post(sale({ items: [{ ...signature, qty: 1.5 }] }))).status).toBe(400)
   })
 
+  it('refuses a sale with no lines, or more than 50', async () => {
+    expect((await post(sale({ items: [] }))).status).toBe(400)
+    const many = Array.from({ length: 51 }, (_, i) => ({ ...signature, lineId: `line-${i}` }))
+    expect((await post(sale({ items: many }))).status).toBe(400)
+    expect((await post(sale({ items: many.slice(0, 50) }))).status).toBe(200)
+  })
+
+  it('refuses a discount row that is not one: no name, or a negative amount', async () => {
+    expect((await post(sale({ discounts: [{ lineId: 'tiramisu__ice', name: '', amount: 16 }] }))).status).toBe(400)
+    expect((await post(sale({ discounts: [{ lineId: 'tiramisu__ice', name: 'PWD Drink -20% (Tiramisu)', amount: -16 }] }))).status).toBe(400)
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('stores each line under its own key, flagging only a line with a parent as an add-on', async () => {
+    const shot = { lineId: 'addon__shot__tiramisu__ice', name: 'Espresso Shot', variant: null, price: 30, qty: 1, parentLineId: 'tiramisu__ice' }
+    const oat = { lineId: 'addon__oat', name: 'Oat Milk', variant: null, price: 40, qty: 1, note: 'on the side' }
+    await post(sale({ items: [signature, shot, oat], discounts: [{ lineId: 'tiramisu__ice', name: 'PWD Drink -20% (Tiramisu)', amount: 32 }] }))
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      items: [
+        { _type: 'saleItem', _key: 'tiramisu__ice', lineId: 'tiramisu__ice', name: 'Tiramisu', variant: 'ice', price: 160, qty: 1, categoryId: 'signature' },
+        { _type: 'saleItem', _key: 'addon__shot__tiramisu__ice', lineId: 'addon__shot__tiramisu__ice', name: 'Espresso Shot', variant: null, price: 30, qty: 1, isAddon: true, parentLineId: 'tiramisu__ice' },
+        { _type: 'saleItem', _key: 'addon__oat', lineId: 'addon__oat', name: 'Oat Milk', variant: null, price: 40, qty: 1, note: 'on the side' },
+      ],
+      discounts: [{ _type: 'saleDiscount', _key: 'tiramisu__ice-0', lineId: 'tiramisu__ice', name: 'PWD Drink -20% (Tiramisu)', amount: 32 }],
+    }))
+  })
+
   it('logs a sale that could not be saved', async () => {
     create.mockRejectedValueOnce(new Error('Sanity down'))
     expect((await post(sale({ total: 160 }))).status).toBe(500)

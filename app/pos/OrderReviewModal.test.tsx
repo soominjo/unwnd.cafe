@@ -3,6 +3,7 @@ import { isValidElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import OrderReviewModal from './OrderReviewModal'
 import type { OrderItem, DiscountLine } from './types'
+import type { OpenOrder } from './addToOrder'
 
 // The modal uses no hooks, so calling it returns its element tree; this finds a button in it by label.
 function buttonLabelled(node: ReactNode, label: string): { onClick: () => void } | undefined {
@@ -40,7 +41,7 @@ const base = {
   payment: 500,
   notes: 'Ana',
   loyalty: null,
-  pendingAction: null,
+  saving: false,
   submitError: null,
   onCancel: () => {},
   onComplete: () => {},
@@ -55,27 +56,23 @@ describe('OrderReviewModal', () => {
     expect(html).toContain('−₱30')
   })
 
-  it('offers Complete + Print Receipt beside Order Complete', () => {
+  it('completes with one button, Complete + Print: a preview then prints the receipt or both, or closes without printing', () => {
     const html = renderToStaticMarkup(<OrderReviewModal {...base} />)
-    expect(html).toContain('Order Complete ✓')
-    expect(html).toContain('🖨 Complete + Print Receipt')
+    expect(html).toContain('🖨 Complete + Print')
+    expect(html).not.toContain('Order Complete')
+    // Not "✕": the review has a ✕ of its own, which cancels.
+    expect(html).toContain('After saving, a preview prints the receipt or both; closing it skips printing.')
+    let completed = 0
+    buttonLabelled(OrderReviewModal({ ...base, onComplete: () => { completed += 1 } }), '🖨 Complete + Print')?.onClick()
+    expect(completed).toBe(1)
   })
 
-  it('completes plainly from Order Complete and with a receipt from the receipt button', () => {
-    const actions: string[] = []
-    const tree = OrderReviewModal({ ...base, onComplete: action => { actions.push(action) } })
-    buttonLabelled(tree, 'Order Complete ✓')?.onClick()
-    buttonLabelled(tree, '🖨 Complete + Print Receipt')?.onClick()
-    expect(actions).toEqual(['plain', 'receipt'])
-  })
-
-  it('shows Saving… only on the button that was tapped, and locks every way out while the sale saves', () => {
-    const html = renderToStaticMarkup(<OrderReviewModal {...base} pendingAction="receipt" />)
-    expect(html).toContain('Order Complete ✓')
-    expect(html).not.toContain('Complete + Print Receipt')
+  it('shows Saving… and locks every way out while the sale saves', () => {
+    const html = renderToStaticMarkup(<OrderReviewModal {...base} saving />)
+    expect(html).not.toContain('Complete + Print')
     expect(html).toContain('Saving…')
-    // The ✕, Order Complete and the receipt button.
-    expect(html.match(/disabled=""/g)).toHaveLength(3)
+    // The ✕ and the one button.
+    expect(html.match(/disabled=""/g)).toHaveLength(2)
   })
 
   it('shows a linked card holder their stamps, and nothing for an order without a card', () => {
@@ -101,5 +98,76 @@ describe('OrderReviewModal', () => {
       <OrderReviewModal {...base} orderItems={plain} discountLines={[]} discountAmount={0} />
     )
     expect(html).not.toContain('Subtotal')
+  })
+})
+
+describe('OrderReviewModal, the customer’s name', () => {
+  const naming = { ...base, onNotesChange: () => {} }
+
+  it('offers to add a name the order has not got, right before saving it', () => {
+    expect(renderToStaticMarkup(<OrderReviewModal {...naming} notes="" />)).toContain('+ Add name</button>')
+  })
+
+  it('shows the name with Edit beside it', () => {
+    const html = renderToStaticMarkup(<OrderReviewModal {...naming} notes="Ana" />)
+    expect(html).toContain('>Ana</span>')
+    expect(html).toContain('aria-label="Edit the customer’s name"')
+  })
+
+  it('keeps a loyalty card holder’s name fixed, and shows it as before where it can’t change', () => {
+    const fixed = renderToStaticMarkup(<OrderReviewModal {...naming} notes="Ana" nameFixed />)
+    expect(fixed).toContain('>Ana</span>')
+    expect(fixed).not.toContain('Edit the customer')
+    expect(renderToStaticMarkup(<OrderReviewModal {...base} notes="" />)).not.toContain('Add name')
+  })
+})
+
+describe('OrderReviewModal, adding to a saved order', () => {
+  // The order in the owner's screenshot, saved at 2:14 PM for ₱790.
+  const saved: OpenOrder = {
+    id: 'sale-214', rev: 'rev-9', createdAt: '2026-10-03T06:14:00Z', name: '', total: 790,
+    items: [
+      { lineId: 'tiramisu__ice', name: 'Tiramisu', variant: 'ice', price: 160, qty: 2 },
+      { lineId: 'amber-cream-latte__ice', name: 'Amber Cream Latte', variant: 'ice', price: 150, qty: 1 },
+    ],
+    discounts: [], loyaltyMemberId: null, loyaltyRewards: [],
+  }
+  const adding = { ...base, savedOrder: saved }
+
+  it('shows what was ordered before above what is being added, and the whole order’s total due', () => {
+    const html = renderToStaticMarkup(<OrderReviewModal {...adding} />)
+    expect(html).toContain('Adding to the 2:14 PM order')
+    expect(html).toContain('Already ordered · 2:14 PM')
+    expect(html).toContain('Tiramisu')
+    expect(html).toContain('Adding now')
+    expect(html.indexOf('Tiramisu')).toBeLessThan(html.indexOf('Spanish Latte'))
+    // ₱790 saved + ₱340 added; ₱500 paid leaves ₱630 short.
+    expect(html).toContain('₱1130')
+    expect(html).toContain('Already ordered ₱790 · added now ₱340')
+    expect(html).toContain('₱630')
+  })
+
+  it('saves onto the order with its one button, Save + Print, never as a new order', () => {
+    const html = renderToStaticMarkup(<OrderReviewModal {...adding} />)
+    expect(html).not.toContain('Order Complete')
+    expect(html).not.toContain('Save to order')
+    expect(html).toContain('Saves onto the 2:14 PM order: no new order is made. A preview then prints, or closing it skips printing.')
+    let saved = 0
+    buttonLabelled(OrderReviewModal({ ...adding, onComplete: () => { saved += 1 } }), '🖨 Save + Print')?.onClick()
+    expect(saved).toBe(1)
+  })
+
+  it('can’t save onto the order with nothing being added', () => {
+    const html = renderToStaticMarkup(<OrderReviewModal {...adding} orderItems={[]} itemCount={0} total={0} grandTotal={0} discountLines={[]} discountAmount={0} />)
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>🖨 Save \+ Print</)
+  })
+
+  it('offers a way on when the order can no longer take items', () => {
+    const steps: string[] = []
+    const refusal = { actionLabel: 'Make it a new order', onAction: () => { steps.push('new order') } }
+    const props = { ...adding, submitError: 'This order was completed, so nothing more can be added to it.', refusal }
+    expect(renderToStaticMarkup(<OrderReviewModal {...props} />)).toContain('This order was completed')
+    buttonLabelled(OrderReviewModal(props), 'Make it a new order')?.onClick()
+    expect(steps).toEqual(['new order'])
   })
 })

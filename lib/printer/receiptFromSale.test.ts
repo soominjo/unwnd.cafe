@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Sale } from '@/app/pos/types'
 import type { SalePayload } from '@/app/pos/salePayload'
-import { buildCheckoutReceiptBlocks, buildReceiptBlocksFromSale } from './receiptFromSale'
+import { buildAddedItemsPrints, buildCheckoutPrints, buildCheckoutReceiptBlocks, buildReceiptBlocksFromSale } from './receiptFromSale'
 
 // What checkout posts: two lattes with an attached shot and a PWD SOLO discount,
 // a croissant, and an oat milk added on its own (no parent line).
@@ -41,7 +41,37 @@ const stored: Sale = {
 
 const savedAt = new Date(stored._createdAt)
 
+// Ana came back at 10:58 PM (Manila) for a Cafe Latte and a cookie, saved onto her order.
+const addedAt = '2026-10-01T14:58:00.000Z'
+const withAdded: Sale = {
+  ...stored,
+  items: [
+    ...stored.items,
+    { lineId: 'cafe-latte__hot__ak3j9', name: 'Cafe Latte', variant: 'hot', price: 110, qty: 1, categoryId: 'espresso', addedAt },
+    { lineId: 'cookie__fixed__ak3j9', name: 'Cookie', variant: null, price: 60, qty: 2, addedAt },
+  ],
+}
+
 describe('buildReceiptBlocksFromSale', () => {
+  it('prints only the latest added items on the staff ticket, headed as added to the order', () => {
+    const blocks = buildReceiptBlocksFromSale(withAdded, 'kitchen', 'latest')
+    expect(blocks.slice(0, 2)).toEqual([{ kind: 'footer', text: 'KITCHEN TICKET' }, { kind: 'footer', text: 'ADDED TO ORDER' }])
+    expect(blocks).toContainEqual({ kind: 'detail', label: 'Time', value: '10:58 PM' })
+    expect(blocks).toContainEqual({ kind: 'detail', label: 'Order from', value: '10:41 PM' })
+    expect(blocks).toContainEqual({ kind: 'detail', label: 'Items', value: '3' })
+    expect(blocks.filter(b => b.kind === 'item')).toEqual([
+      { kind: 'item', name: 'Cafe Latte', variant: 'hot', qty: 1, lineTotal: null },
+      { kind: 'item', name: 'Cookie', variant: null, qty: 2, lineTotal: null },
+    ])
+  })
+
+  it('prints the whole order as before when asked, or when nothing was added', () => {
+    const whole = buildReceiptBlocksFromSale(withAdded, 'kitchen')
+    expect(whole.filter(b => b.kind === 'item')).toHaveLength(6)
+    expect(whole).not.toContainEqual({ kind: 'footer', text: 'ADDED TO ORDER' })
+    expect(buildReceiptBlocksFromSale(stored, 'kitchen', 'latest')).toEqual(buildReceiptBlocksFromSale(stored, 'kitchen'))
+  })
+
   it('reprints a sale saved with a whole-order "(Total items)" row exactly as stored', () => {
     // The POS no longer offers whole-order discounts, but sales saved while it did keep this row.
     const legacy: Sale = { ...stored, discounts: [{ lineId: 'order:pwd', name: 'PWD/Senior -20% (Total items)', amount: 90 }] }
@@ -68,5 +98,28 @@ describe('buildCheckoutReceiptBlocks', () => {
   it('counts the attached shot out of Items but the standalone oat milk in', () => {
     // 2 lattes + 1 croissant + 1 oat milk; the shot rides on a latte.
     expect(buildCheckoutReceiptBlocks(payload, savedAt)).toContainEqual({ kind: 'detail', label: 'Items', value: '4' })
+  })
+})
+
+const tearAt = (blocks: { kind: string }[]) => blocks.findIndex(b => b.kind === 'tear')
+
+describe('buildCheckoutPrints', () => {
+  it('offers the customer’s receipt alone, and both: the receipt, a tear, then the staff ticket below it', () => {
+    const { receipt, both } = buildCheckoutPrints(payload, savedAt)
+    expect(receipt).toEqual(buildCheckoutReceiptBlocks(payload, savedAt))
+    expect(both.filter(b => b.kind === 'tear')).toHaveLength(1)
+    expect(both.slice(0, tearAt(both))).toEqual(receipt)
+    expect(both.slice(tearAt(both) + 1)).toEqual(buildReceiptBlocksFromSale(stored, 'kitchen'))
+    // The staff ticket carries no prices; the receipt does.
+    expect(both.slice(tearAt(both) + 1).some(b => b.kind === 'total')).toBe(false)
+  })
+})
+
+describe('buildAddedItemsPrints', () => {
+  it('offers the whole order’s receipt, and both with the staff ticket of only the items just added below it', () => {
+    const { receipt, both } = buildAddedItemsPrints(withAdded)
+    expect(receipt).toEqual(buildReceiptBlocksFromSale(withAdded, 'customer'))
+    expect(both.slice(0, tearAt(both))).toEqual(receipt)
+    expect(both.slice(tearAt(both) + 1)).toEqual(buildReceiptBlocksFromSale(withAdded, 'kitchen', 'latest'))
   })
 })

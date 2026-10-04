@@ -14,5 +14,12 @@ export const saleItem = defineType({
     defineField({ name: 'isAddon', title: 'Is Add-on', type: 'boolean' }),
     defineField({ name: 'parentLineId', title: 'Parent Line ID', type: 'string' }),
     defineField({ name: 'categoryId', title: 'Category ID', type: 'string' }),
+    defineField({
+      name: 'addedAt',
+      title: 'Added later',
+      description: 'When this line was added to the order after it was first saved (Add items on Sales). Empty for the first checkout.',
+      type: 'datetime',
+      readOnly: true,
+    }),
   ],
 })

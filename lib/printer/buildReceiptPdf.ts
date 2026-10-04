@@ -1,6 +1,6 @@
 import type { jsPDF as PdfDocument } from 'jspdf'
 import { renderReceiptBitmaps, type ReceiptBitmaps } from './rasterize'
-import { assertNeverBlock, type ReceiptBlock } from './receiptDocument'
+import { TEAR_LABEL, assertNeverBlock, type ReceiptBlock } from './receiptDocument'
 
 // A4 in millimetres — a full page, as opposed to the 32/48-char thermal-strip
 // layout ReceiptPreview.tsx renders. Meant for emailing a receipt to a
@@ -28,6 +28,8 @@ const LINE_HEIGHT_MM = 5.5
 const NOTE_LINE_MM = 5
 const DETAIL_LINE_MM = 6
 const SPACER_MM = 5
+/** Space above and below the tear line between two tickets. */
+const TEAR_GAP_MM = 10
 /** Vertical room a single-line block needs before a new page is started for it. */
 const DEFAULT_BLOCK_MM = 16
 
@@ -152,9 +154,24 @@ function drawBlock(doc: PdfDocument, block: ReceiptBlock, y: number, bitmaps: Re
       setText(doc, 11)
       doc.text(block.text, CENTER_X_MM, y, { align: 'center' })
       return y + 7
+    case 'tear':
+      return drawTear(doc, y)
     default:
       return assertNeverBlock(block)
   }
+}
+
+/** Between two tickets of one print: a dashed line with "tear here" in a gap. */
+function drawTear(doc: PdfDocument, y: number): number {
+  const lineY = y + TEAR_GAP_MM
+  doc.setDrawColor(150)
+  doc.setLineWidth(0.2)
+  doc.setLineDashPattern([1.5, 1.5], 0)
+  doc.line(MARGIN_MM, lineY, RIGHT_X_MM, lineY)
+  doc.setLineDashPattern([], 0)
+  setText(doc, 8, 'normal', MUTED)
+  doc.text(TEAR_LABEL.toUpperCase(), CENTER_X_MM, lineY - 1.5, { align: 'center' })
+  return lineY + TEAR_GAP_MM
 }
 
 function drawLogo(doc: PdfDocument, block: LogoBlock, y: number, bitmaps: ReceiptBitmaps): number {

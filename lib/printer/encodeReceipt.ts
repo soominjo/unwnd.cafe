@@ -1,6 +1,6 @@
 import ReceiptPrinterEncoder from '@point-of-sale/receipt-printer-encoder'
 import type { ReceiptAssets } from './receiptAssets'
-import { assertNeverBlock, type ReceiptBlock } from './receiptDocument'
+import { TEAR_LABEL, assertNeverBlock, type ReceiptBlock } from './receiptDocument'
 import { RECEIPT_COLUMNS, THERMAL_COLUMNS, type ThermalColumns } from './thermalConfig'
 
 export interface EncodeReceiptOptions {
@@ -44,8 +44,30 @@ const {
 } = RECEIPT_COLUMNS
 /** Blank lines after the last rule so there is room to tear the paper off cleanly. */
 const FEED_LINES_BEFORE_CUT = 4
+/** Blank lines either side of the tear line between two tickets of one print. */
+const TEAR_GAP_LINES = 3
+const TEAR_LINE = `${'- '.repeat(5)}${TEAR_LABEL}${' -'.repeat(5)}`
 /** Module width in dots (1–8) for the printer-drawn QR used when no bitmap is available. */
 const NATIVE_QR_MODULE_SIZE = 6
+/**
+ * The glyphs cp437 keeps in its control-code slots (0x01–0x1F and 0x7F): ← is ESC, ↔ is GS, • is
+ * BEL. Typed into a name or a note, they would reach the printer as commands, such as a cut.
+ */
+const CONTROL_SLOT_GLYPHS = new Set('☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼⌂')
+
+/** Text that prints as text: control characters and control-slot glyphs become '?', as unknown ones do. */
+function printable(text: string): string {
+  return Array.from(text, (ch) => {
+    const code = ch.codePointAt(0) ?? 0
+    return code < 0x20 || code === 0x7f || CONTROL_SLOT_GLYPHS.has(ch) ? '?' : ch
+  }).join('')
+}
+
+/** The block with all of its text printable: names, notes and labels can't pass for printer commands. */
+function printableBlock(block: ReceiptBlock): ReceiptBlock {
+  const fields = Object.entries(block).map(([key, value]) => [key, typeof value === 'string' ? printable(value) : value])
+  return Object.fromEntries(fields) as ReceiptBlock
+}
 
 /** Encodes a receipt document into raw ESC/POS bytes ready to send to a printer. */
 export function encodeReceiptToEscPos(blocks: readonly ReceiptBlock[], options: EncodeReceiptOptions = {}): Uint8Array {
@@ -64,7 +86,7 @@ export function encodeReceiptToEscPos(blocks: readonly ReceiptBlock[], options: 
   })
   encoder.initialize()
 
-  for (const block of blocks) encodeBlock(encoder, block, context)
+  for (const block of blocks) encodeBlock(encoder, printableBlock(block), context)
 
   return encoder.newline(FEED_LINES_BEFORE_CUT).cut().encode()
 }
@@ -99,9 +121,22 @@ function encodeBlock(encoder: ReceiptPrinterEncoder, block: ReceiptBlock, contex
     case 'qr':
       encodeQr(encoder, block, context)
       break
+    case 'tear':
+      encodeTear(encoder)
+      break
     default:
       assertNeverBlock(block)
   }
+}
+
+// The gap between two tickets of one print, with a line to tear along. The partial cut after it
+// is ignored by a printer with no blade, as the full cut at the end of every print is; a printer
+// with an auto-cutter cuts there and leaves a small tab, so the tickets pull apart by hand.
+function encodeTear(encoder: ReceiptPrinterEncoder): void {
+  encoder.newline(TEAR_GAP_LINES)
+  encoder.align('center').line(TEAR_LINE).align('left')
+  encoder.newline(TEAR_GAP_LINES)
+  encoder.cut('partial')
 }
 
 function encodeLogo(encoder: ReceiptPrinterEncoder, block: LogoBlock, { assets }: EncodeContext): void {

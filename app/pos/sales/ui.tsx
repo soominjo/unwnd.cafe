@@ -5,7 +5,7 @@ import { AlertIcon, XIcon } from './icons'
 // easy tap target on the café's tablet, and toned from the brand palette
 // (deep green for primary, emerald for "done", red only for destructive).
 
-export type ActionTone = 'primary' | 'success' | 'neutral' | 'danger' | 'destructive' | 'ghost' | 'info' | 'rose' | 'amber'
+export type ActionTone = 'primary' | 'success' | 'neutral' | 'danger' | 'destructive' | 'ghost' | 'info' | 'add'
 
 interface ActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   tone?: ActionTone
@@ -23,8 +23,8 @@ const TONE_CLASSES: Record<ActionTone, string> = {
   success: 'bg-emerald-600 text-white hover:bg-emerald-700',
   neutral: 'bg-white border border-foreground/20 text-foreground/75 hover:border-foreground/45 hover:text-foreground',
   info: 'bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100 hover:border-sky-300',
-  rose: 'bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 hover:border-rose-300',
-  amber: 'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 hover:border-amber-300',
+  /** Adding to an order: sky like the POS's "+" add-on chips, on white so it stands apart from Print. */
+  add: 'bg-white border border-sky-300 text-sky-700 hover:bg-sky-50 hover:border-sky-400',
   danger: 'text-red-500 border border-transparent hover:bg-red-50 hover:border-red-200',
   /** Filled red — only for the final "yes, delete" tap inside an inline confirmation. */
   destructive: 'bg-red-500 text-white hover:bg-red-600',
@@ -107,13 +107,14 @@ export function InlineConfirm({ message, confirmLabel, onCancel, onConfirm }: In
   )
 }
 
-export type BadgeTone = 'name' | 'pending' | 'success' | 'neutral'
+export type BadgeTone = 'name' | 'pending' | 'success' | 'neutral' | 'added'
 
 const BADGE_CLASSES: Record<BadgeTone, string> = {
   name: 'bg-[#d4ede1] text-[#1f5c3c]',
   pending: 'bg-amber-100 text-amber-800',
   success: 'bg-emerald-100 text-emerald-700',
   neutral: 'bg-foreground/10 text-foreground/60',
+  added: 'bg-sky-100 text-sky-800',
 }
 
 interface BadgeProps {

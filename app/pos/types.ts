@@ -1,3 +1,5 @@
+import type { LoyaltyReward } from '@/lib/loyalty'
+
 export type Variant = 'hot' | 'ice'
 export type AddonType = 'drink' | 'food'
 
@@ -89,10 +91,14 @@ export interface SaleItem {
   parentLineId?: string
   /** The menu category this was ordered from — absent for add-ons and sales saved before this was tracked. */
   categoryId?: string
+  /** When the line was added to the order after its first checkout (Add items); absent on the first checkout's lines. */
+  addedAt?: string
 }
 
 export interface Sale {
   _id: string
+  /** Sanity's revision: a save of added items is refused once the order has moved past it. */
+  _rev?: string
   _createdAt: string
   total: number
   paymentAmount: number
@@ -102,6 +108,10 @@ export interface Sale {
   discounts?: LineDiscount[]
   notes?: string
   isCompleted?: boolean
+  /** The loyalty card holder the order is linked to. */
+  loyaltyMemberId?: string
+  /** The card's rewards the order used. */
+  loyaltyRewards?: LoyaltyReward[]
 }
 
 export interface TopItem {

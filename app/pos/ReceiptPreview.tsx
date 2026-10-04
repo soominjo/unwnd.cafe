@@ -2,7 +2,7 @@
 
 import type { ReactElement, ReactNode } from 'react'
 import { IBM_Plex_Mono } from 'next/font/google'
-import { assertNeverBlock, type ReceiptBlock } from '@/lib/printer/receiptDocument'
+import { TEAR_LABEL, assertNeverBlock, type ReceiptBlock } from '@/lib/printer/receiptDocument'
 import { RECEIPT_COLUMNS, THERMAL_COLUMNS, type ThermalColumns } from '@/lib/printer/thermalConfig'
 import { LogoBitmap, QrBitmap } from './ReceiptBitmaps'
 
@@ -158,6 +158,14 @@ function ReceiptBlockView({ block, columns }: { block: ReceiptBlock; columns: Th
       )
     case 'footer':
       return <p className="text-center">{block.text}</p>
+    case 'tear':
+      return (
+        <div role="separator" aria-label="Tear here" className="my-6 flex items-center gap-2 text-black/35" style={{ marginInline: `-${ch(PAPER_MARGIN_CH)}` }}>
+          <span className="flex-1 border-t border-dashed border-black/40" />
+          <span className="text-[9px] tracking-[0.3em] uppercase">✂ {TEAR_LABEL}</span>
+          <span className="flex-1 border-t border-dashed border-black/40" />
+        </div>
+      )
     default:
       return assertNeverBlock(block)
   }

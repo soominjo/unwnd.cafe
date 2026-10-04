@@ -10,6 +10,7 @@ import ViewTabs, { type View } from './ViewTabs'
 import OrdersView, { type OrderActions } from './OrdersView'
 import TopItemsView from './TopItemsView'
 import TopCustomersView from './TopCustomersView'
+import { sendRename } from './sendRename'
 import { ErrorBanner } from './ui'
 
 const PAGE_SIZE = 20
@@ -276,6 +277,17 @@ export default function SalesClient() {
     }
   }
 
+  // ── Name the order ─────────────────────────────────────────────────────────
+  // Resolves to null when done, else to why the name wasn't saved: the card shows it by the field.
+  async function renameOrder(id: string, name: string): Promise<string | null> {
+    const { error: problem, gone } = await sendRename(id, name)
+    if (problem && !gone) return problem
+    refreshCurrent()
+    // Deleted on another device: the refresh takes its card away, and the banner says why.
+    if (gone) setError(problem)
+    return null
+  }
+
   // ── Derived ─────────────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -309,6 +321,9 @@ export default function SalesClient() {
     onCancelDeleteItem: () => setConfirmItemKey(null),
     onConfirmDeleteItem: removeItem,
     onCompleteOrder: completeOrder,
+    // A full page load, like the POS link: /pos reads the order on the server with the menu.
+    onAddItems: (id: string) => window.location.assign(`/pos?edit=${encodeURIComponent(id)}`),
+    onRenameOrder: renameOrder,
   }
 
   const sharedOrdersProps = {

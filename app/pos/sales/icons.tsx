@@ -35,12 +35,19 @@ export function PrinterIcon(props: IconProps) {
   )
 }
 
-export function DownloadIcon(props: IconProps) {
+export function PencilIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M12 3v12" />
-      <path d="m7 10 5 5 5-5" />
-      <path d="M5 21h14" />
+      <path d="M4 20h4L19 9l-4-4L4 16v4Z" />
+      <path d="m13.5 6.5 4 4" />
+    </Icon>
+  )
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 5v14M5 12h14" />
     </Icon>
   )
 }

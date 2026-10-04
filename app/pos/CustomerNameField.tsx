@@ -9,8 +9,10 @@ import {
   matchCardHolders,
   nextMilestone,
   type CardHolderWithCard,
+  type LoyaltyReward,
 } from '@/lib/loyalty'
 import LoyaltyBar from './LoyaltyBar'
+import { MAX_NOTES_LENGTH } from '@/lib/sales/validateSaleInput'
 import type { OrderItem, Variant } from './types'
 
 /** The loyalty 10%: one unit of one classic drink in the order, which the cashier picks. */
@@ -43,9 +45,12 @@ export interface CustomerNameFieldProps {
   /** The order has an Espresso or Non-Coffee drink that could be the free one. */
   hasFreeDrinkLine: boolean
   freeActive: boolean
+  /** Adding to a saved order: its name and card stay as saved, with no typing and no unlink. */
+  locked?: boolean
+  /** Rewards the order used already: they stay on the card for the next order. */
+  blocked?: readonly LoyaltyReward[]
 }
 
-const MAX_NAME_LENGTH = 100
 const CARD_NUMBER_TYPED = /^(?:no\.?\s*|#)?\d+$/i
 /** One letter would list nearly every card holder, so names are suggested from two. Card numbers are looked up at any length. */
 const MIN_NAME_QUERY_LENGTH = 2
@@ -60,7 +65,21 @@ const TEN_BUTTON = 'rounded-sm px-3 py-1.5 text-xs font-bold tracking-widest tra
 // links the order to their card, and only then does their stamp bar show. Any other name is
 // still kept for the order, with no stamps.
 export default function CustomerNameField(props: CustomerNameFieldProps) {
-  const { value, disabled, onChange, holders, linked } = props
+  const { value, disabled, onChange, holders, linked, locked = false } = props
+  if (locked) {
+    return (
+      <div className="px-6 py-2 border-t border-foreground/10 shrink-0 space-y-2">
+        {linked ? (
+          <LinkedCard {...props} linked={linked} />
+        ) : (
+          <p className="text-sm text-foreground">
+            <span className="text-[10px] uppercase tracking-[0.2em] font-semibold text-foreground/45">Customer </span>
+            <span className="font-semibold">{value.trim() || 'No name'}</span>
+          </p>
+        )}
+      </div>
+    )
+  }
   return (
     <div className="px-6 py-2 border-t border-foreground/10 shrink-0 space-y-2">
       <div className="relative">
@@ -70,13 +89,13 @@ export default function CustomerNameField(props: CustomerNameFieldProps) {
           placeholder="Customer name or card no.…"
           value={value}
           disabled={disabled}
-          maxLength={MAX_NAME_LENGTH}
+          maxLength={MAX_NOTES_LENGTH}
           onChange={e => onChange(e.target.value)}
           className={`w-full border border-foreground/13 rounded-sm px-2.5 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/40 disabled:opacity-30 bg-transparent ${value.length > 70 ? 'pr-7' : ''}`}
         />
         {value.length > 70 && (
           <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums pointer-events-none ${value.length >= 95 ? 'text-red-400' : 'text-foreground/30'}`}>
-            {MAX_NAME_LENGTH - value.length}
+            {MAX_NOTES_LENGTH - value.length}
           </span>
         )}
       </div>
@@ -146,10 +165,15 @@ function Suggestions({ value, holders, onLink }: { value: string; holders: CardH
 }
 
 function LinkedCard(props: CustomerNameFieldProps & { linked: CardHolderWithCard }) {
-  const { linked, orderStamps, ten, hasFreeDrinkLine, freeActive, onUnlink } = props
+  const { linked, orderStamps, ten, hasFreeDrinkLine, freeActive, onUnlink, locked = false, blocked = [] } = props
   const saved = cardState(linked.card)
   // Rewards can be used on the order that earns them, so the cart's stamps count already.
   const withOrder = cardState(addOrderToTotals(linked.card, orderStamps, []))
+  // A reward this order used already waits on the card for the next order.
+  const tenKept = withOrder.tenReady > 0 && blocked.includes('ten')
+  const freeKept = withOrder.freeReady > 0 && blocked.includes('free')
+  const tenUsable = withOrder.tenReady > 0 && !tenKept
+  const freeUsable = withOrder.freeReady > 0 && !freeKept
   return (
     <div className="rounded-md border border-emerald-200 bg-emerald-50/50 px-3 py-2.5 space-y-2">
       <div className="flex items-baseline justify-between gap-2">
@@ -174,14 +198,16 @@ function LinkedCard(props: CustomerNameFieldProps & { linked: CardHolderWithCard
             <span>No stamps from this order yet: Signature and Matcha Series drinks earn them.</span>
           )}
         </span>
-        <button type="button" onClick={onUnlink} className="ml-auto inline-flex min-h-6 items-center px-1 underline underline-offset-2 hover:text-foreground">
-          Not {linked.name}? Unlink
-        </button>
+        {!locked && (
+          <button type="button" onClick={onUnlink} className="ml-auto inline-flex min-h-6 items-center px-1 underline underline-offset-2 hover:text-foreground">
+            Not {linked.name}? Unlink
+          </button>
+        )}
       </div>
-      {(withOrder.tenReady > 0 || withOrder.freeReady > 0) && (
+      {(tenUsable || freeUsable) && (
         <div className="flex flex-wrap items-center gap-2">
-          {withOrder.tenReady > 0 && <TenOff ten={ten} />}
-          {withOrder.freeReady > 0 && (
+          {tenUsable && <TenOff ten={ten} />}
+          {freeUsable && (
             <span className="text-[11px] font-semibold text-emerald-700">
               {freeActive
                 ? 'Free drink applied.'
@@ -191,6 +217,14 @@ function LinkedCard(props: CustomerNameFieldProps & { linked: CardHolderWithCard
             </span>
           )}
         </div>
+      )}
+      {(tenKept || freeKept) && (
+        <p className="text-[11px] text-foreground/55">
+          {[
+            tenKept && '10% off is ready for their next order: this order has its 10% already.',
+            freeKept && 'A free drink is ready for their next order: this order used one already.',
+          ].filter(Boolean).join(' ')}
+        </p>
       )}
     </div>
   )

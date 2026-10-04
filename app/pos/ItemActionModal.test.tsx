@@ -48,6 +48,12 @@ const base = {
 const render = (mode: 'addons' | 'discount') => renderToStaticMarkup(<ItemActionModal {...base} mode={mode} />)
 
 describe('ItemActionModal', () => {
+  it('locks Google Review on a line added to an order whose 10% was the loyalty one', () => {
+    const reviewOff = /<button[^>]*disabled=""[^>]*>GR −10% · ALL/
+    expect(render('discount')).not.toMatch(reviewOff)
+    expect(renderToStaticMarkup(<ItemActionModal {...base} mode="discount" orderUsedTen />)).toMatch(reviewOff)
+  })
+
   it('names the item and shows a large unit price × quantity in both modes', () => {
     for (const mode of ['addons', 'discount'] as const) {
       const html = render(mode)
