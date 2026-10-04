@@ -619,7 +619,7 @@ export default function POSClient({ initialMenu, initialCardHolders }: POSClient
               <span className="hidden sm:inline">{managerUnlocked ? 'Lock' : 'Manager'}</span>
             </button>
           )}
-          {/* Loyalty cards: see a card's stamps and give a card (no PIN); removing one takes the PIN. */}
+          {/* Loyalty cards: see a card's stamps, and give or remove a card (no PIN). */}
           <button
             onClick={() => setShowLoyalty(true)}
             aria-label="Loyalty cards"

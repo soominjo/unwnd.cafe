@@ -3,8 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { CardHolderList, GiveCardForm } from './LoyaltyView'
 import type { CardHolderWithCard } from '@/lib/loyalty'
 
-// LoyaltyView pulls in ManagerPinModal → PinPad only; nothing needs Next's runtime, but keep
-// the font loader mocked in case a shared import reaches ReceiptPreview.
+// Nothing in LoyaltyView needs Next's runtime, but keep the font loader mocked in case a
+// shared import reaches ReceiptPreview.
 vi.mock('next/font/google', () => ({ IBM_Plex_Mono: () => ({ className: '' }) }))
 
 const holder = (id: string, name: string, cardNumber: number, earned: number, usedTen = 0, usedFree = 0): CardHolderWithCard => ({
@@ -14,9 +14,18 @@ const holders = [holder('k', 'Kylene', 12, 5), holder('p', 'Paolo', 3, 6), holde
 const noop = () => {}
 
 describe('CardHolderList', () => {
-  const list = (confirmingId: string | null = null) => renderToStaticMarkup(
-    <CardHolderList holders={holders} confirmingId={confirmingId} onRequestRemove={noop} onCancelRemove={noop} onConfirmRemove={noop} />,
-  )
+  const list = (confirmingId: string | null = null, { removingId = null, removeError = null }: { removingId?: string | null; removeError?: string | null } = {}) =>
+    renderToStaticMarkup(
+      <CardHolderList
+        holders={holders}
+        confirmingId={confirmingId}
+        removingId={removingId}
+        removeError={removeError}
+        onRequestRemove={noop}
+        onCancelRemove={noop}
+        onConfirmRemove={noop}
+      />,
+    )
 
   it('shows each card with its number, stamps on the current card and what is ready', () => {
     const html = list()
@@ -37,6 +46,22 @@ describe('CardHolderList', () => {
 
   it('names each Remove button after its card', () => {
     expect(list()).toContain('aria-label="Remove Paolo’s card No. 3"')
+  })
+
+  it('shows the card being removed, and removes one card at a time', () => {
+    const paoloRemoveOff = /<button[^>]*disabled=""[^>]*aria-label="Remove Paolo’s card No. 3"/
+    expect(list()).not.toMatch(paoloRemoveOff)
+    const html = list('k', { removingId: 'k' })
+    expect(html).toContain('Removing card No. 12…')
+    expect(html).not.toContain('>Remove card</button>')
+    expect(html).not.toContain('aria-label="Remove Kylene’s card No. 12"')
+    expect(html).toMatch(paoloRemoveOff)
+  })
+
+  it('says why a card was not removed, under its question, so a retry is one tap away', () => {
+    const html = list('k', { removeError: 'Not removed: signed out · reload the page' })
+    expect(html).toContain('Not removed: signed out · reload the page')
+    expect(html).toContain('>Remove card</button>')
   })
 })
 

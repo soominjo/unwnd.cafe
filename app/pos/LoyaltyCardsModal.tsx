@@ -13,8 +13,7 @@ interface LoyaltyCardsModalProps {
 
 // The loyalty cards, opened from the POS header. It sits over the order on screen (the cart
 // is not kept across a page change), so a card given here can go on that order at once.
-// Like Manage Categories it closes with ✕ or the backdrop; Escape is left to the PIN keypad
-// that removing a card opens on top.
+// Like Manage Categories it closes with ✕ or the backdrop.
 export default function LoyaltyCardsModal({ holders, onHoldersChange, onClose }: LoyaltyCardsModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

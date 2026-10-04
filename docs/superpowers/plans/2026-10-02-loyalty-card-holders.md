@@ -21,7 +21,7 @@ earn stamps; stamp 6 gives 10% off one classic drink, stamp 11 a free classic dr
 | Unused 10% | Never expires |
 | Same names | Each card gets a number (No. 1, 2, 3…), shown in suggestions; write it on the card |
 | Give a card | No PIN: any signed-in POS can give one, for less hassle at the counter (changed from the manager PIN on 2026-10-02) |
-| Remove a card | Manager PIN (the POS PIN), checked by the server |
+| Remove a card | No PIN either: any signed-in POS can remove one after confirming what the card loses (changed from the manager PIN on 2026-10-03) |
 
 ## Data
 
@@ -66,10 +66,9 @@ earn stamps; stamp 6 gives 10% off one classic drink, stamp 11 a free classic dr
   pass.
 - `GET /api/loyalty/members`: card holders with their cards.
 - `POST /api/loyalty/members` `{ name }`: gives a card; it needs only the POS session.
-- `DELETE /api/loyalty/members/[id]` `{ pin }`: the server checks the manager PIN against
-  `POS_PIN` (timing-safe) before removing anything. A wrong PIN is a 403, so the POS can tell it
-  from a signed-out session (401).
-- Each change and each wrong PIN is logged with the card's id, never the PIN.
+- `DELETE /api/loyalty/members/[id]` (no body): removes a card; it needs only the POS session.
+  A signed-out POS gets a 401.
+- Each change is logged with the card's id.
 
 ## Screens
 
@@ -87,15 +86,16 @@ earn stamps; stamp 6 gives 10% off one classic drink, stamp 11 a free classic dr
     order on screen with the updated total. The cards are also read again after each receipt
     sale, which picks up cards given on another device.
 - `/pos` header › Loyalty (between Manager and Sales): a panel over the order on screen, so the
-  cart stays. Every card holder with card number, bar and ready rewards; "Give a card" (no PIN)
-  and Remove (manager PIN). It reads the cards again when it opens, and a card given there is
-  suggested in Customer name at once. It is not on the Sales page.
+  cart stays. Every card holder with card number, bar and ready rewards; "Give a card" and
+  Remove, neither with a PIN. Remove asks first, naming the stamps and rewards the card loses.
+  It reads the cards again when it opens, and a card given there is suggested in Customer name
+  at once. It is not on the Sales page.
 
 ## Order of work (each step test-first)
 
 1. `lib/loyalty.ts` rules and tests.
 2. Discounts: loyalty 10% and free drink rows, tests.
 3. Sale payload + `POST /api/sales` validation + Sanity schema.
-4. Manager-PIN check helper, card-holder API and store.
+4. Card-holder API and store (removing a card first took the manager PIN; dropped on 2026-10-03).
 5. POS: name field, bar, rewards, review screen.
 6. Loyalty panel, opened from the POS header.

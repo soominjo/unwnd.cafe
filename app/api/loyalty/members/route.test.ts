@@ -9,21 +9,18 @@ vi.mock('@/lib/loyaltyStore', () => ({ addCardHolder, fetchCardHolders }))
 
 import { GET, POST } from './route'
 
-const PIN = '2468'
 const post = (body: unknown) => POST(new NextRequest('http://pos.test/api/loyalty/members', {
   method: 'POST',
   body: typeof body === 'string' ? body : JSON.stringify(body),
 }))
 
 beforeEach(() => {
-  vi.stubEnv('POS_PIN', PIN)
   vi.stubEnv('SANITY_API_WRITE_TOKEN', 'test-token')
   requirePosAuth.mockReset().mockResolvedValue(null)
   addCardHolder.mockReset().mockImplementation(async (name: string) => ({
     _id: 'new-id', name, cardNumber: 8, joinedAt: '2026-10-02T05:00:00Z', card: { earned: 0, usedTen: 0, usedFree: 0 }, orderCount: 0,
   }))
   fetchCardHolders.mockReset()
-  vi.spyOn(console, 'warn').mockImplementation(() => {})
   vi.spyOn(console, 'info').mockImplementation(() => {})
 })
 
@@ -56,7 +53,7 @@ describe('POST /api/loyalty/members', () => {
 
   it('needs the POS session before anything else', async () => {
     requirePosAuth.mockResolvedValue(NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }))
-    expect((await post({ name: 'Kylene', pin: PIN })).status).toBe(401)
+    expect((await post({ name: 'Kylene' })).status).toBe(401)
     expect(addCardHolder).not.toHaveBeenCalled()
   })
 })

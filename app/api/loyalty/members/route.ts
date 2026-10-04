@@ -18,7 +18,7 @@ export async function GET() {
 }
 
 // Giving a card: { name }. Any signed-in POS can give one, with no manager PIN, so it is quick
-// at the counter. Removing a card still takes the PIN (see [id]/route.ts).
+// at the counter. Removing one takes no PIN either (see [id]/route.ts).
 export async function POST(request: NextRequest) {
   const authError = await requirePosAuth()
   if (authError) return authError

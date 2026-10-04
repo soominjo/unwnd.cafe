@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
 import {
   LOYALTY_CARD_SIZE,
   MAX_CARD_NAME_LENGTH,
@@ -13,7 +13,6 @@ import {
   type CardHolderWithCard,
 } from '@/lib/loyalty'
 import LoyaltyBar from '../LoyaltyBar'
-import ManagerPinModal from '../ManagerPinModal'
 import { refetchCardHolders } from '../refetchCardHolders'
 import { CARD_CHANGE_MESSAGES, sendCardChange } from './sendCardChange'
 import { ActionButton, Badge, EmptyState, ErrorBanner, InlineConfirm, Skeleton } from './ui'
@@ -35,30 +34,40 @@ interface LoyaltyViewProps {
 type LoadState = 'loading' | 'ready' | 'failed'
 
 // Every loyalty card given out, opened from the POS header over the order on screen. Any
-// signed-in POS can give a card; removing one takes the manager PIN, which the server checks.
+// signed-in POS can give or remove a card, with no manager PIN; removing one is asked first.
 export default function LoyaltyView({ holders, onHoldersChange }: LoyaltyViewProps) {
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [draft, setDraft] = useState('')
   const [giving, setGiving] = useState(false)
   const [giveError, setGiveError] = useState<string | null>(null)
-  const [removing, setRemoving] = useState<CardHolderWithCard | null>(null)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  // One card is removed at a time, so a refusal is always about the card still asked about.
+  const [removingId, setRemovingId] = useState<string | null>(null)
+  const [removeError, setRemoveError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  // Counts the cards given or removed here. A read sent before one of them can still list a
+  // card just removed, or miss one just given, so its answer is dropped.
+  const changesMade = useRef(0)
 
   // The cards are read again on open: another device may have given or used one since the
   // POS read them. A failed read keeps the POS's list.
-  const applyRead = useCallback((fresh: CardHolderWithCard[] | null) => {
-    if (fresh) onHoldersChange(fresh)
-    setLoadState(fresh ? 'ready' : 'failed')
+  const read = useCallback(() => {
+    const changesWhenSent = changesMade.current
+    void refetchCardHolders().then(fresh => {
+      if (changesMade.current !== changesWhenSent) return
+      if (fresh) onHoldersChange(fresh)
+      setLoadState(fresh ? 'ready' : 'failed')
+    })
   }, [onHoldersChange])
 
   useEffect(() => {
-    void refetchCardHolders().then(applyRead)
-  }, [applyRead])
+    read()
+  }, [read])
 
   function reload() {
     setLoadState('loading')
-    void refetchCardHolders().then(applyRead)
+    read()
   }
 
   function changeDraft(value: string) {
@@ -78,21 +87,40 @@ export default function LoyaltyView({ holders, onHoldersChange }: LoyaltyViewPro
       return
     }
     const added = data as CardHolderWithCard
+    changesMade.current += 1
     onHoldersChange(prev => [...(prev ?? []), added])
     setDraft('')
     setNotice(`Card No. ${added.cardNumber} is ${added.name}’s: write the number on the card. Type their name in Customer name to collect stamps.`)
   }
 
-  async function removeWithPin(pin: string): Promise<string | null> {
-    if (!removing) return null
-    const holder = removing
-    const { message, unsure } = await sendCardChange(`/api/loyalty/members/${holder._id}`, 'DELETE', { pin })
+  function askToRemove(id: string) {
+    setConfirmingId(id)
+    setRemoveError(null)
+  }
+
+  function cancelRemove() {
+    setConfirmingId(null)
+    setRemoveError(null)
+  }
+
+  async function removeCard(holder: CardHolderWithCard) {
+    setRemovingId(holder._id)
+    setRemoveError(null)
+    setNotice(null)
+    const { message, unsure, gone } = await sendCardChange(`/api/loyalty/members/${holder._id}`, 'DELETE')
+    setRemovingId(null)
     if (unsure) reload()
-    if (message !== null) return message
+    if (message !== null && !gone) {
+      // With no reply the card may be gone already: the list, read again, shows which.
+      setRemoveError(unsure ? message : `Not removed: ${message}`)
+      return
+    }
+    changesMade.current += 1
     onHoldersChange(prev => prev && prev.filter(h => h._id !== holder._id))
     setConfirmingId(null)
-    setNotice(`${holder.name}’s card No. ${holder.cardNumber} is removed. Their past orders keep the name.`)
-    return null
+    setNotice(gone
+      ? `${holder.name}’s card No. ${holder.cardNumber} was removed already, on another device maybe.`
+      : `${holder.name}’s card No. ${holder.cardNumber} is removed. Their past orders keep the name.`)
   }
 
   return (
@@ -123,20 +151,14 @@ export default function LoyaltyView({ holders, onHoldersChange }: LoyaltyViewPro
           <CardHolderList
             holders={holders}
             confirmingId={confirmingId}
-            onRequestRemove={setConfirmingId}
-            onCancelRemove={() => setConfirmingId(null)}
-            onConfirmRemove={setRemoving}
+            removingId={removingId}
+            removeError={removeError}
+            onRequestRemove={askToRemove}
+            onCancelRemove={cancelRemove}
+            onConfirmRemove={holder => void removeCard(holder)}
           />
         )}
       </section>
-      {removing && (
-        <ManagerPinModal
-          hint={`Same PIN as the POS login. Removes ${removing.name}’s card No. ${removing.cardNumber}.`}
-          onPin={removeWithPin}
-          onSuccess={() => setRemoving(null)}
-          onClose={() => setRemoving(null)}
-        />
-      )}
     </div>
   )
 }
@@ -203,7 +225,12 @@ export function GiveCardForm({ draft, onDraftChange, holders, busy = false, erro
 
 interface CardHolderListProps {
   holders: CardHolderWithCard[]
+  /** The card whose removal is being asked about. */
   confirmingId: string | null
+  /** The card being removed: the others can't be removed until it is done. */
+  removingId: string | null
+  /** Why the card asked about was not removed, as it is shown. */
+  removeError: string | null
   onRequestRemove: (id: string) => void
   onCancelRemove: () => void
   onConfirmRemove: (holder: CardHolderWithCard) => void
@@ -222,11 +249,21 @@ function removeMessage(h: CardHolderWithCard): string {
   return lost.length > 0 ? `${ask} Its ${joinAnd(lost)} will be lost.` : ask
 }
 
-export function CardHolderList({ holders, confirmingId, onRequestRemove, onCancelRemove, onConfirmRemove }: CardHolderListProps) {
+export function CardHolderList({
+  holders,
+  confirmingId,
+  removingId,
+  removeError,
+  onRequestRemove,
+  onCancelRemove,
+  onConfirmRemove,
+}: CardHolderListProps) {
   return (
     <ol className="divide-y divide-border/60">
       {holders.map(h => {
         const card = cardState(h.card)
+        const isRemoving = removingId === h._id
+        const isConfirming = confirmingId === h._id && !isRemoving
         return (
           <li
             key={h._id}
@@ -247,13 +284,23 @@ export function CardHolderList({ holders, confirmingId, onRequestRemove, onCance
               {card.tenReady === 0 && card.freeReady === 0 && <span className="text-xs text-foreground/45">{nextMilestone(card.onCard)}</span>}
             </span>
             <span className="col-start-3 row-start-1 justify-self-end sm:col-auto sm:row-auto">
-              {confirmingId !== h._id && (
-                <ActionButton tone="danger" aria-label={`Remove ${h.name}’s card No. ${h.cardNumber}`} onClick={() => onRequestRemove(h._id)}>
+              {!isConfirming && !isRemoving && (
+                <ActionButton
+                  tone="danger"
+                  aria-label={`Remove ${h.name}’s card No. ${h.cardNumber}`}
+                  disabled={removingId !== null}
+                  onClick={() => onRequestRemove(h._id)}
+                >
                   Remove
                 </ActionButton>
               )}
             </span>
-            {confirmingId === h._id && (
+            {isRemoving && (
+              <p className="col-span-full text-[11px] uppercase tracking-widest text-foreground/40 animate-pulse">
+                Removing card No. {h.cardNumber}…
+              </p>
+            )}
+            {isConfirming && (
               <div className="col-span-full">
                 <InlineConfirm
                   message={removeMessage(h)}
@@ -261,6 +308,9 @@ export function CardHolderList({ holders, confirmingId, onRequestRemove, onCance
                   onCancel={onCancelRemove}
                   onConfirm={() => onConfirmRemove(h)}
                 />
+                {removeError && (
+                  <p role="alert" className="mt-2 text-xs font-semibold text-red-700">{removeError}</p>
+                )}
               </div>
             )}
           </li>

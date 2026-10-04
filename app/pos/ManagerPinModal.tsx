@@ -7,26 +7,20 @@ import { PIN_CHECK_MESSAGES, verifyPosPin } from './verifyPosPin'
 interface ManagerPinModalProps {
   /** What the PIN is for, under the title. */
   hint: string
-  /**
-   * Runs once the PIN is entered: resolves null when it worked, or the message to show.
-   * Defaults to checking the PIN with the POS login route.
-   */
-  onPin?: (pin: string) => Promise<string | null>
   /** It worked. Not called if the dialog was closed while the PIN was being checked. */
   onSuccess: () => void
   onClose: () => void
 }
 
-/** The default check: the PIN is the POS login PIN, compared on the server. */
+/** The PIN is the POS login PIN, compared on the server: null when it worked, else the message to show. */
 async function checkPosPin(pin: string): Promise<string | null> {
   const result = await verifyPosPin(pin)
   return result === 'ok' ? null : PIN_CHECK_MESSAGES[result]
 }
 
 // Asks for the manager PIN, the POS login PIN, before a manager-only step: unlocking menu
-// editing on /pos, or giving and removing loyalty cards. The PIN is always checked on the
-// server, by the login route or by the route that makes the change.
-export default function ManagerPinModal({ hint, onPin = checkPosPin, onSuccess, onClose }: ManagerPinModalProps) {
+// editing on /pos. The PIN is always checked on the server, by the login route.
+export default function ManagerPinModal({ hint, onSuccess, onClose }: ManagerPinModalProps) {
   // Closed while a PIN was being checked: a right answer arriving afterwards must not act.
   const closed = useRef(false)
   useEffect(() => {
@@ -43,7 +37,7 @@ export default function ManagerPinModal({ hint, onPin = checkPosPin, onSuccess, 
   }, [onClose])
 
   async function check(pin: string): Promise<string | null> {
-    const message = await onPin(pin)
+    const message = await checkPosPin(pin)
     if (message === null && !closed.current) onSuccess()
     return message
   }
