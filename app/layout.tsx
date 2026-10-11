@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Geist } from 'next/font/google'
 import { Cormorant_Garamond } from 'next/font/google'
 import { Poppins } from 'next/font/google'
-import { bodoniModa } from '@/lib/fonts'
+import { notoSerifDisplay } from '@/lib/fonts'
 import './globals.css'
 import ChromeWrapper from '@/components/ChromeWrapper'
 
@@ -40,7 +40,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${cormorant.variable} ${poppins.variable} ${bodoniModa.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${cormorant.variable} ${poppins.variable} ${notoSerifDisplay.variable} antialiased`}>
         <ChromeWrapper>{children}</ChromeWrapper>
       </body>
     </html>

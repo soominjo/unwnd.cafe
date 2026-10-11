@@ -32,7 +32,7 @@ export default function HomePage() {
           <FadeUp delay={0.1}>
             <h1
               className="font-logo text-cream lowercase leading-none tracking-tight"
-              style={{ fontSize: 'clamp(4rem, 15vw, 14rem)' }}
+              style={{ fontSize: 'clamp(2.25rem, 11.5vw, 14rem)' }}
             >
               unwnd.cafe
             </h1>

@@ -21,7 +21,14 @@
   --font-mono:    var(--font-geist-mono);
   --font-serif:   var(--font-cormorant);
   --font-display: var(--font-poppins);
-  --font-logo:    var(--font-bodoni);
+}
+
+/* The brand wordmark: Noto Serif Display at its condensed width and a heavy weight,
+   the web stand-in for the Bodoni MT Condensed Bold on the cups (see lib/fonts.ts). */
+@utility font-logo {
+  font-family: var(--font-noto-serif-display), 'Times New Roman', serif;
+  font-stretch: 62.5%;
+  font-weight: 800;
 }
 
 body {
