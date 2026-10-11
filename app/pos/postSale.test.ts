@@ -8,6 +8,8 @@ const payload: SalePayload = {
   subtotal: 140,
   items: [{ lineId: 'wcm__ice', name: 'White Chocolate Mocha', variant: 'ice', price: 140, qty: 1 }],
   notes: 'Allen',
+  orderType: 'dine-in',
+  payments: [{ method: 'cash', amount: 140, received: 200 }],
 }
 
 const respond = (status: number, body: string): typeof fetch => async () => new Response(body, { status })

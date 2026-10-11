@@ -18,6 +18,8 @@ const sale: Sale = {
   discounts: [{ lineId: 'cafe-latte__hot', name: 'Loyalty -10% (Cafe Latte)', amount: 12 }],
   loyaltyMemberId: 'kylene',
   loyaltyRewards: ['ten'],
+  orderType: 'take-out',
+  payments: [{ _key: 'pay-0', method: 'cash', amount: 278, received: 300 }],
 }
 
 const order: OpenOrder = {
@@ -30,16 +32,20 @@ const order: OpenOrder = {
   total: 278,
   loyaltyMemberId: 'kylene',
   loyaltyRewards: ['ten'],
+  orderType: 'take-out',
+  payments: [{ _key: 'pay-0', method: 'cash', amount: 278, received: 300 }],
 }
 
 describe('openOrderFromSale', () => {
-  it('keeps what adding needs: the revision, the saved lines and rows, the name and the card', () => {
+  it('keeps what adding needs: the revision, the saved lines and rows, the name, the card, the type and the payments', () => {
     expect(openOrderFromSale(sale)).toEqual(order)
   })
 
-  it('reads an order with no name, card or rows as empty ones', () => {
-    const plain = openOrderFromSale({ ...sale, notes: undefined, discounts: undefined, loyaltyMemberId: undefined, loyaltyRewards: undefined })
-    expect(plain).toMatchObject({ name: '', discounts: [], loyaltyMemberId: null, loyaltyRewards: [] })
+  it('reads an order with no name, card, rows, type or payments as empty ones', () => {
+    const plain = openOrderFromSale({
+      ...sale, notes: undefined, discounts: undefined, loyaltyMemberId: undefined, loyaltyRewards: undefined, orderType: undefined, payments: undefined,
+    })
+    expect(plain).toMatchObject({ name: '', discounts: [], loyaltyMemberId: null, loyaltyRewards: [], orderType: null, payments: [] })
   })
 })
 
@@ -73,23 +79,26 @@ describe('buildAddItemsBody', () => {
   const latte: OrderItem = { lineId: 'cafe-latte__hot__ak3j9', name: 'Cafe Latte', variant: 'hot', price: 120, qty: 2, categoryId: 'espresso', discounts: { pwd: 'solo' } }
   const pwd: DiscountLine = { lineId: latte.lineId, name: 'Cafe Latte', amount: 24, kind: 'pwd', scope: 'solo', label: 'PWD Drink −20% ×1' }
 
-  it('sends the new lines and their rows under the revision opened, with the payment taken', () => {
-    expect(buildAddItemsBody({ order, items: [latte], discountLines: [pwd], payment: 1100, name: 'Kylene', rewards: [] })).toEqual({
+  it('sends the new lines and their rows under the revision opened, with how the new lines were paid', () => {
+    // 2 × 120 − 24 = 216 for the new lines, paid in cash from ₱300.
+    const payments = [{ method: 'cash' as const, amount: 216, received: 300 }]
+    expect(buildAddItemsBody({ order, items: [latte], discountLines: [pwd], payments, name: 'Kylene', rewards: [] })).toEqual({
       rev: 'rev-9',
       items: [latte],
       discounts: [{ lineId: 'cafe-latte__hot__ak3j9', name: 'PWD Drink -20% x1 (Cafe Latte)', amount: 24 }],
-      paymentAmount: 1100,
+      payments: [{ method: 'cash', amount: 216, received: 300 }],
     })
   })
 
   it('names an order that had no name, and sends the rewards used on the new lines', () => {
-    const body = buildAddItemsBody({ order: { ...order, name: '', loyaltyMemberId: null }, items: [latte], discountLines: [], payment: null, name: '  Juan ', rewards: ['free'] })
-    expect(body).toEqual({ rev: 'rev-9', items: [latte], notes: 'Juan', loyaltyRewards: ['free'] })
+    const payments = [{ method: 'ewallet' as const, amount: 120 }]
+    const body = buildAddItemsBody({ order: { ...order, name: '', loyaltyMemberId: null }, items: [latte], discountLines: [], payments, name: '  Juan ', rewards: ['free'] })
+    expect(body).toEqual({ rev: 'rev-9', items: [latte], notes: 'Juan', loyaltyRewards: ['free'], payments: [{ method: 'ewallet', amount: 120 }] })
   })
 
   it('renames or clears the name only when the field changed, and never on a loyalty card’s order', () => {
     const juans = { ...order, name: 'Juan', loyaltyMemberId: null }
-    const args = { items: [latte], discountLines: [], payment: null, rewards: [] }
+    const args = { items: [latte], discountLines: [], payments: [], rewards: [] }
     expect(buildAddItemsBody({ ...args, order: juans, name: 'Juan ' })).not.toHaveProperty('notes')
     expect(buildAddItemsBody({ ...args, order: juans, name: 'Juanito' })).toMatchObject({ notes: 'Juanito' })
     expect(buildAddItemsBody({ ...args, order: juans, name: '  ' })).toMatchObject({ notes: '' })

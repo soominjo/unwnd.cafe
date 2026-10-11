@@ -39,7 +39,63 @@ const props: OrderCardProps = {
   onCompleteOrder: noop,
   onAddItems: noop,
   onRename: async () => null,
+  onChangeMethod: async () => null,
 }
+
+describe('OrderCard, where it is eaten and how it was paid', () => {
+  it('marks Take out in a filled badge, and Dine in plainly', () => {
+    expect(renderToStaticMarkup(<OrderCard {...props} order={{ ...order, orderType: 'take-out' }} />)).toMatch(/<span[^>]*bg-foreground text-cream[^>]*>.*Take out</)
+    expect(renderToStaticMarkup(<OrderCard {...props} order={{ ...order, orderType: 'dine-in' }} />)).toContain('Dine in')
+  })
+
+  it('shows each payment, with when it was paid on an order paid in two goes, each tappable to change its method', () => {
+    const twoGoes: Sale = {
+      ...order,
+      total: 550,
+      payments: [
+        { _key: 'pay-0', method: 'ewallet', amount: 350 },
+        { _key: 'pay-x-0', method: 'cash', amount: 200, received: 200, addedAt: '2026-10-01T14:58:00.000Z' },
+      ],
+    }
+    const html = renderToStaticMarkup(<OrderCard {...props} order={twoGoes} />)
+    expect(html).toContain('Paid')
+    expect(html).toContain('E-wallet ₱350')
+    expect(html).toContain('Cash ₱200')
+    expect(html).toContain('· 10:41 PM')
+    expect(html).toContain('· 10:58 PM')
+    expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*aria-label="₱350 by E-wallet at 10:41 PM. Change the method"/)
+    // Paid at checkout only: no times.
+    const once = renderToStaticMarkup(<OrderCard {...props} order={{ ...order, payments: [{ _key: 'pay-0', method: 'card', amount: 290 }] }} />)
+    expect(once).toContain('Card ₱290')
+    expect(once).not.toContain('· 10:41 PM')
+  })
+
+  it('says when a payment was moved to another method, and what it was taken as', () => {
+    const moved = (movedAt: string): Sale => ({
+      ...order,
+      payments: [{ _key: 'pay-0', method: 'card', amount: 290, movedFrom: 'cash', movedAt, receivedBefore: 300 }],
+    })
+    const html = renderToStaticMarkup(<OrderCard {...props} order={moved('2026-10-01T15:02:00.000Z')} />)
+    expect(html).toContain('Card ₱290')
+    // The time kept on one line.
+    expect(html).toMatch(/moved from Cash · <span class="whitespace-nowrap">11:02 PM<\/span>/)
+    // Moved on a later day: the date too.
+    expect(renderToStaticMarkup(<OrderCard {...props} order={moved('2026-10-03T01:15:00.000Z')} />)).toMatch(/moved from Cash · <span[^>]*>Oct 3, 9:15 AM</)
+    expect(renderToStaticMarkup(<OrderCard {...props} order={{ ...order, payments: [{ _key: 'pay-0', method: 'card', amount: 290 }] }} />)).not.toContain('moved from')
+  })
+
+  it('says what part no payment covers, on an order begun before payments were recorded', () => {
+    const partly: Sale = { ...order, total: 490, payments: [{ _key: 'pay-x-0', method: 'card', amount: 200, addedAt: '2026-10-01T14:58:00.000Z' }] }
+    expect(renderToStaticMarkup(<OrderCard {...props} order={partly} />)).toContain('₱290 not recorded')
+  })
+
+  it('shows neither on an order from before they were recorded', () => {
+    const html = renderToStaticMarkup(<OrderCard {...props} />)
+    expect(html).not.toContain('>Paid<')
+    expect(html).not.toContain('Take out')
+    expect(html).not.toContain('Dine in')
+  })
+})
 
 describe('OrderCard', () => {
   it('lets the name be added or changed on the card, except on a loyalty card holder’s order', () => {

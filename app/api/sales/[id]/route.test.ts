@@ -247,3 +247,117 @@ describe('PATCH /api/sales/[id] { removeLineId }', () => {
     expect(store.doc('sale-plain')?.items).toHaveLength(3)
   })
 })
+
+describe('PATCH /api/sales/[id] { removeLineId } on a paid order', () => {
+  it('takes the removed line off its payment, so the payments still add up to the total', async () => {
+    const byWallet: FakeDoc = {
+      ...plain, _id: 'sale-wallet', paymentAmount: 430, change: 0,
+      payments: [{ _type: 'salePayment', _key: 'pay-0', method: 'ewallet', amount: 430 }],
+    }
+    store = fakeSanityClient([byWallet])
+    sanity.client = store.client
+    expect((await patch('sale-wallet', { removeLineId: 'tiramisu__hot' })).status).toBe(200)
+    expect(store.doc('sale-wallet')).toMatchObject({
+      total: 270, paymentAmount: 270, change: 0,
+      payments: [{ _type: 'salePayment', _key: 'pay-0', method: 'ewallet', amount: 270 }],
+    })
+  })
+
+  it('gives a cash customer the removed line back as change', async () => {
+    const byCash: FakeDoc = {
+      ...plain, _id: 'sale-cash', paymentAmount: 500, change: 70,
+      payments: [{ _type: 'salePayment', _key: 'pay-0', method: 'cash', amount: 430, received: 500 }],
+    }
+    store = fakeSanityClient([byCash])
+    sanity.client = store.client
+    expect((await patch('sale-cash', { removeLineId: 'tiramisu__hot' })).status).toBe(200)
+    expect(store.doc('sale-cash')).toMatchObject({
+      total: 270, paymentAmount: 500, change: 230,
+      payments: [{ _type: 'salePayment', _key: 'pay-0', method: 'cash', amount: 270, received: 500 }],
+    })
+  })
+})
+
+describe('PATCH /api/sales/[id] { paymentKey, method }', () => {
+  // Two Cafe Lattes with a shot and a Tiramisu, ₱430, paid with ₱500 in cash: ₱70 change.
+  const paid: FakeDoc = {
+    ...plain, _id: 'sale-paid', paymentAmount: 500, change: 70, orderType: 'dine-in',
+    payments: [{ _type: 'salePayment', _key: 'pay-0', method: 'cash', amount: 430, received: 500 }],
+  }
+
+  beforeEach(() => {
+    store = fakeSanityClient([paid])
+    sanity.client = store.client
+  })
+
+  it('moves a payment to the method it was really taken by, and what was handed over with it', async () => {
+    expect(await (await patch('sale-paid', { paymentKey: 'pay-0', method: 'ewallet' })).json()).toEqual({ success: true })
+    expect(store.doc('sale-paid')).toMatchObject({
+      payments: [{ _type: 'salePayment', _key: 'pay-0', method: 'ewallet', amount: 430 }],
+      paymentAmount: 430,
+      change: 0,
+    })
+  })
+
+  it('notes on the payment what it was taken as and when it moved, by the server’s clock, and logs the move', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-11T06:02:00.000Z'))
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    try {
+      expect((await patch('sale-paid', { paymentKey: 'pay-0', method: 'card' })).status).toBe(200)
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(store.doc('sale-paid')!.payments).toEqual([
+      { _type: 'salePayment', _key: 'pay-0', method: 'card', amount: 430, movedFrom: 'cash', movedAt: '2026-10-11T06:02:00.000Z', receivedBefore: 500 },
+    ])
+    expect(info).toHaveBeenCalledWith('Payment method changed', { id: 'sale-paid', key: 'pay-0', from: 'cash', to: 'card', amount: 430 })
+  })
+
+  it('logs nothing when the payment already had that method', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    expect((await patch('sale-paid', { paymentKey: 'pay-0', method: 'cash' })).status).toBe(200)
+    expect(info).not.toHaveBeenCalled()
+    expect(store.doc('sale-paid')!.payments).toEqual(paid.payments)
+  })
+
+  it('works from the order as it now is when another device saved between the read and the write', async () => {
+    const read = store.client.getDocument
+    let once = true
+    store.client.getDocument = async <T,>(id: string) => {
+      const doc = await read<T>(id)
+      if (once) {
+        once = false
+        store.touch(id, { notes: 'Ana B.' })
+      }
+      return doc
+    }
+    expect((await patch('sale-paid', { paymentKey: 'pay-0', method: 'card' })).status).toBe(200)
+    expect(store.doc('sale-paid')).toMatchObject({ notes: 'Ana B.', payments: [{ _key: 'pay-0', method: 'card', amount: 430 }] })
+  })
+
+  it('never leaves the change negative, however what was handed over was stored before', async () => {
+    // ₱100 in cash from ₱1,000, then an older POS added a ₱50 line and stored paymentAmount 150.
+    const drifted: FakeDoc = {
+      ...plain, _id: 'sale-drift', total: 150, paymentAmount: 150, change: 0,
+      payments: [{ _type: 'salePayment', _key: 'pay-0', method: 'cash', amount: 100, received: 1000 }],
+    }
+    store = fakeSanityClient([drifted])
+    sanity.client = store.client
+    expect((await patch('sale-drift', { paymentKey: 'pay-0', method: 'card' })).status).toBe(200)
+    expect(store.doc('sale-drift')).toMatchObject({ paymentAmount: 150, change: 0 })
+  })
+
+  it('says the payment changed on another device when it is no longer on the order', async () => {
+    const res = await patch('sale-paid', { paymentKey: 'pay-9', method: 'card' })
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe('This payment changed on another device. Refresh, then try again.')
+  })
+
+  it('refuses a method it does not know, a key that is not one, and an id that is not an order', async () => {
+    expect((await patch('sale-paid', { paymentKey: 'pay-0', method: 'gcash' })).status).toBe(400)
+    expect((await patch('sale-paid', { paymentKey: 'pay-0"]', method: 'card' })).status).toBe(400)
+    expect((await patch('sale-gone', { paymentKey: 'pay-0', method: 'card' })).status).toBe(404)
+    expect(store.doc('sale-paid')!.payments).toEqual(paid.payments)
+  })
+})

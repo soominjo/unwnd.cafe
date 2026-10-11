@@ -17,6 +17,7 @@ import {
 import { ORDER_CHANGED, ORDER_COMPLETED, ORDER_GONE, type AddItemsBody } from '@/lib/sales/addItems'
 import { LOYALTY_CARD_CHANGED, REWARDS_NEED_ITEMS, rewardProblem, rewardsFitOrder, stampsIn, type CardTotals, type LoyaltyReward } from '@/lib/loyalty'
 import { fetchCardTotals } from '@/lib/loyaltyStore'
+import { PAYMENTS_DONT_ADD_UP, handedTotal, parsePayments, toSalePaymentDocs, type PaymentInput, type SalePayment } from '@/lib/sales/payments'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,10 +32,13 @@ interface StoredSale {
   _type: string
   _rev: string
   total: number
+  /** Everything handed over so far: payments for added lines add to it. */
+  paymentAmount?: number
   notes?: string
   isCompleted?: boolean
   items: Array<{ _key: string; price: number; qty: number }>
   discounts?: Array<{ _key: string }>
+  payments?: SalePayment[]
   loyaltyMemberId?: string
   loyaltyRewards?: LoyaltyReward[]
 }
@@ -47,7 +51,10 @@ const REVISION = /^[A-Za-z0-9_-]{1,64}$/
 const refuse = (status: number, error: string, extra: Record<string, unknown> = {}) =>
   NextResponse.json({ success: false, error, ...extra }, { status })
 
-function parseBody(body: unknown): AddItemsBody | null {
+/** parseBody's answer to payments that don't cover the new lines: a reply of its own. */
+const PAYMENTS_REFUSED = 'payments-refused'
+
+function parseBody(body: unknown): AddItemsBody | typeof PAYMENTS_REFUSED | null {
   if (!body || typeof body !== 'object') return null
   const b = body as Record<string, unknown>
   if (typeof b.rev !== 'string' || !REVISION.test(b.rev)) return null
@@ -62,10 +69,19 @@ function parseBody(body: unknown): AddItemsBody | null {
   if (b.notes !== undefined && !isValidNotes(b.notes)) return null
   const rewards = b.loyaltyRewards ?? []
   if (!Array.isArray(rewards) || rewards.some(r => r !== 'ten' && r !== 'free') || new Set(rewards).size !== rewards.length) return null
+  // The new lines are paid for now, by themselves: their payments cover them less their rows.
+  let payments: PaymentInput[] | undefined
+  if (b.payments !== undefined) {
+    const due = items.reduce((sum, i) => sum + i.price * i.qty, 0) - discounts.reduce((sum, d) => sum + d.amount, 0)
+    const parsed = parsePayments(b.payments, due)
+    if (!parsed) return PAYMENTS_REFUSED
+    payments = parsed
+  }
   return {
     rev: b.rev,
     items,
     discounts,
+    ...(payments ? { payments } : {}),
     ...(b.paymentAmount !== undefined ? { paymentAmount: b.paymentAmount } : {}),
     ...(b.notes !== undefined ? { notes: b.notes } : {}),
     loyaltyRewards: rewards as LoyaltyReward[],
@@ -137,6 +153,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return refuse(400, 'Invalid JSON')
   }
   const body = parseBody(raw)
+  if (body === PAYMENTS_REFUSED) return refuse(400, PAYMENTS_DONT_ADD_UP)
   if (!body) return refuse(400, 'Invalid sale data')
 
   const writeClient = getWriteClient()
@@ -168,9 +185,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const refused = await checkRewards(order, body)
   if (refused) return refused
 
-  const paymentAmount = body.paymentAmount ?? total
   const rewards = body.loyaltyRewards ?? []
   const addedAt = new Date().toISOString()
+  // The new lines' payments join the order's, and what was handed over is worked out from all of
+  // them. An order with no payment recorded keeps what it had when nothing is paid now (₱0 added),
+  // and a POS older than payments sends the whole order's payment instead (absent: the exact total).
+  const newPayments = body.payments && body.payments.length > 0 ? toSalePaymentDocs(body.payments, addedAt) : []
+  const payments = [...(order.payments ?? []), ...newPayments]
+  const handedBefore = isValidAmount(order.paymentAmount) ? order.paymentAmount : order.total
+  const paymentAmount = payments.length > 0 ? handedTotal(payments, total) : body.payments ? handedBefore : body.paymentAmount ?? total
   // A name sent names or renames the order (empty clears it), but an order on a loyalty card
   // keeps the card holder's name.
   const naming = body.notes !== undefined && !order.loyaltyMemberId
@@ -191,6 +214,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         total,
         paymentAmount,
         change: paymentAmount - total,
+        ...(newPayments.length > 0 ? { payments } : {}),
         ...(naming && name ? { notes: name } : {}),
         ...(rewards.length > 0 ? { loyaltyRewards: [...(order.loyaltyRewards ?? []), ...rewards] } : {}),
       })

@@ -12,6 +12,9 @@ import { formatPHClock, formatPHTime } from './dateRange'
 import { CheckIcon, PencilIcon, PlusIcon, PrinterIcon, StampCardIcon, TrashIcon } from './icons'
 import { printChoices } from './printChoices'
 import { ActionButton, Badge, InlineConfirm, RemoveButton } from './ui'
+import OrderPayments from './OrderPayments'
+import OrderTypeBadge from './OrderTypeBadge'
+import type { PaymentMethod } from '@/lib/sales/payments'
 
 export type OrdersMode = 'recent' | 'completed'
 
@@ -34,6 +37,8 @@ export interface OrderCardProps {
   onAddItems: () => void
   /** Saves the order's name (empty clears it): resolves to null when done, else to why it wasn't saved. */
   onRename: (name: string) => Promise<string | null>
+  /** Moves one payment to the method it was really taken by: null when done, else why not. */
+  onChangeMethod: (paymentKey: string, method: PaymentMethod) => Promise<string | null>
 }
 
 export default function OrderCard(props: OrderCardProps) {
@@ -57,6 +62,7 @@ export default function OrderCard(props: OrderCardProps) {
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
           <OrderName order={order} onRename={props.onRename} />
           <span className="whitespace-nowrap text-xs tabular-nums text-foreground/50">{formatPHTime(order._createdAt)}</span>
+          {order.orderType && <OrderTypeBadge type={order.orderType} />}
           {lastAddedAt && <Badge tone="added" className="whitespace-nowrap">+ Added {formatPHClock(lastAddedAt)}</Badge>}
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -66,6 +72,8 @@ export default function OrderCard(props: OrderCardProps) {
           </span>
         </div>
       </header>
+
+      <OrderPayments order={order} onChangeMethod={props.onChangeMethod} />
 
       {rounds.map((round) => (
         <OrderRound key={round.addedAt ?? 'first'} round={round} {...props} />

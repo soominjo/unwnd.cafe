@@ -44,6 +44,9 @@ export function buildReceiptBlocksFromSale(sale: Sale, audience: ReceiptAudience
     // The POS stores the customer's name in the sale's notes field.
     customerName: sale.notes,
     audience,
+    orderType: sale.orderType,
+    // Each was paid when its lines were: at checkout, or when items were added.
+    payments: sale.payments?.map(p => ({ method: p.method, amount: p.amount, received: p.received, paidAt: new Date(p.addedAt ?? sale._createdAt) })),
   })
 }
 
@@ -70,6 +73,8 @@ export function buildCheckoutReceiptBlocks(payload: SalePayload, savedAt: Date, 
     change: payload.paymentAmount - payload.total,
     customerName: payload.notes,
     audience,
+    orderType: payload.orderType,
+    payments: payload.payments.map(p => ({ ...p, paidAt: savedAt })),
   })
 }
 

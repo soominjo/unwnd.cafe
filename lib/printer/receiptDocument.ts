@@ -1,4 +1,5 @@
 import { UNWND_SHOP, type ShopDetails } from './shopDetails'
+import { ORDER_TYPE_LABELS, PAYMENT_METHOD_LABELS, samePesos, type OrderType, type PaymentMethod } from '@/lib/sales/payments'
 
 // Shared receipt content model. Every printer transport (ESC/POS bytes, on-screen
 // preview, PDF) renders the same ReceiptBlock[] so the "look" of a receipt can
@@ -15,6 +16,8 @@ export type ReceiptBlock =
   | { kind: 'spacer'; lines?: number }
   | { kind: 'qr'; url: string; caption: string }
   | { kind: 'footer'; text: string }
+  /** A line at twice the size, for the staff ticket's TAKE OUT or DINE IN; inverted prints white on black. */
+  | { kind: 'banner'; text: string; inverted: boolean }
   /** Where two tickets of one print come apart: a gap with a tear line (and a cut, given a cutter). */
   | { kind: 'tear' }
 
@@ -31,6 +34,16 @@ export interface ReceiptItemInput {
 export interface ReceiptDiscountInput {
   label: string
   amount: number
+}
+
+/** One payment on the receipt. */
+export interface ReceiptPaymentInput {
+  method: PaymentMethod
+  amount: number
+  /** Cash only: what was handed over; it prints instead of the amount, with the change below. */
+  received?: number
+  /** When it was paid. Times print only on an order paid at different times (items added later). */
+  paidAt?: Date
 }
 
 /**
@@ -59,6 +72,14 @@ export interface ReceiptInput {
    * time. The ticket is headed ADDED TO ORDER, so the kitchen makes only these.
    */
   addedTo?: Date
+  /** Dine in or take out: a detail on the receipt, a banner on the staff ticket. Absent on old orders. */
+  orderType?: OrderType
+  /**
+   * Each payment. When they cover the whole total the receipt prints a row per payment, then the
+   * change if any was cash; otherwise (orders begun before payments were recorded) it prints
+   * Payment and Change as before.
+   */
+  payments?: readonly ReceiptPaymentInput[]
 }
 
 const RECEIPT_TIME_ZONE = 'Asia/Manila'
@@ -90,10 +111,16 @@ export function assertNeverBlock(block: never): never {
   throw new Error(`Unhandled receipt block kind: ${(block as ReceiptBlock).kind}`)
 }
 
-function headerBlocks(shop: ShopDetails, audience: ReceiptAudience, addedTo?: Date): ReceiptBlock[] {
+/** The staff ticket's TAKE OUT (white on black, so the bar packs it) or DINE IN. */
+function orderTypeBanner(orderType: OrderType | undefined): ReceiptBlock[] {
+  if (!orderType) return []
+  return [{ kind: 'banner', text: ORDER_TYPE_LABELS[orderType].toUpperCase(), inverted: orderType === 'take-out' }]
+}
+
+function headerBlocks(shop: ShopDetails, audience: ReceiptAudience, addedTo?: Date, orderType?: OrderType): ReceiptBlock[] {
   if (audience === 'kitchen') {
     const added: ReceiptBlock[] = addedTo ? [{ kind: 'footer', text: ADDED_TICKET_TITLE }] : []
-    return [{ kind: 'footer', text: KITCHEN_TICKET_TITLE }, ...added, { kind: 'rule', style: 'double' }]
+    return [{ kind: 'footer', text: KITCHEN_TICKET_TITLE }, ...added, ...orderTypeBanner(orderType), { kind: 'rule', style: 'double' }]
   }
   return [
     // The logo carries the brand; the shop name only prints if the bitmap can't be rendered.
@@ -109,8 +136,12 @@ function detailBlocks(input: ReceiptInput): ReceiptBlock[] {
   const name = input.customerName?.trim()
   const nameRow: ReceiptBlock[] = name ? [{ kind: 'detail', label: 'Name', value: name }] : []
   const orderRow: ReceiptBlock[] = input.addedTo ? [{ kind: 'detail', label: 'Order from', value: formatTime(input.addedTo) }] : []
+  // The staff ticket has the banner instead.
+  const typeRow: ReceiptBlock[] =
+    input.orderType && input.audience !== 'kitchen' ? [{ kind: 'detail', label: 'Order', value: ORDER_TYPE_LABELS[input.orderType] }] : []
   return [
     ...nameRow,
+    ...typeRow,
     { kind: 'detail', label: 'Date', value: formatDate(input.timestamp) },
     { kind: 'detail', label: 'Time', value: formatTime(input.timestamp) },
     ...orderRow,
@@ -150,10 +181,35 @@ function totalBlocks(input: ReceiptInput): ReceiptBlock[] {
     { kind: 'rule' },
     ...discountRows,
     { kind: 'total', label: 'TOTAL', value: input.total, emphasis: true },
-    { kind: 'total', label: 'Payment', value: input.paymentAmount },
-    { kind: 'total', label: 'Change', value: input.change },
+    ...paymentRows(input),
     { kind: 'rule', style: 'double' },
   ]
+}
+
+/**
+ * A row per payment (cash as handed over), then the change when any was cash; each with its time
+ * on an order paid at different times. Payments that don't cover the total (an order begun before
+ * they were recorded) print the one Payment and Change rows instead.
+ */
+function paymentRows(input: ReceiptInput): ReceiptBlock[] {
+  const payments = input.payments ?? []
+  const covered = payments.length > 0 && samePesos(payments.reduce((sum, p) => sum + p.amount, 0), input.total)
+  if (!covered) {
+    return [
+      { kind: 'total', label: 'Payment', value: input.paymentAmount },
+      { kind: 'total', label: 'Change', value: input.change },
+    ]
+  }
+  const showTimes = new Set(payments.map(p => (p.paidAt ? formatTime(p.paidAt) : ''))).size > 1
+  const rows = payments.map((p): ReceiptBlock => ({
+    kind: 'total',
+    label: showTimes && p.paidAt ? `${PAYMENT_METHOD_LABELS[p.method]} ${formatTime(p.paidAt)}` : PAYMENT_METHOD_LABELS[p.method],
+    value: p.method === 'cash' ? p.received ?? p.amount : p.amount,
+  }))
+  const cash = payments.filter(p => p.method === 'cash')
+  if (cash.length === 0) return rows
+  const change = cash.reduce((sum, p) => sum + (p.received ?? p.amount) - p.amount, 0)
+  return [...rows, { kind: 'total', label: 'Change', value: change }]
 }
 
 function footerBlocks(input: ReceiptInput, shop: ShopDetails, audience: ReceiptAudience): ReceiptBlock[] {
@@ -182,7 +238,7 @@ export function buildReceiptDocument(input: ReceiptInput): ReceiptBlock[] {
   const shop = input.shop ?? UNWND_SHOP
   const audience = input.audience ?? 'customer'
   return [
-    ...headerBlocks(shop, audience, input.addedTo),
+    ...headerBlocks(shop, audience, input.addedTo, input.orderType),
     ...detailBlocks(input),
     ...itemBlocks(input.items, audience),
     ...(audience === 'kitchen' ? [] : totalBlocks(input)),

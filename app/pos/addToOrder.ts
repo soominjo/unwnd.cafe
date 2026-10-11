@@ -1,5 +1,6 @@
 import type { LoyaltyReward } from '@/lib/loyalty'
 import type { AddItemsBody } from '@/lib/sales/addItems'
+import type { OrderType, PaymentInput, SalePayment } from '@/lib/sales/payments'
 import { savedDiscountName } from './discounts'
 import type { DiscountLine, LineDiscount, OrderItem, Sale, SaleItem } from './types'
 
@@ -21,6 +22,10 @@ export interface OpenOrder {
   total: number
   loyaltyMemberId: string | null
   loyaltyRewards: LoyaltyReward[]
+  /** Dine in or take out as saved; the added lines go the same way. Null on orders from before it was asked. */
+  orderType: OrderType | null
+  /** How its saved part was paid; none on orders from before payments were recorded. */
+  payments: SalePayment[]
 }
 
 export function openOrderFromSale(sale: Sale): OpenOrder {
@@ -34,6 +39,8 @@ export function openOrderFromSale(sale: Sale): OpenOrder {
     total: sale.total,
     loyaltyMemberId: sale.loyaltyMemberId ?? null,
     loyaltyRewards: sale.loyaltyRewards ?? [],
+    orderType: sale.orderType ?? null,
+    payments: sale.payments ?? [],
   }
 }
 
@@ -68,14 +75,14 @@ interface AddItemsArgs {
   /** The new lines: the cart while adding. */
   items: OrderItem[]
   discountLines: DiscountLine[]
-  /** What the customer paid for the whole order, or null for the exact total. */
-  payment: number | null
+  /** How the new lines were paid, as the review screen worked it out (checkPay); none when they come to ₱0. */
+  payments: PaymentInput[]
   /** The name field: sent when it no longer matches the order's name, unless the order is on a loyalty card. */
   name: string
   rewards: LoyaltyReward[]
 }
 
-export function buildAddItemsBody({ order, items, discountLines, payment, name, rewards }: AddItemsArgs): AddItemsBody {
+export function buildAddItemsBody({ order, items, discountLines, payments, name, rewards }: AddItemsArgs): AddItemsBody {
   const typedName = name.trim()
   return {
     rev: order.rev,
@@ -83,7 +90,7 @@ export function buildAddItemsBody({ order, items, discountLines, payment, name, 
     ...(discountLines.length > 0
       ? { discounts: discountLines.map(d => ({ lineId: d.lineId, name: savedDiscountName(d), amount: d.amount })) }
       : {}),
-    ...(payment !== null ? { paymentAmount: payment } : {}),
+    payments,
     ...(!order.loyaltyMemberId && typedName !== order.name ? { notes: typedName } : {}),
     ...(rewards.length > 0 ? { loyaltyRewards: rewards } : {}),
   }

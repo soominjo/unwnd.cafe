@@ -15,6 +15,7 @@ import {
 } from '@/lib/sales/validateSaleInput'
 import { LOYALTY_CARD_CHANGED, REWARDS_NEED_ITEMS, parseSaleLoyalty, rewardProblem, rewardsFitOrder, stampsIn, type CardTotals, type SaleLoyalty } from '@/lib/loyalty'
 import { fetchCardTotals } from '@/lib/loyaltyStore'
+import { PAYMENTS_DONT_ADD_UP, handedTotal, isOrderType, parsePayments, toSalePaymentDocs } from '@/lib/sales/payments'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,9 @@ interface SaleInput {
   /** Checked by parseSaleLoyalty, not by isValidSaleInput. */
   loyaltyMemberId?: unknown
   loyaltyRewards?:  unknown
+  /** Dine in or take out, and how it was paid: absent from a POS older than them, which saves as before. */
+  orderType?: unknown
+  payments?:  unknown
 }
 
 function isValidIso(s: string): boolean {
@@ -100,7 +104,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid sale data' }, { status: 400 })
   }
 
-  const { total, paymentAmount, items, notes, subtotal, discounts } = body
+  const { total, items, notes, subtotal, discounts, orderType } = body
+  if (orderType !== undefined && !isOrderType(orderType)) {
+    return NextResponse.json({ success: false, error: 'Invalid sale data' }, { status: 400 })
+  }
+  // The payments must cover the total exactly; what was handed over then comes from them, not
+  // from the paymentAmount sent.
+  const payments = body.payments === undefined ? null : parsePayments(body.payments, total)
+  if (body.payments !== undefined && !payments) {
+    return NextResponse.json({ success: false, error: PAYMENTS_DONT_ADD_UP }, { status: 400 })
+  }
+  const paymentAmount = payments ? handedTotal(payments, total) : body.paymentAmount
   const change = paymentAmount - total
 
   if (loyalty) {
@@ -119,6 +133,8 @@ export async function POST(request: NextRequest) {
       ...(notes ? { notes: notes.trim() } : {}),
       ...(discounts && discounts.length > 0 ? { discounts: toSaleDiscountDocs(discounts) } : {}),
       ...(loyalty ? { loyaltyMemberId: loyalty.memberId, loyaltyRewards: loyalty.rewards } : {}),
+      ...(orderType ? { orderType } : {}),
+      ...(payments ? { payments: toSalePaymentDocs(payments) } : {}),
       items: items.map(item => toSaleItemDoc(item)),
     })
     return NextResponse.json({ success: true, id: doc._id })

@@ -257,3 +257,74 @@ describe('POST /api/sales/[id]/items on a loyalty card holder’s order', () => 
     expect(console.error).toHaveBeenCalled()
   })
 })
+
+describe('POST /api/sales/[id]/items, the new lines paid for then', () => {
+  // The screenshot order, paid ₱790 by e-wallet when it was saved.
+  const paid: FakeDoc = {
+    ...open,
+    _id: 'sale-paid',
+    orderType: 'dine-in',
+    payments: [{ _type: 'salePayment', _key: 'pay-0', method: 'ewallet', amount: 790 }],
+  }
+
+  beforeEach(() => {
+    store = fakeSanityClient([paid, open])
+    sanity.client = store.client
+  })
+
+  it('appends the payment for the new lines, stamped like them, and adds what was handed over', async () => {
+    const res = await add('sale-paid', { rev: revOf('sale-paid'), items: [latteNew], payments: [{ method: 'cash', amount: 120, received: 200 }] })
+    expect(res.status).toBe(200)
+    const doc = store.doc('sale-paid')!
+    expect(doc.payments).toEqual([
+      { _type: 'salePayment', _key: 'pay-0', method: 'ewallet', amount: 790 },
+      { _type: 'salePayment', _key: expect.stringMatching(/^pay-[a-z0-9]+-0$/), method: 'cash', amount: 120, received: 200, addedAt: AT },
+    ])
+    // 790 + 120 = 910; ₱790 by e-wallet and ₱200 in cash handed over = 990, so ₱80 change.
+    expect(doc).toMatchObject({ total: 910, paymentAmount: 990, change: 80 })
+  })
+
+  it('refuses payments that don’t come to the new lines less their rows, and saves nothing', async () => {
+    const res = await add('sale-paid', { rev: revOf('sale-paid'), items: [latteNew], payments: [{ method: 'cash', amount: 910 }] })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/doesn’t add up/)
+    expect(store.doc('sale-paid')!.items).toHaveLength(4)
+    expect(store.doc('sale-paid')!.payments).toHaveLength(1)
+  })
+
+  it('records only the new part on an order saved before payments were, leaving the first part unrecorded', async () => {
+    const res = await add('sale-214', { rev: revOf('sale-214'), items: [matchaNew], payments: [{ method: 'card', amount: 170 }] })
+    expect(res.status).toBe(200)
+    const doc = store.doc('sale-214')!
+    expect(doc.payments).toEqual([{ _type: 'salePayment', _key: expect.stringMatching(/^pay-[a-z0-9]+-0$/), method: 'card', amount: 170, addedAt: AT }])
+    expect(doc).toMatchObject({ total: 960, paymentAmount: 960, change: 0 })
+  })
+
+  it('takes the new lines’ discount rows off before checking the payment', async () => {
+    const pwd = { lineId: latteNew.lineId, name: 'PWD Drink -20% x1 (Cafe Latte)', amount: 24 }
+    expect((await add('sale-paid', { rev: revOf('sale-paid'), items: [latteNew], discounts: [pwd], payments: [{ method: 'card', amount: 120 }] })).status).toBe(400)
+    expect((await add('sale-paid', { rev: revOf('sale-paid'), items: [latteNew], discounts: [pwd], payments: [{ method: 'card', amount: 96 }] })).status).toBe(200)
+  })
+
+  it('keeps what was handed over in step when a POS older than payments adds to a paid order', async () => {
+    // ₱100 in cash from ₱1,000 handed over; an older POS tab then adds a ₱50 line with no payment.
+    const cashPaid: FakeDoc = {
+      ...open, _id: 'sale-cash', total: 100, subtotal: 100, paymentAmount: 1000, change: 900,
+      items: [saved('americano__hot', 'Americano', 'hot', 100, 1, 'espresso')],
+      payments: [{ _type: 'salePayment', _key: 'pay-0', method: 'cash', amount: 100, received: 1000 }],
+    }
+    store = fakeSanityClient([cashPaid])
+    sanity.client = store.client
+    const cookie = { lineId: 'cookie__fixed__ak3j9', name: 'Cookie', variant: null, price: 50, qty: 1 }
+    expect((await add('sale-cash', { rev: revOf('sale-cash'), items: [cookie] })).status).toBe(200)
+    // ₱1,000 handed over for the ₱100 part; the ₱50 part is not recorded, so it counts as exact.
+    expect(store.doc('sale-cash')).toMatchObject({ total: 150, paymentAmount: 1050, change: 900 })
+  })
+
+  it('takes a split for the new lines', async () => {
+    const both = [latteNew, matchaNew]
+    const res = await add('sale-paid', { rev: revOf('sale-paid'), items: both, payments: [{ method: 'ewallet', amount: 90 }, { method: 'cash', amount: 200 }] })
+    expect(res.status).toBe(200)
+    expect((store.doc('sale-paid')!.payments as unknown[])).toHaveLength(3)
+  })
+})

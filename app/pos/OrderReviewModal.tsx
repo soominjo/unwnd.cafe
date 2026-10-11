@@ -10,6 +10,12 @@ import type { OrderItem, DiscountLine } from './types'
 import type { OpenOrder } from './addToOrder'
 import { formatPHClock } from './sales/dateRange'
 import { MAX_NOTES_LENGTH } from '@/lib/sales/validateSaleInput'
+import { ORDER_TYPE_LABELS, PAYMENT_METHOD_LABELS, type OrderType } from '@/lib/sales/payments'
+import OrderTypeToggle from './review/OrderTypeToggle'
+import PaymentPicker from './review/PaymentPicker'
+import PaymentReadout from './review/PaymentReadout'
+import { checkPay, formatPeso, type PayState } from './review/payState'
+import { BagIcon, CupIcon } from './sales/icons'
 
 /** A linked loyalty card, shown to the customer with the stamps this order adds. */
 export interface ReviewLoyalty {
@@ -26,7 +32,12 @@ interface OrderReviewModalProps {
   grandTotal: number
   discountLines: DiscountLine[]
   discountAmount: number
-  payment: number | null
+  /** Dine in or take out, asked right above the payment (a saved order keeps its own). */
+  orderType: OrderType
+  onOrderTypeChange: (value: OrderType) => void
+  /** How they are paying, as picked so far: Complete + Print waits until it pays what is due. */
+  pay: PayState
+  onPayChange: (pay: PayState) => void
   notes: string
   loyalty: ReviewLoyalty | null
   /** The order is being saved: every way out locks until it is. */
@@ -49,9 +60,10 @@ const NAME_CHIP = 'inline-block max-w-full truncate bg-[#d4ede1] text-[#1f5c3c] 
 
 // Full-height review page (not a floating modal) shown to the customer
 // before the cashier taps charge, laid out as a single centered column.
-// The item list scrolls on its own; the totals, payment, change, and action
-// buttons live in a footer pinned to the bottom of the viewport — a long
-// order should never hide what the customer actually owes.
+// The item list scrolls on its own; the totals, the questions (dine in or take
+// out, how they're paying), the change and the action button live in a footer
+// pinned to the bottom of the viewport — a long order should never hide what
+// the customer actually owes.
 export default function OrderReviewModal({
   orderItems,
   itemCount,
@@ -59,7 +71,10 @@ export default function OrderReviewModal({
   grandTotal,
   discountLines,
   discountAmount,
-  payment,
+  orderType,
+  onOrderTypeChange,
+  pay,
+  onPayChange,
   notes,
   loyalty,
   saving,
@@ -72,19 +87,25 @@ export default function OrderReviewModal({
   nameFixed = false,
 }: OrderReviewModalProps) {
   const { parentItems, addonsByParent, orphanAddons } = groupOrderItems(orderItems)
-  // What the customer owes: the whole order when items are being added to a saved one.
-  const totalDue = (savedOrder?.total ?? 0) + grandTotal
-  const short = payment !== null && payment < totalDue
+  // What the customer pays now: the order, or only the new lines while adding to a saved one
+  // (its saved part was paid when it was saved).
+  const due = grandTotal
+  const payCheck = checkPay(due, pay)
   const savedAt = savedOrder ? formatPHClock(savedOrder.createdAt) : ''
   // Nothing new to put on a saved order (its cart was emptied after an earlier save went through).
   const nothingToSave = savedOrder !== null && orderItems.length === 0
+  const hint = !payCheck.ok && !nothingToSave
+    ? payCheck.reason
+    : savedOrder
+      ? `Saves onto the ${savedAt} order: no new order is made. A preview then prints, or closing it skips printing.`
+      : 'After saving, a preview prints the kitchen ticket and the receipt; closing it skips printing.'
 
   return (
-    <div className="fixed inset-0 z-50 bg-white flex flex-col">
-      <div className="w-full max-w-3xl mx-auto flex-1 flex flex-col min-h-0">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-white flex flex-col">
+      <div className="w-full max-w-3xl mx-auto flex-1 flex flex-col">
 
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-foreground/10 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-6 py-4 border-b border-foreground/10 shrink-0">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-[0.3em] text-foreground/55 font-semibold">Review Your Order</p>
             <p className="text-foreground/45 text-sm mt-1">
@@ -94,11 +115,11 @@ export default function OrderReviewModal({
             </p>
           </div>
           {onNotesChange && !nameFixed ? (
-            <div className="flex-1 flex justify-center min-w-0">
+            <div className="order-last basis-full flex justify-start min-w-0 sm:order-none sm:basis-auto sm:flex-1 sm:justify-center">
               <ReviewNameField name={notes} onChange={onNotesChange} />
             </div>
           ) : notes.trim() && (
-            <div className="flex-1 flex justify-center min-w-0">
+            <div className="order-last basis-full flex justify-start min-w-0 sm:order-none sm:basis-auto sm:flex-1 sm:justify-center">
               <span className={NAME_CHIP}>{notes.trim()}</span>
             </div>
           )}
@@ -129,7 +150,7 @@ export default function OrderReviewModal({
         )}
 
         {/* Scrollable body: item list + notes */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-3">
+        <div className="flex-1 min-h-28 overflow-y-auto px-6 py-3">
           {savedOrder && <SavedPart order={savedOrder} savedAt={savedAt} />}
           <div className="divide-y divide-foreground/[0.07]">
             {parentItems.map(item => {
@@ -210,50 +231,29 @@ export default function OrderReviewModal({
             </div>
           )}
 
-          <div className={`flex flex-col sm:flex-row sm:items-stretch gap-5 sm:gap-6 ${discountAmount > 0 ? 'border-t border-foreground/10 pt-4' : ''}`}>
-            {/* Left: total due + payment/change */}
-            <div className="flex-1 min-w-0 space-y-4">
+          <div className={`grid gap-5 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)] sm:gap-7 ${discountAmount > 0 ? 'border-t border-foreground/10 pt-4' : ''}`}>
+            {/* Left: what is due, then the change, the shortfall, the method or the split */}
+            <div className="min-w-0 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 sm:flex-col sm:flex-nowrap sm:items-stretch sm:justify-start">
               <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-foreground/55 font-semibold">Total Due</p>
-                <p className="font-display font-bold text-5xl tracking-tight text-foreground tabular-nums mt-1">
-                  ₱{totalDue.toFixed(0)}
-                </p>
-                {savedOrder && (
-                  <p className="text-sm text-foreground/55 tabular-nums mt-1">
-                    {`Already ordered ₱${savedOrder.total.toFixed(0)} · added now ₱${grandTotal.toFixed(0)}`}
-                  </p>
-                )}
+                <p className="text-xs uppercase tracking-[0.3em] text-foreground/55 font-semibold">{savedOrder ? 'Due now' : 'Total Due'}</p>
+                <p className="font-display font-bold text-5xl tracking-tight text-foreground mt-1">{formatPeso(due)}</p>
+                {savedOrder && <p className="text-sm text-foreground/55 tabular-nums mt-1">{savedOrderLine(savedOrder, grandTotal)}</p>}
               </div>
-
-              <div className="border-t border-foreground/10 pt-4 flex items-baseline gap-8">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-foreground/55 font-semibold">Payment</p>
-                  <p className="font-display text-xl font-semibold tabular-nums text-foreground mt-1">
-                    {payment !== null ? `₱${payment.toFixed(0)}` : '—'}
-                  </p>
-                </div>
-                {payment === null ? (
-                  <p className="text-xs text-foreground/40 uppercase tracking-widest font-semibold">Awaiting payment</p>
-                ) : short ? (
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-red-500 font-semibold">Short</p>
-                    <p className="text-2xl text-red-500 font-bold tabular-nums mt-1">
-                      ₱{(totalDue - payment).toFixed(0)}
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-foreground/55 font-semibold">Change</p>
-                    <p className="font-display font-semibold text-3xl tracking-tight text-foreground tabular-nums mt-1">
-                      ₱{(payment - totalDue).toFixed(0)}
-                    </p>
-                  </div>
-                )}
+              <div className="text-right sm:border-t sm:border-foreground/10 sm:pt-4 sm:text-left">
+                <PaymentReadout due={due} pay={pay} check={payCheck} />
               </div>
             </div>
 
-            {/* Right: actions, beside the totals */}
-            <div className="sm:w-72 shrink-0 sm:border-l sm:border-foreground/10 sm:pl-6 flex flex-col justify-center gap-2.5">
+            {/* Right: dine in or take out, how they're paying, then the one button */}
+            <div className="min-w-0 flex flex-col gap-3">
+              {savedOrder ? (
+                <SavedOrderType orderType={savedOrder.orderType} />
+              ) : (
+                <OrderTypeToggle value={orderType} onChange={onOrderTypeChange} disabled={saving} />
+              )}
+              <div className="border-t border-foreground/10 pt-3">
+                <PaymentPicker due={due} pay={pay} onChange={onPayChange} disabled={saving} />
+              </div>
               {submitError && (
                 <p className="text-sm text-red-500 uppercase tracking-widest font-medium text-center">{submitError}</p>
               )}
@@ -268,15 +268,13 @@ export default function OrderReviewModal({
                 <>
                   <button
                     onClick={() => onComplete()}
-                    disabled={saving || nothingToSave}
-                    className="w-full bg-foreground text-cream text-base uppercase tracking-widest py-4 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={saving || nothingToSave || !payCheck.ok}
+                    className="w-full bg-foreground text-cream text-base uppercase tracking-widest py-4 font-bold hover:bg-foreground/90 active:scale-[0.99] transition-all rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {saving ? 'Saving…' : savedOrder ? '🖨 Save + Print' : '🖨 Complete + Print'}
                   </button>
-                  <p className="text-xs text-foreground/45 text-center">
-                    {savedOrder
-                      ? `Saves onto the ${savedAt} order: no new order is made. A preview then prints, or closing it skips printing.`
-                      : 'After saving, a preview prints the kitchen ticket and the receipt; closing it skips printing.'}
+                  <p role="status" className={`text-xs text-center ${!payCheck.ok && payCheck.tone === 'error' ? 'text-red-600 font-semibold' : 'text-foreground/45'}`}>
+                    {hint}
                   </p>
                 </>
               )}
@@ -285,6 +283,29 @@ export default function OrderReviewModal({
         </div>
       </div>
     </div>
+  )
+}
+
+/** While adding: what the saved part came to and how it was paid, beside what is added now. */
+function savedOrderLine(order: OpenOrder, addedNow: number): string {
+  const methods = [...new Set(order.payments.map(p => PAYMENT_METHOD_LABELS[p.method]))]
+  const paid = methods.length > 0 ? `, paid by ${methods.join(' + ')}` : ''
+  return `Already ordered ${formatPeso(order.total)}${paid} · adding now ${formatPeso(addedNow)}`
+}
+
+/** While adding: the saved order's Dine in or Take out, which the new lines follow. */
+function SavedOrderType({ orderType }: { orderType: OrderType | null }) {
+  if (!orderType) return null
+  const Icon = orderType === 'take-out' ? BagIcon : CupIcon
+  return (
+    <p className="flex items-center gap-2 text-sm text-foreground/70">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.26em] text-foreground/55">Order</span>
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-foreground/20 px-2 py-1 text-xs font-semibold text-foreground">
+        <Icon width={13} height={13} />
+        {ORDER_TYPE_LABELS[orderType]}
+      </span>
+      as saved
+    </p>
   )
 }
 

@@ -13,7 +13,15 @@ const discountLines: DiscountLine[] = [
   { lineId: 'a', name: 'Spanish Latte', amount: 30, kind: 'review', scope: 'all', label: 'Google Review −10% ×2' },
 ]
 
-const args = { items, discountLines, subtotal: 400, grandTotal: 340, payment: 500, notes: ' Ana ' }
+const args = {
+  items,
+  discountLines,
+  subtotal: 400,
+  grandTotal: 340,
+  orderType: 'dine-in' as const,
+  payments: [{ method: 'cash' as const, amount: 340, received: 500 }],
+  notes: ' Ana ',
+}
 
 describe('buildSalePayload', () => {
   it('posts the discounted total, the pre-discount subtotal and the items as-is', () => {
@@ -35,8 +43,21 @@ describe('buildSalePayload', () => {
     expect('discounts' in buildSalePayload({ ...args, discountLines: [] })).toBe(false)
   })
 
-  it('treats a missing payment as paying the exact total', () => {
-    expect(buildSalePayload({ ...args, payment: null }).paymentAmount).toBe(340)
+  it('posts where it is eaten and each payment as checked on the review screen', () => {
+    const body = buildSalePayload({ ...args, orderType: 'take-out' })
+    expect(body.orderType).toBe('take-out')
+    expect(body.payments).toEqual([{ method: 'cash', amount: 340, received: 500 }])
+  })
+
+  it('counts what was handed over: cash as received, the e-wallet part exactly', () => {
+    const payments = [{ method: 'ewallet' as const, amount: 200 }, { method: 'cash' as const, amount: 140, received: 200 }]
+    expect(buildSalePayload({ ...args, payments }).paymentAmount).toBe(400)
+  })
+
+  it('sends no payment for a ₱0 order, paid in full by a loyalty free drink', () => {
+    const body = buildSalePayload({ ...args, grandTotal: 0, payments: [] })
+    expect(body.payments).toEqual([])
+    expect(body.paymentAmount).toBe(0)
   })
 
   it('trims the customer name and omits it when blank', () => {

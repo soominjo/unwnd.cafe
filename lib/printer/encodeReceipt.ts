@@ -26,6 +26,7 @@ type ItemBlock = Extract<ReceiptBlock, { kind: 'item' }>
 type ItemNoteBlock = Extract<ReceiptBlock, { kind: 'itemNote' }>
 type DetailBlock = Extract<ReceiptBlock, { kind: 'detail' }>
 type QrBlock = Extract<ReceiptBlock, { kind: 'qr' }>
+type BannerBlock = Extract<ReceiptBlock, { kind: 'banner' }>
 
 interface EncodeContext {
   columns: ThermalColumns
@@ -121,12 +122,21 @@ function encodeBlock(encoder: ReceiptPrinterEncoder, block: ReceiptBlock, contex
     case 'qr':
       encodeQr(encoder, block, context)
       break
+    case 'banner':
+      encodeBanner(encoder, block)
+      break
     case 'tear':
       encodeTear(encoder)
       break
     default:
       assertNeverBlock(block)
   }
+}
+
+// The staff ticket's TAKE OUT or DINE IN at twice the width and height, regular weight. Take out
+// prints white on black, so the bar can't miss that it is to be packed.
+function encodeBanner(encoder: ReceiptPrinterEncoder, block: BannerBlock): void {
+  encoder.align('center').size(2, 2).invert(block.inverted).line(block.text).invert(false).size(1, 1).align('left')
 }
 
 // The gap between two tickets of one print, with a line to tear along. The partial cut after it

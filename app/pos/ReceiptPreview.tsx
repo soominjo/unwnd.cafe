@@ -158,6 +158,18 @@ function ReceiptBlockView({ block, columns }: { block: ReceiptBlock; columns: Th
       )
     case 'footer':
       return <p className="text-center">{block.text}</p>
+    case 'banner':
+      // Twice the width and height, as the printer's size(2, 2); take out prints white on black.
+      return (
+        <div className="flex items-end justify-center" style={{ height: `${LINE_HEIGHT * 2}em` }}>
+          <span
+            className={`inline-block ${block.inverted ? 'bg-black text-white' : ''}`}
+            style={{ transform: 'scale(2)', transformOrigin: 'bottom', paddingInline: '0.5ch' }}
+          >
+            {block.text}
+          </span>
+        </div>
+      )
     case 'tear':
       return (
         <div role="separator" aria-label="Tear here" className="my-6 flex items-center gap-2 text-black/35" style={{ marginInline: `-${ch(PAPER_MARGIN_CH)}` }}>

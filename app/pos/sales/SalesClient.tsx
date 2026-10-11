@@ -10,8 +10,11 @@ import ViewTabs, { type View } from './ViewTabs'
 import OrdersView, { type OrderActions } from './OrdersView'
 import TopItemsView from './TopItemsView'
 import TopCustomersView from './TopCustomersView'
+import TallyView from './TallyView'
 import { sendRename } from './sendRename'
+import { sendMethodChange } from './sendMethodChange'
 import { ErrorBanner } from './ui'
+import type { PaymentMethod } from '@/lib/sales/payments'
 
 const PAGE_SIZE = 20
 
@@ -21,8 +24,9 @@ interface NavigateUpdates extends PeriodUpdates {
 
 type OrderStatus = 'pending' | 'completed'
 
-async function fetchSummary(from: string, to: string, signal: AbortSignal) {
-  const qs = new URLSearchParams({ from, to })
+// On a day or a short range the summary also lists every payment, for the Tally tab's lists.
+async function fetchSummary(from: string, to: string, lines: boolean, signal: AbortSignal) {
+  const qs = new URLSearchParams({ from, to, ...(lines ? { lines: '1' } : {}) })
   const res = await fetch(`/api/sales/summary?${qs}`, { signal })
   return res.json()
 }
@@ -50,7 +54,7 @@ export default function SalesClient() {
   // On a long period, Recent/Completed aren't offered — fall back to Top Items rather
   // than showing a tab that isn't in the bar (the raw `view` state is left untouched,
   // so switching back to Today/Yesterday restores whichever tab was picked there).
-  const activeView: View = detailed || view === 'summary' || view === 'names' ? view : 'summary'
+  const activeView: View = detailed || view === 'summary' || view === 'names' || view === 'tally' ? view : 'summary'
   const [summary, setSummary] = useState<SalesSummary | null>(null)
   // Scoped to the active tab's status (pending/completed) — not "every order on the page 1 of the whole period".
   const [orders, setOrders] = useState<Sale[]>([])
@@ -117,9 +121,9 @@ export default function SalesClient() {
     setError(null)
     try {
       const status: OrderStatus = currentView === 'completed' ? 'completed' : 'pending'
-      const wantsOrders = detailed && currentView !== 'summary' && currentView !== 'names'
+      const wantsOrders = detailed && currentView !== 'summary' && currentView !== 'names' && currentView !== 'tally'
       const [summaryJson, ordersJson] = await Promise.all([
-        fetchSummary(from, to, signal),
+        fetchSummary(from, to, detailed, signal),
         wantsOrders ? fetchOrders(from, to, status, pg, signal) : null,
       ])
       if (signal.aborted) return
@@ -288,6 +292,17 @@ export default function SalesClient() {
     return null
   }
 
+  // ── Fix a payment's method ─────────────────────────────────────────────────
+  // Resolves to null when done, else to why the payment wasn't moved: shown beside it.
+  async function changeMethod(saleId: string, paymentKey: string, method: PaymentMethod): Promise<string | null> {
+    const { error: problem, gone } = await sendMethodChange(saleId, paymentKey, method)
+    if (problem && !gone) return problem
+    refreshCurrent()
+    // Deleted on another device: the refresh takes it away, and the banner says why.
+    if (gone) setError(problem)
+    return null
+  }
+
   // ── Derived ─────────────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -324,6 +339,7 @@ export default function SalesClient() {
     // A full page load, like the POS link: /pos reads the order on the server with the menu.
     onAddItems: (id: string) => window.location.assign(`/pos?edit=${encodeURIComponent(id)}`),
     onRenameOrder: renameOrder,
+    onChangeMethod: changeMethod,
   }
 
   const sharedOrdersProps = {
@@ -371,6 +387,8 @@ export default function SalesClient() {
           <TopItemsView summary={summary} loading={loading} />
         ) : activeView === 'names' ? (
           <TopCustomersView summary={summary} loading={loading} />
+        ) : activeView === 'tally' ? (
+          <TallyView summary={summary} loading={loading} detailed={detailed} onChangeMethod={changeMethod} />
         ) : (
           <OrdersView
             {...sharedOrdersProps}

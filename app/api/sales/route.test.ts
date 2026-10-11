@@ -132,3 +132,50 @@ describe('POST /api/sales', () => {
     expect(console.error).toHaveBeenCalled()
   })
 })
+
+describe('POST /api/sales with how it was paid', () => {
+  it('stores Dine in or Take out and each payment, keyed, with what was handed over and the change', async () => {
+    const res = await post(sale({ orderType: 'take-out', payments: [{ method: 'cash', amount: 259, received: 300 }] }))
+    expect(res.status).toBe(200)
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      orderType: 'take-out',
+      payments: [{ _type: 'salePayment', _key: 'pay-0', method: 'cash', amount: 259, received: 300 }],
+      paymentAmount: 300,
+      change: 41,
+    }))
+  })
+
+  it('works out what was handed over from the payments, whatever paymentAmount says', async () => {
+    await post(sale({ paymentAmount: 999, orderType: 'dine-in', payments: [{ method: 'ewallet', amount: 159 }, { method: 'cash', amount: 100, received: 200 }] }))
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      payments: [
+        { _type: 'salePayment', _key: 'pay-0', method: 'ewallet', amount: 159 },
+        { _type: 'salePayment', _key: 'pay-1', method: 'cash', amount: 100, received: 200 },
+      ],
+      paymentAmount: 359,
+      change: 100,
+    }))
+  })
+
+  it('takes no payment on a ₱0 order', async () => {
+    const free = { ...latte, price: 0 }
+    expect((await post(sale({ items: [free], subtotal: 0, total: 0, paymentAmount: 0, payments: [] }))).status).toBe(200)
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ payments: [], paymentAmount: 0, change: 0 }))
+  })
+
+  it('refuses payments that do not add up to the total, and an order type it does not know', async () => {
+    const short = await post(sale({ orderType: 'dine-in', payments: [{ method: 'cash', amount: 200 }] }))
+    expect(short.status).toBe(400)
+    expect((await short.json()).error).toMatch(/doesn’t add up/)
+    expect((await post(sale({ orderType: 'delivery', payments: [{ method: 'card', amount: 259 }] }))).status).toBe(400)
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('saves an order from an older POS, with neither, as before', async () => {
+    expect((await post(sale())).status).toBe(200)
+    const stored = create.mock.calls[0][0]
+    expect(stored).toMatchObject({ paymentAmount: 300, change: 41 })
+    expect(stored).not.toHaveProperty('payments')
+    expect(stored).not.toHaveProperty('orderType')
+  })
+})

@@ -1,4 +1,5 @@
 import { defineField, defineType } from 'sanity'
+import { ORDER_TYPES, ORDER_TYPE_LABELS } from '../../lib/sales/payments'
 
 export const sale = defineType({
   name: 'sale',
@@ -21,6 +22,24 @@ export const sale = defineType({
       name: 'change',
       title: 'Change (₱)',
       type: 'number',
+    }),
+    defineField({
+      name: 'orderType',
+      title: 'Dine in or take out',
+      description: 'Empty on orders from before it was asked.',
+      type: 'string',
+      options: {
+        list: ORDER_TYPES.map(value => ({ title: ORDER_TYPE_LABELS[value], value })),
+        layout: 'radio',
+        direction: 'horizontal',
+      },
+    }),
+    defineField({
+      name: 'payments',
+      title: 'How it was paid',
+      description: 'One payment, or two for a split; items added later are paid with their own. Orders from before payments were recorded have none.',
+      type: 'array',
+      of: [{ type: 'salePayment' }],
     }),
     defineField({
       name: 'subtotal',

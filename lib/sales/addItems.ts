@@ -1,4 +1,5 @@
 import type { LoyaltyReward } from '@/lib/loyalty'
+import type { PaymentInput } from './payments'
 import type { SaleDiscountInput, SaleItemInput } from './validateSaleInput'
 
 // The contract of POST /api/sales/[id]/items, shared by the route and the POS.
@@ -16,7 +17,12 @@ export interface AddItemsBody {
   items: SaleItemInput[]
   /** Discount rows of the new lines. */
   discounts?: SaleDiscountInput[]
-  /** What the customer paid for the whole order; absent means the exact total. */
+  /**
+   * How the new lines were paid: they come to the new lines less their rows (the saved part was
+   * paid when it was saved). Absent from a POS older than payments.
+   */
+  payments?: PaymentInput[]
+  /** From a POS older than payments: what the customer paid for the whole order; absent means the exact total. */
   paymentAmount?: number
   /** The order's name from here on (empty clears it); an order on a loyalty card keeps the card holder's. */
   notes?: string

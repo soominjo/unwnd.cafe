@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { client } from '@/sanity/lib/client'
 import { requirePosAuth } from '@/lib/requirePosAuth'
 import { getResolvedCategories } from '@/lib/menuCategories'
+import { countOrderTypes, paymentLines, tallyPayments } from '@/lib/sales/paymentTally'
+import type { OrderType, SalePayment } from '@/lib/sales/payments'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +26,8 @@ interface SaleRecord {
   items:         SaleItemRecord[]
   isCompleted?:  boolean
   notes?:        string
+  orderType?:    OrderType
+  payments?:     SalePayment[]
 }
 
 interface TopItem {
@@ -68,8 +72,9 @@ export async function GET(request: NextRequest) {
     const [sales, categories]: [SaleRecord[], Awaited<ReturnType<typeof getResolvedCategories>>] = await Promise.all([
       fresh.fetch(
         `*[_type == "sale" && _createdAt >= $from && _createdAt <= $to]{
-          _id, _createdAt, total, paymentAmount, change, isCompleted, notes,
-          items[]{ name, variant, price, qty, categoryId }
+          _id, _createdAt, total, paymentAmount, change, isCompleted, notes, orderType,
+          items[]{ name, variant, price, qty, categoryId },
+          payments[]{ _key, method, amount, received, addedAt, movedFrom, movedAt }
         }`,
         { from, to },
         { cache: 'no-store' }
@@ -137,9 +142,18 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.orderCount - a.orderCount || b.totalSpent - a.totalSpent)
       .slice(0, LEADERBOARD_SIZE)
 
+    // The Tally tab: how the period was paid (always adding up to the revenue) and where it was
+    // eaten; with lines=1 (a day or a short range), every payment too, to check against the drawer.
+    const wantsLines = searchParams.get('lines') === '1'
+
     return NextResponse.json({
       success: true,
-      data: { totalRevenue, orderCount, avgOrderValue, topItems, topItemCategories, topCustomers, pendingCount, completedCount },
+      data: {
+        totalRevenue, orderCount, avgOrderValue, topItems, topItemCategories, topCustomers, pendingCount, completedCount,
+        paymentTally: tallyPayments(sales),
+        orderTypes: countOrderTypes(sales),
+        ...(wantsLines ? { paymentLines: paymentLines(sales) } : {}),
+      },
     })
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to fetch summary.' }, { status: 500 })

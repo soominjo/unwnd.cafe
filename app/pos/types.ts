@@ -1,4 +1,6 @@
 import type { LoyaltyReward } from '@/lib/loyalty'
+import type { OrderType, SalePayment } from '@/lib/sales/payments'
+import type { OrderTypeCounts, PaymentLine, PaymentTally } from '@/lib/sales/paymentTally'
 
 export type Variant = 'hot' | 'ice'
 export type AddonType = 'drink' | 'food'
@@ -111,6 +113,10 @@ export interface Sale {
   loyaltyMemberId?: string
   /** The card's rewards the order used. */
   loyaltyRewards?: LoyaltyReward[]
+  /** Dine in or take out; absent on orders from before it was asked. */
+  orderType?: OrderType
+  /** How the order was paid; absent on orders from before payments were recorded. */
+  payments?: SalePayment[]
 }
 
 export interface TopItem {
@@ -144,4 +150,9 @@ export interface SalesSummary {
   /** Whole-period counts (not just the current page) — what the Recent/Completed tab badges show. */
   pendingCount: number
   completedCount: number
+  /** How the period was paid: always adds up to totalRevenue (the Tally tab). */
+  paymentTally: PaymentTally
+  orderTypes: OrderTypeCounts
+  /** Every payment in the period, newest first: sent only when asked (a day or a short range). */
+  paymentLines?: PaymentLine[]
 }

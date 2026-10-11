@@ -55,6 +55,22 @@ describe('encodeReceiptToEscPos', () => {
     expect(lineFeeds(tear, partial)).toBeGreaterThanOrEqual(4)
   })
 
+  it('prints TAKE OUT white on black on the staff ticket, and DINE IN without the inversion', () => {
+    const INVERT_ON = [0x1d, 0x42, 0x01]
+    const INVERT_OFF = [0x1d, 0x42, 0x00]
+    const takeOut = encodeReceiptToEscPos(buildReceiptDocument({ ...sale, audience: 'kitchen', orderType: 'take-out' }))
+    const at = positions(takeOut, 'TAKE OUT')[0]
+    expect(at).toBeGreaterThan(-1)
+    expect(positions(takeOut, INVERT_ON).some(p => p < at)).toBe(true)
+    expect(positions(takeOut, INVERT_OFF).some(p => p > at)).toBe(true)
+    // Nothing after the banner prints inverted: the inversion ends before the next line's text.
+    expect(positions(takeOut, INVERT_OFF)[0]).toBeLessThan(positions(takeOut, 'Juan')[0])
+
+    const dineIn = encodeReceiptToEscPos(buildReceiptDocument({ ...sale, audience: 'kitchen', orderType: 'dine-in' }))
+    expect(positions(dineIn, 'DINE IN')).toHaveLength(1)
+    expect(positions(dineIn, INVERT_ON)).toHaveLength(0)
+  })
+
   it('prints one ticket as before: no tear line, no partial cut, one full cut at the end', () => {
     const bytes = encodeReceiptToEscPos(receipt)
     expect(positions(bytes, 'tear here')).toHaveLength(0)

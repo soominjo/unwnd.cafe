@@ -120,6 +120,12 @@ export function formatPHClock(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-PH', { timeZone: PH_TIME_ZONE, hour: 'numeric', minute: '2-digit' })
 }
 
+/** The time of day in the Philippines, with the date too when it falls on another day than `sameDayAs`. */
+export function formatPHWhen(iso: string, sameDayAs: string): string {
+  const phDay = (at: string) => new Date(at).toLocaleDateString('en-CA', { timeZone: PH_TIME_ZONE })
+  return phDay(iso) === phDay(sameDayAs) ? formatPHClock(iso) : formatPHTime(iso)
+}
+
 export function formatPHTime(iso: string): string {
   return new Date(iso).toLocaleString('en-PH', {
     timeZone: PH_TIME_ZONE,

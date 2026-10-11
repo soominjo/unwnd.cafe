@@ -1,4 +1,4 @@
-export type View = 'recent' | 'completed' | 'summary' | 'names'
+export type View = 'recent' | 'completed' | 'tally' | 'summary' | 'names'
 
 interface ViewTabsProps {
   view: View
@@ -13,13 +13,14 @@ interface ViewTabsProps {
 const ALL_TABS: ReadonlyArray<{ key: View; label: string }> = [
   { key: 'recent', label: 'Recent Orders' },
   { key: 'completed', label: 'Completed' },
+  { key: 'tally', label: 'Tally' },
   { key: 'summary', label: 'Top Items' },
   { key: 'names', label: 'Top Names' },
 ]
 
-/** Week/Month/Year/a long custom range skip the order lists — only the two leaderboards apply. */
+/** Week/Month/Year/a long custom range skip the order lists — the tally and the two leaderboards apply. */
 const SUMMARY_ONLY_TABS: ReadonlyArray<{ key: View; label: string }> = ALL_TABS.filter(
-  (tab) => tab.key === 'summary' || tab.key === 'names',
+  (tab) => tab.key === 'tally' || tab.key === 'summary' || tab.key === 'names',
 )
 
 export default function ViewTabs({ view, onChange, pendingCount, completedCount, loading, detailed }: ViewTabsProps) {

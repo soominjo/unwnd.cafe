@@ -18,6 +18,8 @@ const payload: SalePayload = {
   ],
   discounts: [{ lineId: 'latte__ice', name: 'PWD Drink -20% x1 (Spanish Latte)', amount: 33 }],
   notes: 'Ana',
+  orderType: 'dine-in',
+  payments: [{ method: 'cash', amount: 417, received: 500 }],
 }
 
 // The record POST /api/sales stores for that body (see app/api/sales/route.ts):
@@ -30,6 +32,8 @@ const stored: Sale = {
   change: 83,
   subtotal: 450,
   notes: 'Ana',
+  orderType: 'dine-in',
+  payments: [{ _key: 'pay-0', method: 'cash', amount: 417, received: 500 }],
   discounts: [{ lineId: 'latte__ice', name: 'PWD Drink -20% x1 (Spanish Latte)', amount: 33 }],
   items: [
     { lineId: 'latte__ice', name: 'Spanish Latte', variant: 'ice', price: 150, qty: 2, note: 'Less sweet', categoryId: 'signature' },
@@ -78,6 +82,82 @@ describe('buildReceiptBlocksFromSale', () => {
     expect(buildReceiptBlocksFromSale(legacy, 'customer')).toContainEqual(
       { kind: 'total', label: 'PWD/Senior -20% (Total items)', value: 90, isDiscount: true },
     )
+  })
+})
+
+// The same order saved before Dine in / Take out and payments were recorded.
+const beforePayments: Sale = { ...stored, orderType: undefined, payments: undefined }
+const rowsOf = (blocks: ReturnType<typeof buildReceiptBlocksFromSale>) =>
+  blocks.filter(b => b.kind === 'total').map(b => (b.kind === 'total' ? `${b.label} ${b.value}` : ''))
+
+describe('where it is eaten and how it was paid', () => {
+  it('shows Dine in or Take out among the receipt’s details', () => {
+    expect(buildReceiptBlocksFromSale({ ...stored, orderType: 'take-out' }, 'customer')).toContainEqual({ kind: 'detail', label: 'Order', value: 'Take out' })
+    expect(buildReceiptBlocksFromSale(stored, 'customer')).toContainEqual({ kind: 'detail', label: 'Order', value: 'Dine in' })
+    expect(buildReceiptBlocksFromSale(beforePayments, 'customer').some(b => b.kind === 'detail' && b.label === 'Order')).toBe(false)
+  })
+
+  it('lists each payment, cash as handed over, then the change when one was cash', () => {
+    const split: Sale = {
+      ...stored,
+      paymentAmount: 517,
+      change: 100,
+      payments: [{ _key: 'pay-0', method: 'ewallet', amount: 217 }, { _key: 'pay-1', method: 'cash', amount: 200, received: 300 }],
+    }
+    expect(rowsOf(buildReceiptBlocksFromSale(split, 'customer'))).toEqual(['Subtotal 450', 'PWD Drink -20% x1 (Spanish Latte) 33', 'TOTAL 417', 'E-wallet 217', 'Cash 300', 'Change 100'])
+  })
+
+  it('prints no change for an order paid without cash', () => {
+    const byCard: Sale = { ...stored, paymentAmount: 417, change: 0, payments: [{ _key: 'pay-0', method: 'card', amount: 417 }] }
+    expect(rowsOf(buildReceiptBlocksFromSale(byCard, 'customer')).slice(-2)).toEqual(['TOTAL 417', 'Card 417'])
+  })
+
+  it('shows when each part was paid on an order paid in two goes, for items added later', () => {
+    // 417 at 10:41 PM by e-wallet; the Cafe Latte and two cookies (230) at 10:58 PM in cash, ₱300 handed over.
+    const twoGoes: Sale = {
+      ...withAdded,
+      total: 647,
+      paymentAmount: 717,
+      change: 70,
+      payments: [
+        { _key: 'pay-0', method: 'ewallet', amount: 417 },
+        { _key: 'pay-x-0', method: 'cash', amount: 230, received: 300, addedAt },
+      ],
+    }
+    expect(rowsOf(buildReceiptBlocksFromSale(twoGoes, 'customer')).slice(-3)).toEqual(['E-wallet 10:41 PM 417', 'Cash 10:58 PM 300', 'Change 70'])
+  })
+
+  it('prints Payment and Change as before when the payments don’t cover the order (begun before they were recorded)', () => {
+    const partly: Sale = {
+      ...withAdded,
+      total: 647,
+      paymentAmount: 800,
+      change: 153,
+      orderType: undefined,
+      payments: [{ _key: 'pay-x-0', method: 'cash', amount: 230, received: 300, addedAt }],
+    }
+    expect(rowsOf(buildReceiptBlocksFromSale(partly, 'customer')).slice(-2)).toEqual(['Payment 800', 'Change 153'])
+    expect(rowsOf(buildReceiptBlocksFromSale(beforePayments, 'customer')).slice(-2)).toEqual(['Payment 500', 'Change 83'])
+  })
+
+  it('opens the staff ticket with TAKE OUT in a black band, DINE IN plain, and neither on an old order', () => {
+    expect(buildReceiptBlocksFromSale({ ...stored, orderType: 'take-out' }, 'kitchen').slice(0, 2)).toEqual([
+      { kind: 'footer', text: 'KITCHEN TICKET' },
+      { kind: 'banner', text: 'TAKE OUT', inverted: true },
+    ])
+    expect(buildReceiptBlocksFromSale(stored, 'kitchen')[1]).toEqual({ kind: 'banner', text: 'DINE IN', inverted: false })
+    expect(buildReceiptBlocksFromSale(beforePayments, 'kitchen').some(b => b.kind === 'banner')).toBe(false)
+    // An added-items ticket keeps its heading first, then the banner.
+    expect(buildReceiptBlocksFromSale({ ...withAdded, orderType: 'take-out' }, 'kitchen', 'latest').slice(0, 3)).toEqual([
+      { kind: 'footer', text: 'KITCHEN TICKET' },
+      { kind: 'footer', text: 'ADDED TO ORDER' },
+      { kind: 'banner', text: 'TAKE OUT', inverted: true },
+    ])
+  })
+
+  it('keeps the money off the staff ticket: no Order detail and no payments there', () => {
+    const kitchen = buildReceiptBlocksFromSale({ ...stored, orderType: 'take-out' }, 'kitchen')
+    expect(kitchen.some(b => b.kind === 'total' || (b.kind === 'detail' && b.label === 'Order'))).toBe(false)
   })
 })
 

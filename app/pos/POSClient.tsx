@@ -39,6 +39,8 @@ import {
 } from './discounts'
 import { buildSalePayload } from './salePayload'
 import { postSale } from './postSale'
+import { NO_PAYMENT, checkPay, type PayState } from './review/payState'
+import type { OrderType, PaymentInput } from '@/lib/sales/payments'
 import { ADDON_CATEGORY_ID } from './constants'
 import { buildAddedItemsPrints, buildCheckoutPrints, type SalePrints } from '@/lib/printer/receiptFromSale'
 import type { PosMenu, PosMenuItem } from '@/lib/posMenu'
@@ -72,8 +74,9 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   const [orderItems, setOrderItems]             = useState<OrderItem[]>([])
   const [showConfirm, setShowConfirm]           = useState(false)
   const [mobileDrawer, setMobileDrawer]         = useState(false)
-  const [payment, setPayment]                   = useState<number | null>(null)
-  const [customInput, setCustomInput]           = useState('')
+  // Dine in or take out, and how they're paying: both picked on the review screen.
+  const [orderType, setOrderType]               = useState<OrderType>('dine-in')
+  const [pay, setPay]                           = useState<PayState>(NO_PAYMENT)
   // The sale, or the items added to a saved order, is being saved: the review locks until it is.
   const [saving, setSaving]                     = useState(false)
   const [submitError, setSubmitError]           = useState<string | null>(null)
@@ -194,8 +197,9 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   const discountLines  = useMemo(() => buildDiscountLines(orderItems, loyalty), [orderItems, loyalty])
   const discountAmount = useMemo(() => totalDiscount(discountLines), [discountLines])
   const grandTotal     = useMemo(() => total - discountAmount, [total, discountAmount])
-  // What the customer owes: the whole order while items are added to a saved one.
-  const amountDue      = (openOrder?.total ?? 0) + grandTotal
+  // What the customer pays now: the order, or only the new lines while adding to a saved one (its
+  // saved part was paid when it was saved).
+  const amountDue      = grandTotal
 
   const addItem = useCallback((item: MenuItem, variant: Variant | null, categoryId: string) => {
     const price =
@@ -310,8 +314,8 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     setOrderItems([])
     setShowConfirm(false)
     setMobileDrawer(false)
-    setPayment(null)
-    setCustomInput('')
+    setOrderType('dine-in')
+    setPay(NO_PAYMENT)
     setSubmitError(null)
     setSelectedLineId(null)
     setItemModal(null)
@@ -323,9 +327,14 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
 
   async function completeSale() {
     if (saving) return
-    if (openOrder) return saveToOrder(openOrder)
+    // The review screen keeps its button off until the payment pays what is due.
+    const payCheck = checkPay(grandTotal, pay)
+    if (!payCheck.ok) return
+    if (openOrder) return saveToOrder(openOrder, payCheck.payments)
     const saleLoyalty = linkedHolder ? { memberId: linkedHolder._id, rewards: loyaltyOrder.rewards } : null
-    const payload = buildSalePayload({ items: orderItems, discountLines, subtotal: total, grandTotal, payment, notes, loyalty: saleLoyalty })
+    const payload = buildSalePayload({
+      items: orderItems, discountLines, subtotal: total, grandTotal, orderType, payments: payCheck.payments, notes, loyalty: saleLoyalty,
+    })
     setSaving(true)
     setSubmitError(null)
     const result = await postSale(payload)
@@ -374,8 +383,8 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   // "Add items": the cart's lines go onto the saved order, never a second sale. A refusal keeps
   // the cart on screen: the order changed elsewhere (its saved part is shown again), or it was
   // completed or deleted (the cart can become a new order instead).
-  async function saveToOrder(order: OpenOrder) {
-    const body = buildAddItemsBody({ order, items: orderItems, discountLines, payment, name: notes, rewards: loyaltyOrder.rewards })
+  async function saveToOrder(order: OpenOrder, payments: PaymentInput[]) {
+    const body = buildAddItemsBody({ order, items: orderItems, discountLines, payments, name: notes, rewards: loyaltyOrder.rewards })
     setSaving(true)
     setSubmitError(null)
     const result = await postAddItems(order.id, body)
@@ -450,8 +459,8 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     setNewOrderAfterReceipt(false)
     setOpenOrder(null)
     setOrderItems([])
-    setPayment(null)
-    setCustomInput('')
+    setOrderType('dine-in')
+    setPay(NO_PAYMENT)
     setSubmitError(null)
     setSelectedLineId(null)
     setItemModal(null)
@@ -459,11 +468,6 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     unlinkCardHolder()
     window.history.replaceState(null, '', '/pos')
     void refetchCardHolders().then(holders => { if (holders) setCardHolders(holders) })
-  }
-
-  function handleSetPayment(amount: number | null, raw: string) {
-    setPayment(amount)
-    setCustomInput(raw)
   }
 
   function handleItemAdded(item: MenuItem & { category: string }) {
@@ -899,8 +903,6 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
             discountLines={discountLines}
             selectedLineId={selectedLineId}
             itemModal={itemModal}
-            payment={payment}
-            customInput={customInput}
             customerNameField={customerNameField}
             freeDrinkReady={freeDrinkReady}
             freeLineId={loyalty.freeLineId}
@@ -908,7 +910,6 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
             onAdjust={adjustQty}
             onClear={clearOrder}
             onCharge={() => setShowConfirm(true)}
-            onSetPayment={handleSetPayment}
             onSelectItem={setSelectedLineId}
             onOpenItemModal={openItemModal}
           />
@@ -953,8 +954,6 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
               discountLines={discountLines}
               selectedLineId={selectedLineId}
               itemModal={itemModal}
-              payment={payment}
-              customInput={customInput}
               customerNameField={customerNameField}
               freeDrinkReady={freeDrinkReady}
               freeLineId={loyalty.freeLineId}
@@ -962,7 +961,6 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
               onAdjust={adjustQty}
               onClear={clearOrder}
               onCharge={() => { setMobileDrawer(false); setShowConfirm(true) }}
-              onSetPayment={handleSetPayment}
               onSelectItem={setSelectedLineId}
               onOpenItemModal={openItemModal}
             />
@@ -1002,7 +1000,10 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
           grandTotal={grandTotal}
           discountLines={discountLines}
           discountAmount={discountAmount}
-          payment={payment}
+          orderType={orderType}
+          onOrderTypeChange={setOrderType}
+          pay={pay}
+          onPayChange={setPay}
           notes={notes}
           loyalty={linkedHolder ? { name: linkedHolder.name, cardNumber: linkedHolder.cardNumber, savedOnCard: cardState(linkedHolder.card).onCard, orderStamps } : null}
           saving={saving}
@@ -1216,8 +1217,6 @@ function OrderPanel({
   discountLines,
   selectedLineId,
   itemModal,
-  payment,
-  customInput,
   customerNameField,
   freeDrinkReady,
   freeLineId,
@@ -1225,7 +1224,6 @@ function OrderPanel({
   onAdjust,
   onClear,
   onCharge,
-  onSetPayment,
   onSelectItem,
   onOpenItemModal,
 }: {
@@ -1239,8 +1237,6 @@ function OrderPanel({
   discountLines: DiscountLine[]
   selectedLineId: string | null
   itemModal: { lineId: string; mode: ItemModalMode } | null
-  payment: number | null
-  customInput: string
   /** The customer name field, with its loyalty card suggestions and stamp bar. */
   customerNameField: ReactNode
   /** The linked card has a free drink ready, so Espresso and Non-Coffee lines offer "Make free". */
@@ -1250,7 +1246,6 @@ function OrderPanel({
   onAdjust: (lineId: string, delta: number) => void
   onClear: () => void
   onCharge: () => void
-  onSetPayment: (amount: number | null, raw: string) => void
   onSelectItem: (lineId: string) => void
   onOpenItemModal: (lineId: string, mode: ItemModalMode) => void
 }) {
@@ -1462,61 +1457,11 @@ function OrderPanel({
           </div>
         )}
         <div className="flex justify-between items-center">
-          <span className="text-xs uppercase tracking-widest text-foreground/60 font-semibold">{savedOrder ? 'Total due' : 'Total'}</span>
+          <span className="text-xs uppercase tracking-widest text-foreground/60 font-semibold">{savedOrder ? 'Due now' : 'Total'}</span>
           <span className="font-display font-semibold text-4xl tabular-nums text-foreground">₱{amountDue.toFixed(0)}</span>
         </div>
-
-        {/* Payment presets */}
-        <div className="space-y-1.5">
-          <p className="text-[10px] uppercase tracking-[0.25em] text-foreground/60 font-semibold">Payment</p>
-          <div className="flex gap-1.5">
-            {[500, 1000, 2000].map(amt => (
-              <button
-                key={amt}
-                onClick={() => onSetPayment(amt, String(amt))}
-                disabled={items.length === 0}
-                className={`flex-1 py-2 text-xs font-bold tabular-nums rounded-sm border transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed ${
-                  payment === amt
-                    ? 'bg-foreground text-cream border-foreground'
-                    : 'border-foreground/15 text-foreground hover:border-foreground/35 hover:bg-foreground/4'
-                }`}
-              >
-                ₱{amt}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Custom amount */}
-        <input
-          type="number"
-          inputMode="numeric"
-          placeholder="Custom amount"
-          value={customInput}
-          disabled={items.length === 0}
-          onChange={e => {
-            const raw = e.target.value
-            const val = parseFloat(raw)
-            onSetPayment(isNaN(val) ? null : val, raw)
-          }}
-          className="w-full border border-foreground/13 rounded-sm px-2.5 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/40 disabled:opacity-30 bg-transparent"
-        />
-
-        {/* Change / Short indicator */}
-        {payment !== null && items.length > 0 && (
-          payment >= amountDue ? (
-            <div className="flex items-baseline justify-between">
-              <span className="text-[10px] uppercase tracking-[0.25em] text-foreground/60 font-semibold">Change</span>
-              <span className="font-display font-semibold text-2xl tracking-tight text-foreground tabular-nums">
-                ₱{(payment - amountDue).toFixed(0)}
-              </span>
-            </div>
-          ) : (
-            <p className="text-xs text-red-500 uppercase tracking-widest font-semibold">
-              Short ₱{(amountDue - payment).toFixed(0)}
-            </p>
-          )
-        )}
+        {/* The payment (with the change) and dine in or take out are asked on the review screen. */}
+        <p className="text-xs text-foreground/50">Dine in or take out, and how they pay, are picked on the next screen.</p>
 
         {/* Action buttons */}
         <div className="flex gap-2 pt-0.5">

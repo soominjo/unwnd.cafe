@@ -28,6 +28,8 @@ describe('loadOpenSale', () => {
       order: {
         id: 'sale-214', rev: 'rev-9', createdAt: '2026-10-03T06:14:00Z', name: '', items: pending.items,
         discounts: [], total: 790, loyaltyMemberId: null, loyaltyRewards: [],
+        // Saved before Dine in / Take out and payments were recorded.
+        orderType: null, payments: [],
       },
     })
     expect(fetch).toHaveBeenCalledWith('*[_type == "sale" && _id == $id][0]', { id: 'sale-214' }, { cache: 'no-store' })

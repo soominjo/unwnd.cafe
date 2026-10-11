@@ -70,6 +70,14 @@ describe('POSClient first paint', () => {
     expect(firstPaint(null)).toContain('>Loyalty</span>')
   })
 
+  it('leaves Dine in or Take out and the payment to the review screen, and says so on the order panel', () => {
+    const html = firstPaint(live)
+    expect(html).not.toContain('placeholder="Custom amount"')
+    expect(html).not.toMatch(/>₱(500|1000|2000)<\/button>/)
+    expect(html).not.toContain('Dine in or take out?')
+    expect(html).toContain('Dine in or take out, and how they pay, are picked on the next screen.')
+  })
+
   it('links to Sales at every screen width: a sale no longer opens Sales by itself', () => {
     const link = firstPaint(live).match(/<a[^>]*href="\/pos\/sales"[^>]*>/)?.[0]
     expect(link).toBeDefined()
@@ -86,16 +94,19 @@ describe('POSClient first paint, adding to a saved order', () => {
       { lineId: 'amber-cream-latte__ice', name: 'Amber Cream Latte', variant: 'ice', price: 150, qty: 1 },
     ],
     discounts: [], loyaltyMemberId: null, loyaltyRewards: [],
+    orderType: 'dine-in', payments: [{ _key: 'pay-0', method: 'ewallet', amount: 790 }],
   }
 
-  it('shows the order it adds to: a banner, its lines locked above an empty cart, and Review for the whole order', () => {
+  it('shows the order it adds to: a banner, its lines locked above an empty cart, and Review for what is due now', () => {
     const html = renderToStaticMarkup(<POSClient initialMenu={live} initialCardHolders={[]} initialOpenOrder={saved} />)
     expect(html).toContain('Adding to an order with no name · 2:14 PM')
     expect(html).toContain('Already ordered · 2:14 PM')
     // Tiramisu is not on this menu: it can only come from the saved lines.
     expect(html).toContain('Tiramisu')
     expect(html).toContain('Tap a drink to add it to this order.')
-    expect(html).toContain('Review · ₱790')
+    // The saved ₱790 was paid when it was saved: only new lines are due now, and there are none yet.
+    expect(html).toContain('Due now')
+    expect(html).toContain('Review · ₱0')
     expect(html).not.toContain('Charge ₱')
   })
 

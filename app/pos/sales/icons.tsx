@@ -124,6 +124,27 @@ export function UnlockIcon(props: IconProps) {
   )
 }
 
+/** A cup with steam: Dine in. */
+export function CupIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4.5 9h11v5a4.5 4.5 0 0 1-4.5 4.5H9A4.5 4.5 0 0 1 4.5 14V9Z" />
+      <path d="M15.5 10.5H17a2.5 2.5 0 0 1 0 5h-1.6" />
+      <path d="M8 3.5c0 1.2 1 1.4 1 2.6M11.5 3.5c0 1.2 1 1.4 1 2.6" />
+    </Icon>
+  )
+}
+
+/** A paper bag: Take out. */
+export function BagIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5.5 8h13l-1.1 12.5H6.6L5.5 8Z" />
+      <path d="M9 10V6.5a3 3 0 0 1 6 0V10" />
+    </Icon>
+  )
+}
+
 /** A stamp card: a card with a row of stamps. */
 export function StampCardIcon(props: IconProps) {
   return (

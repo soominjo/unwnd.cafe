@@ -44,6 +44,7 @@ type ItemBlock = Extract<ReceiptBlock, { kind: 'item' }>
 type TotalBlock = Extract<ReceiptBlock, { kind: 'total' }>
 type DetailBlock = Extract<ReceiptBlock, { kind: 'detail' }>
 type QrBlock = Extract<ReceiptBlock, { kind: 'qr' }>
+type BannerBlock = Extract<ReceiptBlock, { kind: 'banner' }>
 
 // jsPDF's built-in core fonts use WinAnsiEncoding, which has no glyph for "₱" —
 // the same constraint the ESC/POS thermal encoder works around (see
@@ -154,11 +155,27 @@ function drawBlock(doc: PdfDocument, block: ReceiptBlock, y: number, bitmaps: Re
       setText(doc, 11)
       doc.text(block.text, CENTER_X_MM, y, { align: 'center' })
       return y + 7
+    case 'banner':
+      return drawBanner(doc, block, y)
     case 'tear':
       return drawTear(doc, y)
     default:
       return assertNeverBlock(block)
   }
+}
+
+/** A staff ticket's TAKE OUT (white on black) or DINE IN, larger, never bolder — as the thermal print. */
+function drawBanner(doc: PdfDocument, block: BannerBlock, y: number): number {
+  setText(doc, 18)
+  if (block.inverted) {
+    const width = doc.getTextWidth(block.text) + 12
+    doc.setFillColor(0, 0, 0)
+    doc.rect(CENTER_X_MM - width / 2, y - 7, width, 10, 'F')
+    doc.setTextColor(255)
+  }
+  doc.text(block.text, CENTER_X_MM, y, { align: 'center' })
+  doc.setTextColor(INK)
+  return y + 12
 }
 
 /** Between two tickets of one print: a dashed line with "tear here" in a gap. */

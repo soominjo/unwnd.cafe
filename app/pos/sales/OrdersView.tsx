@@ -1,4 +1,5 @@
 import type { Sale } from '../types'
+import type { PaymentMethod } from '@/lib/sales/payments'
 import OrderCard, { type OrdersMode } from './OrderCard'
 import Pagination from './Pagination'
 import { TrashIcon } from './icons'
@@ -21,6 +22,8 @@ export interface OrderActions {
   onAddItems: (id: string) => void
   /** Names the order (empty clears it): resolves to null when done, else to why it wasn't saved. */
   onRenameOrder: (id: string, name: string) => Promise<string | null>
+  /** Moves one of the order's payments to another method: null when done, else why not. */
+  onChangeMethod: (id: string, paymentKey: string, method: PaymentMethod) => Promise<string | null>
 }
 
 interface OrdersViewProps {
@@ -102,6 +105,7 @@ export default function OrdersView(props: OrdersViewProps) {
             onCompleteOrder={() => actions.onCompleteOrder(order._id)}
             onAddItems={() => actions.onAddItems(order._id)}
             onRename={(name) => actions.onRenameOrder(order._id, name)}
+            onChangeMethod={(paymentKey, method) => actions.onChangeMethod(order._id, paymentKey, method)}
           />
         ))}
       </div>
