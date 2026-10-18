@@ -8,12 +8,9 @@ import {
   formatSince,
   formatTimer,
   fromManilaInput,
-  isInRange,
-  isTimeclockPeriod,
   manilaDayKey,
   manilaWeekStart,
   periodRange,
-  staffWeeksRange,
   toManilaInput,
 } from './time'
 
@@ -42,21 +39,6 @@ describe('weeks and periods, in Manila time', () => {
 
   it('counts Nov 1, 12:10 AM Manila as November, not October', () => {
     expect(periodRange('month', at('2026-10-31T16:10:00Z')).from).toBe('2026-10-31T16:00:00.000Z')
-  })
-
-  it('reads last week and this week for the Staff tab', () => {
-    expect(staffWeeksRange(NOW)).toEqual({ from: '2026-10-04T16:00:00.000Z', to: '2026-10-18T16:00:00.000Z' })
-  })
-
-  it('takes a range from inclusive to exclusive', () => {
-    const week = periodRange('week', NOW)
-    expect(isInRange('2026-10-11T16:00:00.000Z', week)).toBe(true)
-    expect(isInRange('2026-10-18T16:00:00.000Z', week)).toBe(false)
-  })
-
-  it('knows its four periods', () => {
-    expect(isTimeclockPeriod('lastmonth')).toBe(true)
-    expect(isTimeclockPeriod('year')).toBe(false)
   })
 })
 

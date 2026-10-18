@@ -47,10 +47,6 @@ function manilaMonthStart(ms: number, monthsAway: number): number {
   return fromWall(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth() + monthsAway, 1))
 }
 
-export function isTimeclockPeriod(value: string): value is TimeclockPeriod {
-  return (TIMECLOCK_PERIODS as readonly string[]).includes(value)
-}
-
 /** The shifts Records shows for a period: those whose time in falls inside it. */
 export function periodRange(period: TimeclockPeriod, now: number): IsoRange {
   const week = manilaWeekStart(now)
@@ -64,17 +60,6 @@ export function periodRange(period: TimeclockPeriod, now: number): IsoRange {
     case 'lastmonth':
       return { from: iso(manilaMonthStart(now, -1)), to: iso(manilaMonthStart(now, 0)) }
   }
-}
-
-/** What the Staff tab reads: last week and this week, for each person's "This week" and last week's total. */
-export function staffWeeksRange(now: number): IsoRange {
-  const week = manilaWeekStart(now)
-  return { from: iso(week - 7 * DAY_MS), to: iso(week + 7 * DAY_MS) }
-}
-
-export function isInRange(at: Instant, range: IsoRange): boolean {
-  const ms = toMs(at)
-  return ms >= Date.parse(range.from) && ms < Date.parse(range.to)
 }
 
 /** "2026-10-15": the Manila calendar day an instant falls on. Sorts like the days it names. */

@@ -12,8 +12,6 @@ import {
   type TimeShift,
 } from '@/lib/timeclock/rules'
 import {
-  PERIOD_LABELS,
-  TIMECLOCK_PERIODS,
   formatClock,
   formatDay,
   formatEnd,
@@ -25,6 +23,7 @@ import {
 } from '@/lib/timeclock/time'
 import { ActionButton, Badge, EmptyState, ErrorBanner, InlineConfirm, Skeleton } from '../sales/ui'
 import { latestOnly } from '../timeclock/latestOnly'
+import PeriodChips from '../timeclock/PeriodChips'
 import { readTimeClock, sendTimeClock, type TimeClockData } from '../timeclock/sendTimeClock'
 import ShiftEditor from './ShiftEditor'
 
@@ -81,7 +80,6 @@ export default function RecordsView({ now }: { now: number }) {
     await load(period)
   }
 
-  const range = periodRange(period, now)
   const board = data?.board ?? null
   const shifts = data?.shifts ?? []
   // Shifts still open from an earlier day: most likely forgotten clock-outs. Each is fixed in
@@ -126,22 +124,7 @@ export default function RecordsView({ now }: { now: number }) {
 
   return (
     <div className="space-y-4">
-      <div role="group" aria-label="Period" className="flex flex-wrap gap-1.5">
-        {TIMECLOCK_PERIODS.map(key => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={period === key}
-            onClick={() => changePeriod(key)}
-            className={`h-9 rounded-full border px-3.5 text-xs font-semibold transition-colors ${
-              period === key ? 'border-foreground bg-foreground text-cream' : 'border-foreground/20 bg-white text-foreground/65 hover:text-foreground'
-            }`}
-          >
-            {PERIOD_LABELS[key]}
-          </button>
-        ))}
-      </div>
-      <p className="-mt-2 text-xs text-foreground/45">{`${formatDay(range.from)} – ${formatDay(Date.parse(range.to) - 1)}`}</p>
+      <PeriodChips value={period} now={now} onChange={changePeriod} />
 
       {loadState === 'failed' && (
         <ErrorBanner

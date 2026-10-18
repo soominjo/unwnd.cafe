@@ -21,8 +21,6 @@ import { isClassicDrinkLine, isTenOffLine } from '@/lib/loyalty'
 // Review while it is on. Other discounts on a line with a free unit are worked out
 // on the units still paid.
 
-export const DISCOUNT_KINDS: LineDiscountKind[] = ['pwd', 'review']
-
 export const DISCOUNT_RATES: Record<Exclude<DiscountRowKind, 'free'>, number> = {
   pwd: 0.20,
   review: 0.10,
