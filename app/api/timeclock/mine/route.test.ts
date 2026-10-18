@@ -8,7 +8,7 @@ vi.mock('@/lib/timeclock/store', () => ({ fetchMine }))
 import { POST } from './route'
 import { hashStaffPin } from '@/lib/timeclock/pins'
 
-const SECRET = 'test-secret-that-is-long-enough-1234'
+const TOKEN = 'test-write-token-that-is-long-enough-1234'
 const WEEK = { from: '2026-10-11T16:00:00.000Z', to: '2026-10-18T16:00:00.000Z' }
 const post = (body: unknown) => POST(new NextRequest('http://pos.test/api/timeclock/mine', {
   method: 'POST',
@@ -17,7 +17,7 @@ const post = (body: unknown) => POST(new NextRequest('http://pos.test/api/timecl
 const mine = { name: 'John Reyes', openShift: null, shifts: [] }
 
 beforeEach(() => {
-  vi.stubEnv('STAFF_PIN_SECRET', SECRET)
+  vi.stubEnv('SANITY_API_WRITE_TOKEN', TOKEN)
   requirePosAuth.mockReset().mockResolvedValue(null)
   fetchMine.mockReset().mockResolvedValue(mine)
   vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -32,7 +32,7 @@ describe('POST /api/timeclock/mine', () => {
   it('gives that person’s own hours, found by the PIN’s fingerprint', async () => {
     const res = await post({ pin: '2222', ...WEEK })
     expect(res.status).toBe(200)
-    expect(fetchMine).toHaveBeenCalledWith(hashStaffPin('2222', SECRET), WEEK.from, WEEK.to)
+    expect(fetchMine).toHaveBeenCalledWith(hashStaffPin('2222', TOKEN), WEEK.from, WEEK.to)
     expect((await res.json()).data).toEqual(mine)
   })
 
@@ -51,10 +51,10 @@ describe('POST /api/timeclock/mine', () => {
     expect(fetchMine).not.toHaveBeenCalled()
   })
 
-  it('stops until STAFF_PIN_SECRET is set, and needs the POS session', async () => {
-    vi.stubEnv('STAFF_PIN_SECRET', '')
+  it('stops until SANITY_API_WRITE_TOKEN is set, and needs the POS session', async () => {
+    vi.stubEnv('SANITY_API_WRITE_TOKEN', '')
     expect((await post({ pin: '2222', ...WEEK })).status).toBe(500)
-    vi.stubEnv('STAFF_PIN_SECRET', SECRET)
+    vi.stubEnv('SANITY_API_WRITE_TOKEN', TOKEN)
     requirePosAuth.mockResolvedValue(NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }))
     expect((await post({ pin: '2222', ...WEEK })).status).toBe(401)
     expect(fetchMine).not.toHaveBeenCalled()

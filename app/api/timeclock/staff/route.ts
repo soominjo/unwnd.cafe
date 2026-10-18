@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePosAuth } from '@/lib/requirePosAuth'
-import { hasStaffPinSecret, hashStaffPin, staffPinRefusal } from '@/lib/timeclock/pins'
+import { hasStaffPinKey, hashStaffPin, staffPinRefusal } from '@/lib/timeclock/pins'
 import { cleanStaffName, staffNameProblem } from '@/lib/timeclock/rules'
 import { addStaff } from '@/lib/timeclock/store'
 
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   const authError = await requirePosAuth()
   if (authError) return authError
 
-  if (!process.env.SANITY_API_WRITE_TOKEN || !hasStaffPinSecret()) {
+  if (!hasStaffPinKey()) {
     return NextResponse.json({ success: false, error: 'Server misconfiguration' }, { status: 500 })
   }
 

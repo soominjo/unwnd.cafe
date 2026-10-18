@@ -8,7 +8,7 @@ vi.mock('@/lib/timeclock/store', () => ({ removeStaff, setStaffPin }))
 import { DELETE, PATCH } from './route'
 import { hashStaffPin } from '@/lib/timeclock/pins'
 
-const SECRET = 'test-secret-that-is-long-enough-1234'
+const TOKEN = 'test-write-token-that-is-long-enough-1234'
 const url = (id: string) => `http://pos.test/api/timeclock/staff/${id}`
 const context = (id: string) => ({ params: Promise.resolve({ id }) })
 const patch = (id: string, body: unknown) =>
@@ -17,8 +17,7 @@ const remove = (id: string) => DELETE(new NextRequest(url(id), { method: 'DELETE
 const signedOut = () => NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
 beforeEach(() => {
-  vi.stubEnv('SANITY_API_WRITE_TOKEN', 'test-token')
-  vi.stubEnv('STAFF_PIN_SECRET', SECRET)
+  vi.stubEnv('SANITY_API_WRITE_TOKEN', TOKEN)
   vi.stubEnv('POS_PIN', '2468')
   requirePosAuth.mockReset().mockResolvedValue(null)
   removeStaff.mockReset().mockResolvedValue({ ok: true, name: 'Ana Cruz' })
@@ -34,7 +33,7 @@ afterEach(() => {
 describe('PATCH /api/timeclock/staff/[id]', () => {
   it('gives them a new PIN, stored as its fingerprint', async () => {
     expect((await patch('ana', { pin: '4321' })).status).toBe(200)
-    expect(setStaffPin).toHaveBeenCalledWith('ana', hashStaffPin('4321', SECRET))
+    expect(setStaffPin).toHaveBeenCalledWith('ana', hashStaffPin('4321', TOKEN))
   })
 
   it('refuses a PIN that is not four digits, the manager PIN, and a bad id', async () => {

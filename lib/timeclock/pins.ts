@@ -3,14 +3,17 @@ import { staffPinProblem } from './rules'
 
 // Server only. Staff PINs are stored as a keyed fingerprint, never as digits. The dataset can be
 // read by anyone with the project ID, and a 4-digit PIN has only 10,000 values, so a plain hash
-// would be undone in a moment; this one can't be checked without STAFF_PIN_SECRET.
+// would be undone in a moment. The key is the server's Sanity write token, which every time clock
+// write needs anyway and which never leaves the server, so there is no setting of its own to add;
+// whoever holds that token could change any PIN already. A new token makes every staff PIN stop
+// working until the manager sets new ones on the Manager page.
 
-/** The shortest STAFF_PIN_SECRET accepted. */
-export const MIN_PIN_SECRET_LENGTH = 32
+/** The shortest key accepted. Sanity tokens are far longer. */
+export const MIN_PIN_KEY_LENGTH = 32
 
-/** Whether STAFF_PIN_SECRET is set. Until it is, the PIN routes answer "Server misconfiguration". */
-export function hasStaffPinSecret(secret: string | undefined = process.env.STAFF_PIN_SECRET): boolean {
-  return typeof secret === 'string' && secret.length >= MIN_PIN_SECRET_LENGTH
+/** Whether SANITY_API_WRITE_TOKEN, the PIN key, is set. Until it is, the PIN routes answer "Server misconfiguration". */
+export function hasStaffPinKey(key: string | undefined = process.env.SANITY_API_WRITE_TOKEN): boolean {
+  return typeof key === 'string' && key.length >= MIN_PIN_KEY_LENGTH
 }
 
 /**
@@ -25,7 +28,7 @@ export function staffPinRefusal(pin: unknown, managerPin: string | undefined = p
 }
 
 /** A staff PIN's fingerprint: the same PIN always gives the same one, so a PIN finds its owner. */
-export function hashStaffPin(pin: string, secret: string | undefined = process.env.STAFF_PIN_SECRET): string {
-  if (!hasStaffPinSecret(secret)) throw new Error(`STAFF_PIN_SECRET must be set, at least ${MIN_PIN_SECRET_LENGTH} characters`)
-  return createHmac('sha256', secret as string).update(`unwnd-staff-pin:${pin}`).digest('hex')
+export function hashStaffPin(pin: string, key: string | undefined = process.env.SANITY_API_WRITE_TOKEN): string {
+  if (!hasStaffPinKey(key)) throw new Error(`SANITY_API_WRITE_TOKEN must be set, at least ${MIN_PIN_KEY_LENGTH} characters, to fingerprint staff PINs`)
+  return createHmac('sha256', key as string).update(`unwnd-staff-pin:${pin}`).digest('hex')
 }

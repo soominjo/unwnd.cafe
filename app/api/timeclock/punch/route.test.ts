@@ -8,7 +8,7 @@ vi.mock('@/lib/timeclock/store', () => ({ punch }))
 import { POST } from './route'
 import { hashStaffPin } from '@/lib/timeclock/pins'
 
-const SECRET = 'test-secret-that-is-long-enough-1234'
+const TOKEN = 'test-write-token-that-is-long-enough-1234'
 const post = (body: unknown) => POST(new NextRequest('http://pos.test/api/timeclock/punch', {
   method: 'POST',
   body: typeof body === 'string' ? body : JSON.stringify(body),
@@ -17,8 +17,7 @@ const shift = { _id: 'shift-1', staffId: 'john', staffName: 'John Reyes', clockI
 const johnIn = { staffId: 'john', action: 'in', pin: '2222' }
 
 beforeEach(() => {
-  vi.stubEnv('SANITY_API_WRITE_TOKEN', 'test-token')
-  vi.stubEnv('STAFF_PIN_SECRET', SECRET)
+  vi.stubEnv('SANITY_API_WRITE_TOKEN', TOKEN)
   requirePosAuth.mockReset().mockResolvedValue(null)
   punch.mockReset().mockResolvedValue({ ok: true, action: 'in', name: 'John Reyes', shift, repeat: false })
   vi.spyOn(console, 'info').mockImplementation(() => {})
@@ -34,7 +33,7 @@ describe('POST /api/timeclock/punch', () => {
   it('clocks the person tapped, checking the PIN by its fingerprint, never passing the digits on', async () => {
     const res = await post(johnIn)
     expect(res.status).toBe(200)
-    expect(punch).toHaveBeenCalledWith('john', hashStaffPin('2222', SECRET), 'in')
+    expect(punch).toHaveBeenCalledWith('john', hashStaffPin('2222', TOKEN), 'in')
     expect(JSON.stringify(punch.mock.calls[0])).not.toContain('2222')
     expect((await res.json()).data).toEqual({ action: 'in', name: 'John Reyes', shift, repeat: false })
   })
@@ -65,8 +64,8 @@ describe('POST /api/timeclock/punch', () => {
     expect(punch).not.toHaveBeenCalled()
   })
 
-  it('stops with "Server misconfiguration" until STAFF_PIN_SECRET is set', async () => {
-    vi.stubEnv('STAFF_PIN_SECRET', '')
+  it('stops with "Server misconfiguration" until SANITY_API_WRITE_TOKEN is set', async () => {
+    vi.stubEnv('SANITY_API_WRITE_TOKEN', '')
     const res = await post(johnIn)
     expect(res.status).toBe(500)
     expect((await res.json()).error).toBe('Server misconfiguration')

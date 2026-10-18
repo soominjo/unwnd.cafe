@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePosAuth } from '@/lib/requirePosAuth'
-import { hasStaffPinSecret, hashStaffPin, staffPinRefusal } from '@/lib/timeclock/pins'
+import { hasStaffPinKey, hashStaffPin, staffPinRefusal } from '@/lib/timeclock/pins'
 import { isDocId } from '@/lib/timeclock/rules'
 import { removeStaff, setStaffPin } from '@/lib/timeclock/store'
 
@@ -17,7 +17,7 @@ const gone = () => NextResponse.json({ success: false, error: 'They are off the 
 export async function PATCH(request: NextRequest, { params }: Params) {
   const authError = await requirePosAuth()
   if (authError) return authError
-  if (!process.env.SANITY_API_WRITE_TOKEN || !hasStaffPinSecret()) return misconfigured()
+  if (!hasStaffPinKey()) return misconfigured()
 
   const { id } = await params
   if (!isDocId(id)) return badId()

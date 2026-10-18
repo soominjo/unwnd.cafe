@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePosAuth } from '@/lib/requirePosAuth'
-import { hasStaffPinSecret, hashStaffPin } from '@/lib/timeclock/pins'
+import { hasStaffPinKey, hashStaffPin } from '@/lib/timeclock/pins'
 import { isStaffPin, readRange } from '@/lib/timeclock/rules'
 import { fetchMine } from '@/lib/timeclock/store'
 
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   const authError = await requirePosAuth()
   if (authError) return authError
 
-  if (!hasStaffPinSecret()) {
+  if (!hasStaffPinKey()) {
     return NextResponse.json({ success: false, error: 'Server misconfiguration' }, { status: 500 })
   }
 

@@ -8,15 +8,14 @@ vi.mock('@/lib/timeclock/store', () => ({ addStaff }))
 import { POST } from './route'
 import { hashStaffPin } from '@/lib/timeclock/pins'
 
-const SECRET = 'test-secret-that-is-long-enough-1234'
+const TOKEN = 'test-write-token-that-is-long-enough-1234'
 const post = (body: unknown) => POST(new NextRequest('http://pos.test/api/timeclock/staff', {
   method: 'POST',
   body: typeof body === 'string' ? body : JSON.stringify(body),
 }))
 
 beforeEach(() => {
-  vi.stubEnv('SANITY_API_WRITE_TOKEN', 'test-token')
-  vi.stubEnv('STAFF_PIN_SECRET', SECRET)
+  vi.stubEnv('SANITY_API_WRITE_TOKEN', TOKEN)
   vi.stubEnv('POS_PIN', '2468')
   requirePosAuth.mockReset().mockResolvedValue(null)
   addStaff.mockReset().mockImplementation(async (name: string) => ({ ok: true, row: { staffId: 'new-id', name, hasPin: true, openShift: null } }))
@@ -32,7 +31,7 @@ describe('POST /api/timeclock/staff', () => {
   it('puts the name, cleaned up, on the time clock with its PIN’s fingerprint', async () => {
     const res = await post({ name: '  Ana   Cruz ', pin: '3333' })
     expect(res.status).toBe(201)
-    expect(addStaff).toHaveBeenCalledWith('Ana Cruz', hashStaffPin('3333', SECRET))
+    expect(addStaff).toHaveBeenCalledWith('Ana Cruz', hashStaffPin('3333', TOKEN))
     expect((await res.json()).data).toEqual({ staffId: 'new-id', name: 'Ana Cruz', hasPin: true, openShift: null })
   })
 
@@ -57,10 +56,10 @@ describe('POST /api/timeclock/staff', () => {
     expect((await pin.json()).error).toBe('Someone else has that PIN. Choose another.')
   })
 
-  it('stops until STAFF_PIN_SECRET is set, and needs the POS session', async () => {
-    vi.stubEnv('STAFF_PIN_SECRET', '')
+  it('stops until SANITY_API_WRITE_TOKEN is set, and needs the POS session', async () => {
+    vi.stubEnv('SANITY_API_WRITE_TOKEN', '')
     expect((await post({ name: 'Ana Cruz', pin: '3333' })).status).toBe(500)
-    vi.stubEnv('STAFF_PIN_SECRET', SECRET)
+    vi.stubEnv('SANITY_API_WRITE_TOKEN', TOKEN)
     requirePosAuth.mockResolvedValue(NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }))
     expect((await post({ name: 'Ana Cruz', pin: '3333' })).status).toBe(401)
     expect(addStaff).not.toHaveBeenCalled()
