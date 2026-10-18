@@ -25,6 +25,13 @@ describe('the Manager page', () => {
     expect(html).not.toContain('>Lock<')
   })
 
+  it('opens straight to the tabs and Lock when the manager left it unlocked', () => {
+    const html = renderToStaticMarkup(<ManagerClient initiallyUnlocked />)
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Hours</)
+    expect(html).toContain('Lock</button>')
+    expect(html).not.toContain('Manager PIN')
+  })
+
   it('takes menu editing back to the POS from the Menu tab', () => {
     const html = renderToStaticMarkup(<MenuTab onEdit={noop} />)
     expect(html).toContain('>Edit the menu</button>')

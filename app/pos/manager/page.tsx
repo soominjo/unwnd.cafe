@@ -1,11 +1,16 @@
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 import ManagerClient from './ManagerClient'
+import { MANAGER_UNLOCK_COOKIE, isManagerUnlocked } from './managerUnlock'
 
 export const metadata: Metadata = {
   title: 'Manager — unwnd.',
   robots: { index: false, follow: false },
 }
 
-export default function ManagerPage() {
-  return <ManagerClient />
+// Read per request: it opens unlocked when the manager left it that way, so a reload or Back
+// shows no PIN pad first.
+export default async function ManagerPage() {
+  const jar = await cookies()
+  return <ManagerClient initiallyUnlocked={isManagerUnlocked(jar.get(MANAGER_UNLOCK_COOKIE)?.value)} />
 }

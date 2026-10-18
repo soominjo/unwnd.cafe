@@ -9,8 +9,8 @@ import { UnlockIcon } from '../sales/icons'
 import { ActionButton, ErrorBanner, Skeleton } from '../sales/ui'
 import { readTimeClock, sendTimeClock } from '../timeclock/sendTimeClock'
 import { useNow } from '../timeclock/useNow'
-import { useIdleLock } from '../useIdleLock'
 import { PIN_CHECK_MESSAGES, verifyPosPin } from '../verifyPosPin'
+import { forgetManagerUnlock, rememberManagerUnlock } from './managerUnlock'
 import RecordsView from './RecordsView'
 import StaffAdmin from './StaffAdmin'
 
@@ -24,13 +24,19 @@ const TABS = [
 
 // The Manager page, opened from the POS header. It asks for the manager PIN (the POS login PIN)
 // first, then holds what a manager does: everyone's hours, the staff and their PINs, and the way
-// into menu editing. Like manager mode on the POS, it locks after two idle minutes or as soon as
-// the screen goes off. The routes behind it take any signed-in POS.
-export default function ManagerClient() {
-  const [unlocked, setUnlocked] = useState(false)
+// into menu editing. Once unlocked it stays unlocked, through reloads, Back and trips to the POS,
+// until its Lock button (see managerUnlock.ts). The routes behind it take any signed-in POS.
+export default function ManagerClient({ initiallyUnlocked = false }: { initiallyUnlocked?: boolean }) {
+  const [unlocked, setUnlocked] = useState(initiallyUnlocked)
   const [tab, setTab] = useState<ManagerTab>('hours')
-  const lock = useCallback(() => setUnlocked(false), [])
-  useIdleLock(unlocked, lock)
+  const lock = useCallback(() => {
+    forgetManagerUnlock()
+    setUnlocked(false)
+  }, [])
+  const unlock = useCallback(() => {
+    rememberManagerUnlock()
+    setUnlocked(true)
+  }, [])
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -52,7 +58,7 @@ export default function ManagerClient() {
           {tab === 'hours' ? <HoursTab /> : tab === 'staff' ? <StaffTab /> : <MenuTab />}
         </main>
       ) : (
-        <ManagerPinGate onUnlock={() => setUnlocked(true)} />
+        <ManagerPinGate onUnlock={unlock} />
       )}
     </div>
   )
