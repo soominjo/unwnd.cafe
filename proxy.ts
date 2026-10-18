@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export const config = {
-  matcher: ['/pos', '/pos/(.+)', '/api/sales', '/api/sales/(.+)', '/api/loyalty/(.+)'],
+  matcher: ['/pos', '/pos/(.+)', '/api/sales', '/api/sales/(.+)', '/api/loyalty/(.+)', '/api/timeclock', '/api/timeclock/(.+)'],
 }
 
 async function hashPin(pin: string): Promise<string> {

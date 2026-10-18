@@ -22,12 +22,14 @@ import CardActions from './CardActions'
 import OrderReviewModal from './OrderReviewModal'
 import ReceiptPreviewModal from './ReceiptPreviewModal'
 import ItemActionModal, { type ItemModalMode } from './ItemActionModal'
-import ManagerPinModal from './ManagerPinModal'
 import { canEditMenu } from './canEditMenu'
 import CustomerNameField from './CustomerNameField'
-import { watchIdle } from './watchIdle'
-import { LockIcon, StampCardIcon, UnlockIcon } from './sales/icons'
+import { useIdleLock } from './useIdleLock'
+import { takeMenuEditing } from './menuHandoff'
+import { ClockIcon, LockIcon, StampCardIcon, UnlockIcon } from './sales/icons'
 import LoyaltyCardsModal from './LoyaltyCardsModal'
+import { readTimeClock } from './timeclock/sendTimeClock'
+import { countOnShift } from '@/lib/timeclock/rules'
 import {
   NO_LOYALTY,
   buildDiscountLines,
@@ -51,7 +53,7 @@ import { resolveLoyaltyOrder, sameLoyaltyChoice } from './loyaltyOrder'
 import { refetchCardHolders } from './refetchCardHolders'
 import { blockedRewards, buildAddItemsBody, nameAfterRefresh, newLineSuffix, openOrderFromSale, reviewLockedBy, savedState, type OpenOrder } from './addToOrder'
 import { postAddItems } from './postAddItems'
-import { leaveFor } from './navigation'
+import { leaveFor, openPosPage } from './navigation'
 import { AddingBanner, OpenOrderNotice } from './AddingBanner'
 import SavedOrderLines from './SavedOrderLines'
 
@@ -65,9 +67,6 @@ interface POSClientProps {
   /** Why the order "Add items" asked for could not be opened; the POS starts a new order instead. */
   openOrderProblem?: OpenSaleProblem | null
 }
-
-/** Manager mode locks itself after this long with no tap or key press. */
-const MANAGER_IDLE_LOCK_MS = 2 * 60 * 1000
 
 export default function POSClient({ initialMenu, initialCardHolders, initialOpenOrder = null, openOrderProblem = null }: POSClientProps) {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
@@ -103,6 +102,8 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   const [choosingTen, setChoosingTen]           = useState(false)
   // The loyalty cards panel, opened from the header over the order on screen.
   const [showLoyalty, setShowLoyalty]           = useState(false)
+  // How many staff are on shift, for the count on the header's Time clock.
+  const [onShiftCount, setOnShiftCount]         = useState(0)
   // The per-item modal (Customize / Add-ons / Discount): which line it is for and which
   // section it shows; null when closed. One at a time, opened from that line's buttons.
   const [itemModal, setItemModal]               = useState<{ lineId: string; mode: ItemModalMode } | null>(null)
@@ -120,10 +121,10 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null)
   const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null)
   // Manager mode unlocks every menu edit: adding, editing and deleting items, the
-  // category manager, and dragging tabs to reorder. It takes the POS PIN; Lock, a
-  // reload, two idle minutes or the screen going off lock it again.
+  // category manager, and dragging tabs to reorder. It is turned on from the Manager page
+  // (Menu → Edit the menu, after the manager PIN); Lock, a reload, two idle minutes or the
+  // screen going off lock it again.
   const [managerUnlocked, setManagerUnlocked]   = useState(false)
-  const [showManagerPin, setShowManagerPin]     = useState(false)
   const menuEditable = canEditMenu(managerUnlocked, initialMenu)
 
   // Locking also closes any menu form left open, so it cannot be saved by someone else.
@@ -136,18 +137,26 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     setDragOverCategoryId(null)
   }, [])
 
+  useIdleLock(managerUnlocked, lockManager)
+
+  // "Edit the menu" on the Manager page opens the POS with menu editing on, once. Read after
+  // the first paint, which the server rendered locked; the built-in menu has nothing to edit.
   useEffect(() => {
-    if (!managerUnlocked) return
-    const stopWatching = watchIdle(window, MANAGER_IDLE_LOCK_MS, lockManager)
-    function onVisibilityChange() {
-      if (document.visibilityState === 'hidden') lockManager()
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
+    void Promise.resolve().then(() => {
+      if (takeMenuEditing() && initialMenu) setManagerUnlocked(true)
+    })
+  }, [initialMenu])
+
+  // Who is on shift, for the count on the header's Time clock.
+  useEffect(() => {
+    let current = true
+    void readTimeClock().then(data => {
+      if (current && data) setOnShiftCount(countOnShift(data.board))
+    })
     return () => {
-      stopWatching()
-      document.removeEventListener('visibilitychange', onVisibilityChange)
+      current = false
     }
-  }, [managerUnlocked, lockManager])
+  }, [])
 
   // Close all modals when the page is restored from the browser's back-forward cache.
   // Without this, any overlay that was open before navigating away blocks all clicks.
@@ -159,7 +168,6 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
         setMobileDrawer(false)
         setItemModal(null)
         setSalePrints(null)
-        setShowManagerPin(false)
         setShowLoyalty(false)
         lockManager()
       }
@@ -726,24 +734,44 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
       {/* ── Header ── */}
       <header className="bg-foreground flex items-center justify-between px-6 py-4 shrink-0">
         <Link href="/" className="font-logo text-2xl lowercase tracking-tight text-cream hover:text-cream/70 transition-colors">unwnd. pos</Link>
-        {/* Tighter on phones, where Manager and Loyalty show as icons beside the Order button. */}
+        {/* Tighter on phones, where Time clock, Manager and Loyalty show as icons beside the Order button. */}
         <div className="flex items-center gap-1 sm:gap-4">
-          {/* Manager mode: the PIN unlocks menu editing; tapping again locks it away. Not offered
-              on the built-in fallback menu, which has nothing to edit. */}
-          {initialMenu && (
+          {/* Time clock and Manager open their own pages, asking first when an order is on screen. */}
+          <button
+            onClick={() => openPosPage('/pos/timeclock', itemCount)}
+            aria-label={onShiftCount > 0 ? `Time clock, ${onShiftCount} on shift` : 'Time clock'}
+            title="Time clock: clock in or out with your PIN"
+            className="h-9 px-2 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
+          >
+            <ClockIcon width={14} height={14} />
+            <span className="hidden sm:inline">Time clock</span>
+            {onShiftCount > 0 && (
+              <span className="min-w-4.5 h-4.5 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold tracking-normal flex items-center justify-center">
+                {onShiftCount}
+              </span>
+            )}
+          </button>
+          {/* While the menu is being edited, Manager is its Lock; otherwise it opens the Manager page. */}
+          {managerUnlocked ? (
             <button
-              onClick={() => (managerUnlocked ? lockManager() : setShowManagerPin(true))}
-              aria-pressed={managerUnlocked}
-              aria-label="Manager mode"
-              title={managerUnlocked ? 'Lock menu editing' : 'Manager PIN: add, edit, delete and reorder the menu'}
-              className={`h-9 px-2 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] transition-colors ${
-                managerUnlocked
-                  ? 'bg-amber-400 text-foreground font-bold hover:bg-amber-300'
-                  : 'text-cream/55 hover:text-cream/85 hover:bg-cream/10'
-              }`}
+              onClick={lockManager}
+              aria-pressed="true"
+              aria-label="Lock menu editing"
+              title="Lock menu editing"
+              className="h-9 px-2 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] transition-colors bg-amber-400 text-foreground font-bold hover:bg-amber-300"
             >
-              {managerUnlocked ? <UnlockIcon width={14} height={14} /> : <LockIcon width={14} height={14} />}
-              <span className="hidden sm:inline">{managerUnlocked ? 'Lock' : 'Manager'}</span>
+              <UnlockIcon width={14} height={14} />
+              <span className="hidden sm:inline">Lock</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => openPosPage('/pos/manager', itemCount)}
+              aria-label="Manager"
+              title="Manager: hours, staff and PINs, menu editing"
+              className="h-9 px-2 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
+            >
+              <LockIcon width={14} height={14} />
+              <span className="hidden sm:inline">Manager</span>
             </button>
           )}
           {/* Loyalty cards: see a card's stamps, and give or remove a card (no PIN). */}
@@ -1034,15 +1062,6 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
       {/* ── Loyalty cards, over the order on screen; a card given here is suggested in Customer name at once ── */}
       {showLoyalty && (
         <LoyaltyCardsModal holders={cardHolders} onHoldersChange={setCardHolders} onClose={() => setShowLoyalty(false)} />
-      )}
-
-      {/* ── Manager PIN, before any menu editing shows ── */}
-      {showManagerPin && (
-        <ManagerPinModal
-          hint="Same PIN as the POS login. Unlocks menu editing: add, edit and delete items, add or remove categories, and reorder tabs."
-          onSuccess={() => { setManagerUnlocked(true); setShowManagerPin(false) }}
-          onClose={() => setShowManagerPin(false)}
-        />
       )}
 
       {/* ── Per-item modal: Customize / Add-ons / Discount for one line, above either order panel ── */}

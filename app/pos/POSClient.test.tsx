@@ -57,9 +57,21 @@ describe('POSClient first paint', () => {
     }
   })
 
-  it('offers the Manager unlock only when there is a live menu to edit', () => {
-    expect(firstPaint(live)).toContain('>Manager</span>')
-    expect(firstPaint(null)).not.toContain('>Manager</span>')
+  it('offers Manager with or without the live menu: its page holds the staff hours too', () => {
+    for (const html of [firstPaint(live), firstPaint(null)]) {
+      expect(html).toContain('>Manager</span>')
+      expect(html).toContain('aria-label="Manager"')
+      // Menu editing is turned on from the Manager page, never on first paint.
+      expect(html).not.toContain('>Lock</span>')
+    }
+  })
+
+  it('puts Time clock in the header just before Manager, with no count until someone is on shift', () => {
+    const html = firstPaint(live)
+    expect(html.indexOf('>Time clock</span>')).toBeGreaterThan(-1)
+    expect(html.indexOf('>Time clock</span>')).toBeLessThan(html.indexOf('>Manager</span>'))
+    expect(html).toContain('aria-label="Time clock"')
+    expect(firstPaint(null)).toContain('>Time clock</span>')
   })
 
   it('puts Loyalty in the header between Manager and Sales, with or without the live menu', () => {

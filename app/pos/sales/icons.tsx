@@ -1,7 +1,7 @@
 import type { SVGProps } from 'react'
 
 // Small stroke icons for the sales screen's action buttons and the POS header's
-// manager lock and loyalty button. Inline SVG rather than emoji so they render
+// time clock, manager lock and loyalty button. Inline SVG rather than emoji so they render
 // identically on every device and inherit the button's text colour.
 
 type IconProps = SVGProps<SVGSVGElement>
@@ -153,6 +153,16 @@ export function StampCardIcon(props: IconProps) {
       <circle cx="7.5" cy="12" r="1.5" />
       <circle cx="12" cy="12" r="1.5" />
       <circle cx="16.5" cy="12" r="1.5" />
+    </Icon>
+  )
+}
+
+/** A clock face: the time clock. */
+export function ClockIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
     </Icon>
   )
 }
