@@ -31,7 +31,8 @@ describe('POSClient first paint', () => {
   it('already shows the live menu, so nothing swaps in after a reload', () => {
     const html = firstPaint(live)
     expect(html).toContain('Ube Cream Latte')
-    expect(html).toContain('White Mocha Americano')
+    // No drink comes from code any more: a saved one renamed (say, with a ⭐) can't bring an old copy back.
+    expect(html).not.toContain('White Mocha Americano')
     expect(html).not.toContain('Cereal Cream Latte')
     // Only the live tabs, not the built-in menu's six.
     expect(html).not.toContain('Non-Coffee')
@@ -39,7 +40,7 @@ describe('POSClient first paint', () => {
 
   it('shows the built-in menu when the live one could not be read, and says so', () => {
     const html = firstPaint(null)
-    expect(html).toContain('Cereal Cream Latte')
+    expect(html).not.toContain('Cereal Cream Latte')
     expect(html).toContain('Non-Coffee')
     // Taken off the menu by the owner on Oct 20, 2026 (Signature is the tab on screen), and Espresso renamed Classic.
     expect(html).not.toContain('Amber Cream Latte')

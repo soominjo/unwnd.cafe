@@ -2,26 +2,10 @@ import type { MenuCategory } from './types'
 
 export const MENU: MenuCategory[] = [
   {
+    // Its drinks are all saved in Sanity. Code copies came back whenever a saved one was renamed.
     id: 'signature',
     label: 'Signature',
-    items: [
-      {
-        id: 'white-mocha-americano',
-        name: 'White Mocha Americano',
-        subtitle: 'Espresso · White Chocolate Sauce · Breve',
-        priceHot: 130,
-        priceIce: 140,
-        priceFixed: null,
-      },
-      {
-        id: 'cereal-cream-latte',
-        name: 'Cereal Cream Latte',
-        subtitle: 'Espresso · Milk · Cereal · Sea Salt Cream',
-        priceHot: 160,
-        priceIce: 170,
-        priceFixed: null,
-      },
-    ],
+    items: [],
   },
   {
     // Shown as Classic since Oct 20, 2026; the id stays, as the loyalty rules key on it.
