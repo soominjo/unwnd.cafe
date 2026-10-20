@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { MANAGER_UNLOCK_COOKIE, forgetManagerUnlock, isManagerUnlocked, managerUnlockCookie, rememberManagerUnlock } from './managerUnlock'
+import {
+  MANAGER_UNLOCK_COOKIE,
+  MENU_EDITING_COOKIE,
+  forgetManagerUnlock,
+  forgetMenuEditing,
+  isUnlockCookieOn,
+  managerUnlockCookie,
+  rememberManagerUnlock,
+  rememberMenuEditing,
+} from './managerUnlock'
 
 describe('remembering that the Manager page is unlocked', () => {
   it('keeps it in a cookie for the Manager page only, until Lock clears it', () => {
@@ -15,9 +24,28 @@ describe('remembering that the Manager page is unlocked', () => {
   })
 
   it('reads only its own "1" as unlocked', () => {
-    expect(isManagerUnlocked('1')).toBe(true)
-    expect(isManagerUnlocked(undefined)).toBe(false)
-    expect(isManagerUnlocked('')).toBe(false)
-    expect(isManagerUnlocked('true')).toBe(false)
+    expect(isUnlockCookieOn('1')).toBe(true)
+    expect(isUnlockCookieOn(undefined)).toBe(false)
+    expect(isUnlockCookieOn('')).toBe(false)
+    expect(isUnlockCookieOn('true')).toBe(false)
+  })
+})
+
+describe('remembering that the POS menu is being edited', () => {
+  it('keeps it in a cookie the POS reads, until the POS Lock clears it', () => {
+    const jar = { cookie: '' }
+    rememberMenuEditing(jar, true)
+    expect(jar.cookie).toBe(`${MENU_EDITING_COOKIE}=1; Path=/pos; Max-Age=31536000; SameSite=Strict; Secure`)
+    forgetMenuEditing(jar, true)
+    expect(jar.cookie).toBe(`${MENU_EDITING_COOKIE}=; Path=/pos; Max-Age=0; SameSite=Strict; Secure`)
+  })
+
+  it('is a separate cookie from the Manager page one, so each Lock locks only its own screen', () => {
+    expect(MENU_EDITING_COOKIE).not.toBe(MANAGER_UNLOCK_COOKIE)
+    const jar = { cookie: '' }
+    rememberMenuEditing(jar, false)
+    expect(jar.cookie).toBe(`${MENU_EDITING_COOKIE}=1; Path=/pos; Max-Age=31536000; SameSite=Strict`)
+    forgetMenuEditing(jar, false)
+    expect(jar.cookie).toBe(`${MENU_EDITING_COOKIE}=; Path=/pos; Max-Age=0; SameSite=Strict`)
   })
 })

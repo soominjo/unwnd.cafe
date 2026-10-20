@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { BoardRow } from '@/lib/timeclock/rules'
-import { handOffMenuEditing } from '../menuHandoff'
 import { PageHeader, PageTabs } from '../PageChrome'
 import PinPad from '../PinPad'
 import { UnlockIcon } from '../sales/icons'
@@ -10,7 +9,7 @@ import { ActionButton, ErrorBanner, Skeleton } from '../sales/ui'
 import { readTimeClock, sendTimeClock } from '../timeclock/sendTimeClock'
 import { useNow } from '../timeclock/useNow'
 import { PIN_CHECK_MESSAGES, verifyPosPin } from '../verifyPosPin'
-import { forgetManagerUnlock, rememberManagerUnlock } from './managerUnlock'
+import { forgetManagerUnlock, rememberManagerUnlock, rememberMenuEditing } from './managerUnlock'
 import RecordsView from './RecordsView'
 import StaffAdmin from './StaffAdmin'
 
@@ -134,9 +133,9 @@ function StaffTab() {
   )
 }
 
-/** "Edit the menu": back to the POS, with menu editing handed over so the PIN isn't asked again. */
+/** "Edit the menu": back to the POS with menu editing on, and left on until the POS Lock. */
 function openMenuEditing() {
-  handOffMenuEditing()
+  rememberMenuEditing()
   window.location.assign('/pos')
 }
 
@@ -151,7 +150,7 @@ export function MenuTab({ onEdit = openMenuEditing }: { onEdit?: () => void }) {
         <div>
           <ActionButton tone="primary" onClick={onEdit}>Edit the menu</ActionButton>
         </div>
-        <p className="text-xs text-foreground/45">Takes you back to the POS with editing on. Tap Lock there when you’re done; it also locks after two idle minutes.</p>
+        <p className="text-xs text-foreground/45">Takes you back to the POS with editing on. It stays on, through reloads, until you tap Lock there.</p>
       </div>
     </section>
   )

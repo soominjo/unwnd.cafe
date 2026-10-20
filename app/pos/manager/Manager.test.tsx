@@ -36,6 +36,9 @@ describe('the Manager page', () => {
     const html = renderToStaticMarkup(<MenuTab onEdit={noop} />)
     expect(html).toContain('>Edit the menu</button>')
     expect(html).toContain('Takes you back to the POS with editing on.')
+    // Editing no longer locks itself: a reload or idle minutes leave it on until Lock.
+    expect(html).toContain('It stays on, through reloads, until you tap Lock there.')
+    expect(html).not.toContain('it also locks after two idle minutes')
   })
 })
 

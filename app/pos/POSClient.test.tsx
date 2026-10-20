@@ -66,6 +66,22 @@ describe('POSClient first paint', () => {
     }
   })
 
+  it('opens with menu editing still on when the manager left it on, so a reload keeps it until Lock', () => {
+    const html = renderToStaticMarkup(<POSClient initialMenu={live} initialCardHolders={[]} initialMenuEditing />)
+    expect(html).toContain('>Lock</span>')
+    expect(html).not.toContain('>Manager</span>')
+    expect(html).toContain('title="Edit item"')
+    expect(html).toContain('title="Manage menu"')
+    expect(html).toContain('draggable="true"')
+  })
+
+  it('keeps editing off on the built-in fallback even when it was left on: there is nothing saved to edit', () => {
+    const html = renderToStaticMarkup(<POSClient initialMenu={null} initialCardHolders={[]} initialMenuEditing />)
+    expect(html).toContain('>Manager</span>')
+    expect(html).not.toContain('>Lock</span>')
+    expect(html).not.toContain('title="Edit item"')
+  })
+
   it('puts Time clock in the header just before Manager, with no count until someone is on shift', () => {
     const html = firstPaint(live)
     expect(html.indexOf('>Time clock</span>')).toBeGreaterThan(-1)

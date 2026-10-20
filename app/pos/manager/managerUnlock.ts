@@ -1,10 +1,14 @@
-// The Manager page stays unlocked after the manager PIN, through reloads, Back and trips to the
-// POS, until its Lock button. A cookie remembers it, and the page reads that cookie on the server,
-// so a reload opens unlocked with no PIN pad first. Like the PIN gate itself, this is a screen-side
-// gate: the routes behind the page take any signed-in POS.
+// Manager unlocks last until their Lock button, through reloads, Back and trips between pages.
+// Two cookies remember them, each read on the server so a reload opens as it was left:
+// - the Manager page, unlocked by the manager PIN;
+// - menu editing on the POS, turned on by the Manager page's "Edit the menu".
+// Each Lock clears only its own. Like the PIN gate itself, this is a screen-side gate: the routes
+// behind both screens take any signed-in POS.
 
 export const MANAGER_UNLOCK_COOKIE = 'pos_manager_unlocked'
-const COOKIE_PATH = '/pos/manager'
+export const MENU_EDITING_COOKIE = 'pos_menu_unlocked'
+const MANAGER_PATH = '/pos/manager'
+const POS_PATH = '/pos'
 /** A year: in practice, until Lock. */
 const REMEMBER_FOR_S = 365 * 24 * 60 * 60
 
@@ -14,19 +18,24 @@ interface CookieJar {
 
 const onHttps = (): boolean => typeof location !== 'undefined' && location.protocol === 'https:'
 
-/** The cookie text that remembers the unlock, or forgets it. Secure on https only, so localhost works too. */
-export function managerUnlockCookie(unlocked: boolean, secure: boolean): string {
+/** The cookie text that remembers an unlock, or forgets it. Secure on https only, so localhost works too. */
+function unlockCookie(name: string, path: string, unlocked: boolean, secure: boolean): string {
   const parts = [
-    `${MANAGER_UNLOCK_COOKIE}=${unlocked ? '1' : ''}`,
-    `Path=${COOKIE_PATH}`,
+    `${name}=${unlocked ? '1' : ''}`,
+    `Path=${path}`,
     `Max-Age=${unlocked ? REMEMBER_FOR_S : 0}`,
     'SameSite=Strict',
   ]
   return (secure ? [...parts, 'Secure'] : parts).join('; ')
 }
 
-/** Whether the cookie says the Manager page was left unlocked. */
-export function isManagerUnlocked(value: string | undefined): boolean {
+/** The Manager page's cookie text. */
+export function managerUnlockCookie(unlocked: boolean, secure: boolean): string {
+  return unlockCookie(MANAGER_UNLOCK_COOKIE, MANAGER_PATH, unlocked, secure)
+}
+
+/** Whether a cookie says it was left unlocked. */
+export function isUnlockCookieOn(value: string | undefined): boolean {
   return value === '1'
 }
 
@@ -38,4 +47,14 @@ export function rememberManagerUnlock(jar: CookieJar = document, secure: boolean
 /** Lock: the Manager page asks for the PIN again. */
 export function forgetManagerUnlock(jar: CookieJar = document, secure: boolean = onHttps()): void {
   jar.cookie = managerUnlockCookie(false, secure)
+}
+
+/** "Edit the menu": the POS opens with menu editing on from now on. */
+export function rememberMenuEditing(jar: CookieJar = document, secure: boolean = onHttps()): void {
+  jar.cookie = unlockCookie(MENU_EDITING_COOKIE, POS_PATH, true, secure)
+}
+
+/** The POS Lock: the POS opens locked again. */
+export function forgetMenuEditing(jar: CookieJar = document, secure: boolean = onHttps()): void {
+  jar.cookie = unlockCookie(MENU_EDITING_COOKIE, POS_PATH, false, secure)
 }

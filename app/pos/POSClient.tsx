@@ -24,8 +24,7 @@ import ReceiptPreviewModal from './ReceiptPreviewModal'
 import ItemActionModal, { type ItemModalMode } from './ItemActionModal'
 import { canEditMenu } from './canEditMenu'
 import CustomerNameField from './CustomerNameField'
-import { useIdleLock } from './useIdleLock'
-import { takeMenuEditing } from './menuHandoff'
+import { forgetMenuEditing } from './manager/managerUnlock'
 import { ClockIcon, LockIcon, StampCardIcon, UnlockIcon } from './sales/icons'
 import LoyaltyCardsModal from './LoyaltyCardsModal'
 import { readTimeClock } from './timeclock/sendTimeClock'
@@ -66,9 +65,11 @@ interface POSClientProps {
   initialOpenOrder?: OpenOrder | null
   /** Why the order "Add items" asked for could not be opened; the POS starts a new order instead. */
   openOrderProblem?: OpenSaleProblem | null
+  /** Menu editing was left on (its cookie, read on the server): the POS opens with it on, so a reload keeps it. */
+  initialMenuEditing?: boolean
 }
 
-export default function POSClient({ initialMenu, initialCardHolders, initialOpenOrder = null, openOrderProblem = null }: POSClientProps) {
+export default function POSClient({ initialMenu, initialCardHolders, initialOpenOrder = null, openOrderProblem = null, initialMenuEditing = false }: POSClientProps) {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [orderItems, setOrderItems]             = useState<OrderItem[]>([])
   const [showConfirm, setShowConfirm]           = useState(false)
@@ -122,13 +123,14 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null)
   // Manager mode unlocks every menu edit: adding, editing and deleting items, the
   // category manager, and dragging tabs to reorder. It is turned on from the Manager page
-  // (Menu → Edit the menu, after the manager PIN); Lock, a reload, two idle minutes or the
-  // screen going off lock it again.
-  const [managerUnlocked, setManagerUnlocked]   = useState(false)
+  // (Menu → Edit the menu, after the manager PIN) and stays on, through reloads, until Lock.
+  // The built-in fallback menu has nothing saved to edit, so it never opens unlocked.
+  const [managerUnlocked, setManagerUnlocked]   = useState(initialMenuEditing && initialMenu !== null)
   const menuEditable = canEditMenu(managerUnlocked, initialMenu)
 
   // Locking also closes any menu form left open, so it cannot be saved by someone else.
   const lockManager = useCallback(() => {
+    forgetMenuEditing()
     setManagerUnlocked(false)
     setEditingItem(null)
     setAddItemCategory(null)
@@ -136,16 +138,6 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     setDraggedCategoryId(null)
     setDragOverCategoryId(null)
   }, [])
-
-  useIdleLock(managerUnlocked, lockManager)
-
-  // "Edit the menu" on the Manager page opens the POS with menu editing on, once. Read after
-  // the first paint, which the server rendered locked; the built-in menu has nothing to edit.
-  useEffect(() => {
-    void Promise.resolve().then(() => {
-      if (takeMenuEditing() && initialMenu) setManagerUnlocked(true)
-    })
-  }, [initialMenu])
 
   // Who is on shift, for the count on the header's Time clock.
   useEffect(() => {
