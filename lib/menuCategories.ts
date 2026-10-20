@@ -11,7 +11,8 @@ export interface ResolvedCategory {
 
 export const BUILT_IN_CATEGORIES: ResolvedCategory[] = [
   { id: 'signature',  label: 'Signature',  type: 'drink', order: 1, isBuiltIn: true },
-  { id: 'espresso',   label: 'Espresso',   type: 'drink', order: 2, isBuiltIn: true },
+  // Shown as Classic since Oct 20, 2026; the id stays, as the loyalty rules key on it.
+  { id: 'espresso',   label: 'Classic',    type: 'drink', order: 2, isBuiltIn: true },
   { id: 'non-coffee', label: 'Non-Coffee', type: 'drink', order: 3, isBuiltIn: true },
   { id: 'meal',       label: 'Meal',       type: 'food',  order: 4, isBuiltIn: true },
   { id: 'waffle',     label: 'Waffle',     type: 'food',  order: 5, isBuiltIn: true },

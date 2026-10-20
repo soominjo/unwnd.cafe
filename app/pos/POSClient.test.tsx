@@ -41,6 +41,10 @@ describe('POSClient first paint', () => {
     const html = firstPaint(null)
     expect(html).toContain('Cereal Cream Latte')
     expect(html).toContain('Non-Coffee')
+    // Taken off the menu by the owner on Oct 20, 2026 (Signature is the tab on screen), and Espresso renamed Classic.
+    expect(html).not.toContain('Amber Cream Latte')
+    expect(html).toContain('>Classic</button>')
+    expect(html).not.toContain('>Espresso</button>')
     // Its prices can be out of date, so the cashier must know it is the fallback.
     expect(html).toContain('Showing the built-in menu')
     expect(firstPaint(live)).not.toContain('Showing the built-in menu')

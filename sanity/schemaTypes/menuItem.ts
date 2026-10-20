@@ -27,11 +27,11 @@ export const menuItem = defineType({
       name: 'category',
       title: 'Category',
       type: 'string',
-      description: 'Must match a category id: signature, espresso, non-coffee, meal, waffle, snack, or a custom one.',
+      description: 'Must match a category id: signature, espresso (shown as Classic), non-coffee, meal, waffle, snack, or a custom one.',
       options: {
         list: [
           { title: 'Signature', value: 'signature' },
-          { title: 'Espresso', value: 'espresso' },
+          { title: 'Classic', value: 'espresso' },
           { title: 'Non-Coffee', value: 'non-coffee' },
           { title: 'Meal', value: 'meal' },
           { title: 'Waffle', value: 'waffle' },
@@ -84,7 +84,7 @@ export const menuItem = defineType({
       options: {
         list: [
           { title: 'Signature', value: 'signature' },
-          { title: 'Espresso', value: 'espresso' },
+          { title: 'Classic', value: 'espresso' },
           { title: 'Non-Coffee', value: 'non-coffee' },
           { title: 'Matcha Series', value: 'matcha-series' },
           { title: 'Meal', value: 'meal' },
