@@ -54,6 +54,16 @@ describe('MenuClient', () => {
     expect(waffle.match(/<img/g)).toHaveLength(1)
   })
 
+  it("loads the first row's photos up front when the first category has photos", () => {
+    // A photo of its own per item: React merges preloads of the same address into one.
+    const photoOf = (id: string) => ({ asset: { _ref: `image-${id}abc-800x600-jpg` } })
+    const withPhotos = items.map((i) => (i.category === 'signature' ? { ...i, image: photoOf(i._id) } : i))
+    const third = { _id: 's3', name: 'Oat Spanish Latte⭐', price: 180, priceHot: 180, priceIce: 180, drinkType: 'both' as const, category: 'signature', image: photoOf('s3') }
+    const html = renderToStaticMarkup(<MenuClient items={[...withPhotos, third]} categories={categories} />)
+    expect(html.match(/<link rel="preload" as="image"/g)).toHaveLength(2)
+    expect(render().match(/<link rel="preload" as="image"/g)).toBeNull()
+  })
+
   it('starts drinks on Iced and prices them that way', () => {
     const html = render()
     expect(html).toMatch(/aria-pressed="true"[^>]*>Iced</)

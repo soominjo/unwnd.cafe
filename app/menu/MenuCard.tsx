@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import type { SanityMenuItem } from '@/types/sanity'
-import { photoLoader, photoSrc } from './menuPhoto'
+import { CARD_PHOTO_RATIO, photoLoader, photoSrc } from './menuPhoto'
 import { formatPeso, priceFor, type Temp } from './menuView'
 import TempToggle from './TempToggle'
 
@@ -17,10 +17,13 @@ export interface MenuCardProps {
   onAdd: () => void
   /** Opens the item sheet. */
   onOpen: () => void
+  /** In the first row on screen: load the photo up front, as it's the biggest thing in view. */
+  preload?: boolean
 }
 
-// One menu item: a square photo on top in a category with photos, a plain paper card otherwise.
-export default function MenuCard({ item, withPhoto, temp, justAdded, onTemp, onAdd, onOpen }: MenuCardProps) {
+// One menu item: the whole tall drink photo on top in a category with photos, a plain paper
+// card otherwise.
+export default function MenuCard({ item, withPhoto, temp, justAdded, onTemp, onAdd, onOpen, preload = false }: MenuCardProps) {
   return (
     <article className="group flex min-w-0 flex-col">
       {withPhoto && (
@@ -28,14 +31,15 @@ export default function MenuCard({ item, withPhoto, temp, justAdded, onTemp, onA
           type="button"
           onClick={onOpen}
           aria-label={`See ${item.name}`}
-          className="relative block aspect-square w-full overflow-hidden rounded-[10px] bg-photo"
+          className="relative block aspect-9/16 w-full overflow-hidden rounded-[10px] bg-photo"
         >
           {item.image ? (
             <Image
-              src={photoSrc(item.image)}
-              loader={photoLoader(item.image)}
+              src={photoSrc(item.image, CARD_PHOTO_RATIO)}
+              loader={photoLoader(item.image, CARD_PHOTO_RATIO)}
               alt=""
               fill
+              preload={preload}
               sizes="(min-width: 1024px) 280px, (min-width: 640px) 30vw, 45vw"
               placeholder={item.lqip ? 'blur' : 'empty'}
               blurDataURL={item.lqip}

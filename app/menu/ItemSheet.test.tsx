@@ -46,12 +46,14 @@ describe('ItemSheet', () => {
     expect(html).not.toContain('aria-pressed')
   })
 
-  // The menu's photos are tall cup shots cropped square; a wider box would cut off the lid and base.
-  it('shows the whole square photo on phones too', () => {
+  // The menu's photos are tall cup shots. 4:5 shows the cup with its toppings and still leaves
+  // the Add button on a phone's screen.
+  it('shows the photo tall, 4:5, at every width', () => {
     const html = sheet({ ...latte, image: { asset: { _ref: 'image-abc123-800x600-jpg' } } }, 'Iced')
     const photoBox = html.match(/<div class="([^"]*bg-photo[^"]*)"/)?.[1] ?? ''
-    expect(photoBox.split(' ')).toContain('aspect-square')
-    expect(photoBox).not.toMatch(/aspect-\[/)
+    expect(photoBox.split(' ')).toContain('aspect-4/5')
+    expect(photoBox).not.toMatch(/aspect-square|sm:aspect/)
+    expect(html).toContain('w=640&amp;h=800')
   })
 
   it('shows no photo area for an item without a photo, and the photo for one with', () => {

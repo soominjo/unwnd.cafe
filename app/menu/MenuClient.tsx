@@ -18,6 +18,9 @@ interface MenuClientProps {
 // How long the + shows its tick after an add.
 const ADDED_TICK_MS = 900
 
+// Photos loaded up front: the first row of the phone grid, two across.
+const FIRST_ROW_PHOTOS = 2
+
 // The Nav and the chips cover the top ~140px: a category is the one being read from when its
 // top slides under them until it leaves the upper part of the screen.
 const SPY_ROOT_MARGIN = '-140px 0px -55% 0px'
@@ -99,7 +102,7 @@ export default function MenuClient({ items, categories }: MenuClientProps) {
       <CategoryChips sections={sections} active={active} onPick={pick} />
 
       <div className="mx-auto max-w-310 px-5 sm:px-10 lg:px-16">
-        {sections.map((section) => (
+        {sections.map((section, sectionIndex) => (
           <section
             key={section.id}
             id={`cat-${section.id}`}
@@ -114,7 +117,7 @@ export default function MenuClient({ items, categories }: MenuClientProps) {
               <span className="text-xs tracking-[0.06em] text-ink-2">{countLabel(section.items.length, 'item')}</span>
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-5 sm:gap-y-8 lg:grid-cols-4 lg:gap-x-6 lg:gap-y-10">
-              {section.items.map((item) => (
+              {section.items.map((item, itemIndex) => (
                 <MenuCard
                   key={item._id}
                   item={item}
@@ -124,6 +127,8 @@ export default function MenuClient({ items, categories }: MenuClientProps) {
                   onTemp={(temp) => setTemp(item._id, temp)}
                   onAdd={() => add(item)}
                   onOpen={() => setOpenId(item._id)}
+                  // The first row on a phone: the biggest thing on screen when the page opens.
+                  preload={sectionIndex === 0 && itemIndex < FIRST_ROW_PHOTOS}
                 />
               ))}
             </div>

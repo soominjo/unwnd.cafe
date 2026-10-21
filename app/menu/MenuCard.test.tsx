@@ -50,11 +50,28 @@ describe('MenuCard', () => {
     expect(html).not.toContain('bg-paper')
   })
 
+  it('shows the whole tall photo, 9:16 like the drink shots, not a square crop', () => {
+    const html = card({ item: { ...latte, image: PHOTO }, withPhoto: true })
+    expect(html).toMatch(/<button[^>]*aria-label="See [^"]*"[^>]*class="[^"]*aspect-9\/16/)
+    expect(html).toContain('w=640&amp;h=1138')
+    expect(html).not.toContain('aspect-square')
+  })
+
   it('keeps the photo spot with a quiet unwnd. tile while the photo is missing', () => {
     const html = card({ withPhoto: true })
     expect(html).not.toContain('<img')
     expect(html).toContain('aria-label="See Seasalt Spanish Latte⭐"')
+    expect(html).toContain('aspect-9/16')
     expect(text(html)).toContain('unwnd.')
+  })
+
+  it('loads the photo up front only when the card is in the first row on screen', () => {
+    const first = card({ item: { ...latte, image: PHOTO }, withPhoto: true, preload: true })
+    expect(first).toContain('<link rel="preload" as="image"')
+    expect(first).not.toContain('loading="lazy"')
+    const later = card({ item: { ...latte, image: PHOTO }, withPhoto: true })
+    expect(later).not.toContain('rel="preload"')
+    expect(later).toContain('loading="lazy"')
   })
 
   it('notes one-way drinks and shows nothing for food', () => {

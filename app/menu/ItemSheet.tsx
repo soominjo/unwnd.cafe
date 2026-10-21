@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useRef, type MouseEvent } from 'react'
 import type { SanityMenuItem } from '@/types/sanity'
-import { photoLoader, photoSrc } from './menuPhoto'
+import { SHEET_PHOTO_RATIO, photoLoader, photoSrc } from './menuPhoto'
 import { formatPeso, priceFor, type Temp } from './menuView'
 import TempToggle from './TempToggle'
 
@@ -65,12 +65,12 @@ export default function ItemSheet({ item, categoryLabel, temp, onTemp, onAdd, on
       {item && (
         <div className={photo ? 'sm:grid sm:grid-cols-[1.05fr_1fr]' : undefined}>
           {photo && (
-            // Square at every width: the photos are tall cup shots cropped square, and a wider box
-            // would cut off the lid and the base.
-            <div className="relative aspect-square bg-photo">
+            // 4:5 at every width: tall enough for the whole cup and its toppings, short enough to
+            // keep the Add button on a phone's screen.
+            <div className="relative aspect-4/5 bg-photo">
               <Image
-                src={photoSrc(photo)}
-                loader={photoLoader(photo)}
+                src={photoSrc(photo, SHEET_PHOTO_RATIO)}
+                loader={photoLoader(photo, SHEET_PHOTO_RATIO)}
                 alt=""
                 fill
                 sizes="(min-width: 640px) 470px, 100vw"
