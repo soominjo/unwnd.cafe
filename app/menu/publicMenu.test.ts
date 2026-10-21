@@ -37,6 +37,25 @@ describe('what /menu shows', () => {
     expect(food.image).toBeUndefined()
   })
 
+  it('adds the blurred preview to items that have a photo', () => {
+    const photo = { asset: { _ref: 'image-abc123-800x600-jpg' } }
+    const [a, b] = toPublicMenu(
+      { categories, items: [item({ _id: 'a', image: photo }), item({ _id: 'b' })] },
+      { a: 'data:image/jpeg;base64,AAA', b: 'data:image/jpeg;base64,BBB' }
+    ).items
+    expect(a).toMatchObject({ image: photo, lqip: 'data:image/jpeg;base64,AAA' })
+    expect(b.lqip).toBeUndefined()
+  })
+
+  it('treats an image field with no uploaded photo as no photo, so the page cannot fail on it', () => {
+    const [empty] = toPublicMenu(
+      { categories, items: [item({ _id: 'a', image: {} as MenuItemDoc['image'] })] },
+      { a: 'data:image/jpeg;base64,AAA' }
+    ).items
+    expect(empty.image).toBeUndefined()
+    expect(empty.lqip).toBeUndefined()
+  })
+
   it('the ingredients an item has, as /menu showed them before', async () => {
     const [latte, plain] = toPublicMenu({ categories, items: [item({ ingredients: ['Espresso', 'Milk'] }), item({})] }).items
     expect(latte.ingredients).toEqual(['Espresso', 'Milk'])

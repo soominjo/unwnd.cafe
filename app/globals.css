@@ -12,6 +12,9 @@
   --hair:       rgba(0, 45, 6, .13);   /* hairline borders */
   --hair-2:     rgba(0, 45, 6, .28);   /* stronger hairlines: chips, toggles */
   --gold:       #B8892C;   /* review stars */
+  --photo:      #DCD3C3;   /* where a menu photo sits while it loads or is missing */
+  --added:      #4E9F57;   /* the menu's + button just after adding */
+  --nav-h:      calc(4.75rem + 1px);   /* the fixed Nav's height: py-5 around the 2.25rem logo line, plus its 1px border (77px at the default text size) */
 }
 
 @theme inline {
@@ -26,6 +29,8 @@
   --color-hair:       var(--hair);
   --color-hair-2:     var(--hair-2);
   --color-gold:       var(--gold);
+  --color-photo:      var(--photo);
+  --color-added:      var(--added);
 
   --font-sans:    var(--font-geist-sans);
   --font-mono:    var(--font-geist-mono);
@@ -46,4 +51,13 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* The menu's item sheet rising into place, and its tray bar nudging after an add. */
+@keyframes sheet-up {
+  from { transform: translateY(40px); }
+}
+
+@keyframes tray-pulse {
+  40% { transform: scale(1.03); }
 }

@@ -8,6 +8,8 @@ export interface SanityMenuItem {
   description?: string
   subtitle?: string
   image?: { asset: { _ref: string } }
+  /** A tiny blurred copy of `image` (Sanity's lqip), shown while the photo loads. */
+  lqip?: string
   drinkType?: 'hot' | 'iced' | 'both'
   sizes?: string[]
   ingredients?: string[]
