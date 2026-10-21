@@ -61,6 +61,12 @@ describe('ReviewsSection', () => {
     expect(text(noReviews)).toContain('34 reviews on Google')
   })
 
+  it('lays four reviews in one row on wide screens, so none sits alone', () => {
+    const four = render({ ...data, reviews: [ana, ben, { ...ana, key: 'c' }, { ...ben, key: 'd' }] })
+    expect(four).toMatch(/<ul[^>]*class="[^"]*lg:grid-cols-4/)
+    expect(render(data)).toMatch(/<ul[^>]*class="[^"]*lg:grid-cols-3/)
+  })
+
   it('offers swiping only when there is more than one review', () => {
     expect(text(render({ ...data, reviews: [ana] }))).not.toContain('Swipe for more')
     expect(text(render(data))).toContain('Swipe for more')

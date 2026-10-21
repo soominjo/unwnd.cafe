@@ -62,7 +62,10 @@ export default function ReviewsSection({ reviews, reviewUrl }: ReviewsSectionPro
       {list.length > 0 && (
         <ul
           role="list"
-          className="mt-7 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-8 pt-0.5 pb-2.5 scroll-px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-4 md:px-16 md:scroll-px-16 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible"
+          className={`mt-7 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-8 pt-0.5 pb-2.5 scroll-px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-4 md:px-16 md:scroll-px-16 lg:grid lg:gap-5 lg:overflow-visible ${
+            // Four in one row rather than three and one left on its own.
+            list.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
+          }`}
         >
           {list.map((review) => (
             <li key={review.key} className="shrink-0 basis-[84%] snap-start sm:basis-[44%] lg:basis-auto">
