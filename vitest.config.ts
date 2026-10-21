@@ -9,7 +9,7 @@ export default defineConfig({
   // tsconfig's "@/*" path, so a test can reach modules that import through it.
   resolve: { alias: { '@': dirname(fileURLToPath(import.meta.url)) } },
   test: {
-    include: ['app/**/*.test.{ts,tsx}', 'lib/**/*.test.{ts,tsx}'],
+    include: ['app/**/*.test.{ts,tsx}', 'lib/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
     environment: 'node',
   },
 })

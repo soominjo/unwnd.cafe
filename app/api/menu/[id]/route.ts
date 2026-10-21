@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { client } from '@/sanity/lib/client'
 import { getWriteClient } from '@/sanity/lib/writeClient'
 import { requirePosAuth } from '@/lib/requirePosAuth'
@@ -68,6 +69,8 @@ export async function PATCH(
         applicableCategories: applicableCategories ?? null,
       })
       .commit()
+    // The customer-facing menu follows the POS: its next visit shows the edit.
+    revalidatePath('/menu')
 
     return NextResponse.json({
       success: true,
@@ -119,6 +122,7 @@ export async function DELETE(
 
     const writeClient = getWriteClient()
     await writeClient.delete(id)
+    revalidatePath('/menu')
 
     return NextResponse.json({ success: true })
   } catch {

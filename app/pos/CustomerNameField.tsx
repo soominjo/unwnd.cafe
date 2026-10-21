@@ -11,6 +11,7 @@ import {
   nextMilestone,
   stampCount,
   type CardHolderWithCard,
+  type LoyaltyCopy,
   type LoyaltyReward,
 } from '@/lib/loyalty'
 import LoyaltyBar from './LoyaltyBar'
@@ -19,7 +20,7 @@ import type { OrderItem, Variant } from './types'
 
 /** The loyalty 10%: one unit of one item in the order it can go on, which the cashier picks. */
 export interface LoyaltyTenControls {
-  /** The order's Espresso, Non-Coffee, Waffle and Snack items the 10% can go on. */
+  /** The order's items the 10% can go on (classic drinks, Waffle and Snack). */
   lines: readonly OrderItem[]
   /** The item the 10% is on, or null. */
   lineId: string | null
@@ -44,13 +45,15 @@ export interface CustomerNameFieldProps {
   /** Stamps the order on screen adds to a linked card. */
   orderStamps: number
   ten: LoyaltyTenControls
-  /** The order has an Espresso or Non-Coffee drink that could be the free one. */
+  /** The order has a classic drink (espresso or non-coffee tab) that could be the free one. */
   hasFreeDrinkLine: boolean
   freeActive: boolean
   /** Adding to a saved order: its name and card stay as saved, with no typing and no unlink. */
   locked?: boolean
   /** Rewards the order used already: they stay on the card for the next order. */
   blocked?: readonly LoyaltyReward[]
+  /** The loyalty sentences, naming tabs as the menu does today. */
+  copy: LoyaltyCopy
 }
 
 const CARD_NUMBER_TYPED = /^(?:no\.?\s*|#)?\d+$/i
@@ -166,7 +169,7 @@ function Suggestions({ value, holders, onLink }: { value: string; holders: CardH
 }
 
 function LinkedCard(props: CustomerNameFieldProps & { linked: CardHolderWithCard }) {
-  const { linked, orderStamps, ten, hasFreeDrinkLine, freeActive, onUnlink, locked = false, blocked = [] } = props
+  const { linked, orderStamps, ten, hasFreeDrinkLine, freeActive, onUnlink, locked = false, blocked = [], copy } = props
   const saved = cardState(linked.card)
   // Rewards can be used on the order that earns them, so the cart's stamps count already.
   const withOrder = cardState(addOrderToTotals(linked.card, orderStamps, []))
@@ -196,7 +199,7 @@ function LinkedCard(props: CustomerNameFieldProps & { linked: CardHolderWithCard
               <span>{nextMilestone(withOrder.onCard)}</span>
             </>
           ) : (
-            <span>No stamps from this order yet: Signature, Matcha Series and Meal items earn 1, Espresso, Non-Coffee, Waffle and Snack items ½.</span>
+            <span>{copy.noStampsYet}</span>
           )}
         </span>
         {!locked && (
@@ -207,14 +210,14 @@ function LinkedCard(props: CustomerNameFieldProps & { linked: CardHolderWithCard
       </div>
       {(tenUsable || freeUsable) && (
         <div className="flex flex-wrap items-center gap-2">
-          {tenUsable && <TenOff ten={ten} />}
+          {tenUsable && <TenOff ten={ten} needsItem={copy.tenNeedsItem} />}
           {freeUsable && (
             <span className="text-[11px] font-semibold text-emerald-700">
               {freeActive
                 ? 'Free drink applied.'
                 : hasFreeDrinkLine
-                  ? 'Free drink ready: tap “Make free” on an Espresso or Non-Coffee drink.'
-                  : 'Free drink ready: add an Espresso or Non-Coffee drink to use it.'}
+                  ? copy.freeDrinkTap
+                  : copy.freeDrinkAdd}
             </span>
           )}
         </div>
@@ -231,10 +234,10 @@ function LinkedCard(props: CustomerNameFieldProps & { linked: CardHolderWithCard
   )
 }
 
-// The 10% goes on one unit of one Espresso, Non-Coffee, Waffle or Snack item. "Use 10% off"
+// The 10% goes on one unit of one item it can go on (a classic drink, a Waffle or a Snack). "Use 10% off"
 // puts it straight on the only one in the order, or lists them to pick from; with none, staff
 // ask the customer to add one.
-function TenOff({ ten }: { ten: LoyaltyTenControls }) {
+function TenOff({ ten, needsItem }: { ten: LoyaltyTenControls; needsItem: string }) {
   const applied = ten.lineId === null ? undefined : ten.lines.find(l => l.lineId === ten.lineId)
   if (applied) {
     return (
@@ -253,7 +256,7 @@ function TenOff({ ten }: { ten: LoyaltyTenControls }) {
   if (ten.lines.length === 0) {
     return (
       <p role="status" className="flex flex-wrap items-center gap-x-2 text-[11px] font-semibold text-amber-800">
-        <span>The 10% off is for one Espresso, Non-Coffee, Waffle or Snack item. Ask the customer to add one to use it.</span>
+        <span>{needsItem}</span>
         <button type="button" onClick={ten.onCancel} className="inline-flex min-h-6 items-center px-1 underline underline-offset-2">OK</button>
       </p>
     )

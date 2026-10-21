@@ -9,6 +9,7 @@ const { requirePosAuth, fetchCardTotals, sanity } = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/requirePosAuth', () => ({ requirePosAuth }))
 vi.mock('@/lib/loyaltyStore', () => ({ fetchCardTotals }))
+vi.mock('@/lib/sales/rewardsRefusal', () => ({ rewardsRefusal: async () => 'Rewards need items (named by the menu).' }))
 vi.mock('@/sanity/lib/writeClient', () => ({ getWriteClient: () => sanity.client }))
 
 import { POST } from './route'

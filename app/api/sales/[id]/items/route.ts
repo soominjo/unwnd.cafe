@@ -15,8 +15,9 @@ import {
   type SaleItemInput,
 } from '@/lib/sales/validateSaleInput'
 import { ORDER_CHANGED, ORDER_COMPLETED, ORDER_GONE, type AddItemsBody } from '@/lib/sales/addItems'
-import { LOYALTY_CARD_CHANGED, REWARDS_NEED_ITEMS, rewardProblem, rewardsFitOrder, stampsIn, type CardTotals, type LoyaltyReward } from '@/lib/loyalty'
+import { LOYALTY_CARD_CHANGED, rewardProblem, rewardsFitOrder, stampsIn, type CardTotals, type LoyaltyReward } from '@/lib/loyalty'
 import { fetchCardTotals } from '@/lib/loyaltyStore'
+import { rewardsRefusal } from '@/lib/sales/rewardsRefusal'
 import { PAYMENTS_DONT_ADD_UP, handedTotal, parsePayments, toSalePaymentDocs, type PaymentInput, type SalePayment } from '@/lib/sales/payments'
 
 export const dynamic = 'force-dynamic'
@@ -121,7 +122,7 @@ async function checkRewards(order: StoredSale, body: AddItemsBody): Promise<Next
   if (rewards.length === 0) return null
   if (!order.loyaltyMemberId) return refuse(400, 'This order has no loyalty card.')
   if (rewards.some(r => (order.loyaltyRewards ?? []).includes(r))) return refuse(400, 'This order used that reward already.')
-  if (!rewardsFitOrder(body.items, rewards)) return refuse(400, REWARDS_NEED_ITEMS)
+  if (!rewardsFitOrder(body.items, rewards)) return refuse(400, await rewardsRefusal())
   let totals: CardTotals | null
   try {
     // The card's totals already count this order's saved part.

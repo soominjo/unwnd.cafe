@@ -8,6 +8,7 @@ vi.mock('@/lib/requirePosAuth', () => ({ requirePosAuth }))
 vi.mock('@/sanity/lib/writeClient', () => ({ getWriteClient: () => ({ create }) }))
 vi.mock('@/sanity/lib/client', () => ({ client: { withConfig: () => ({ fetch: vi.fn() }) } }))
 vi.mock('@/lib/loyaltyStore', () => ({ fetchCardTotals }))
+vi.mock('@/lib/sales/rewardsRefusal', () => ({ rewardsRefusal: async () => 'Rewards need items (named by the menu).' }))
 
 import { POST } from './route'
 
@@ -45,7 +46,7 @@ describe('POST /api/sales with a loyalty card', () => {
     // A Signature drink only: the 10% has no Espresso, Non-Coffee, Waffle or Snack item to go on.
     const none = await post(sale({ items: [signature], loyaltyMemberId: 'kylene', loyaltyRewards: ['ten'] }))
     expect(none.status).toBe(400)
-    expect((await none.json()).error).toBe('Each loyalty reward needs its own item: an Espresso or Non-Coffee drink for the free drink, and an Espresso, Non-Coffee, Waffle or Snack item for the 10%.')
+    expect((await none.json()).error).toBe('Rewards need items (named by the menu).')
     // One Cafe Latte cannot be both the free drink and the 10% one.
     expect((await post(sale({ items: [latte], loyaltyMemberId: 'kylene', loyaltyRewards: ['ten', 'free'] }))).status).toBe(400)
     expect((await post(sale({ items: [{ ...latte, qty: 2 }], loyaltyMemberId: 'kylene', loyaltyRewards: ['ten', 'free'] }))).status).toBe(200)

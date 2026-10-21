@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getWriteClient } from '@/sanity/lib/writeClient'
 import { requirePosAuth } from '@/lib/requirePosAuth'
 import { MENU_SETTINGS_ID as SETTINGS_ID, fetchMenuSettings, type MenuSettings } from '@/lib/posMenu'
@@ -14,22 +15,8 @@ export async function GET() {
   }
 }
 
-interface HideAction {
-  itemId: string
-  action: 'hide' | 'restore'
-}
-
 interface ReorderAction {
   categoryOrder: string[]
-}
-
-function isHideAction(body: unknown): body is HideAction {
-  if (!body || typeof body !== 'object') return false
-  const b = body as Record<string, unknown>
-  return (
-    typeof b.itemId === 'string' && b.itemId.trim().length > 0 && b.itemId.length <= 100 &&
-    (b.action === 'hide' || b.action === 'restore')
-  )
 }
 
 function isReorderAction(body: unknown): body is ReorderAction {
@@ -58,21 +45,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const writeClient = getWriteClient()
-    const current = await fetchMenuSettings()
 
     if (isReorderAction(body)) {
-      const updated: MenuSettings = { ...current, categoryOrder: body.categoryOrder }
+      const updated: MenuSettings = { categoryOrder: body.categoryOrder }
       await writeClient.createOrReplace({ _id: SETTINGS_ID, _type: 'menuSettings', ...updated })
-      return NextResponse.json({ success: true, ...updated })
-    }
-
-    if (isHideAction(body)) {
-      const { itemId, action } = body
-      const hiddenItemIds = action === 'hide'
-        ? (current.hiddenItemIds.includes(itemId) ? current.hiddenItemIds : [...current.hiddenItemIds, itemId])
-        : current.hiddenItemIds.filter((id) => id !== itemId)
-      const updated: MenuSettings = { ...current, hiddenItemIds }
-      await writeClient.createOrReplace({ _id: SETTINGS_ID, _type: 'menuSettings', ...updated })
+      // /menu shows its tabs in this order too.
+      revalidatePath('/menu')
       return NextResponse.json({ success: true, ...updated })
     }
 

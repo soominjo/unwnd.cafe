@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import CustomerNameField, { type CustomerNameFieldProps, type LoyaltyTenControls } from './CustomerNameField'
 import LoyaltyBar from './LoyaltyBar'
-import type { CardHolderWithCard } from '@/lib/loyalty'
+import { loyaltyCopy, type CardHolderWithCard } from '@/lib/loyalty'
 import type { OrderItem } from './types'
 
 const holder = (id: string, name: string, cardNumber: number, earned: number, usedTen = 0, usedFree = 0): CardHolderWithCard => ({
@@ -11,6 +11,12 @@ const holder = (id: string, name: string, cardNumber: number, earned: number, us
 const kylene = holder('k', 'Kylene', 12, 5)
 const holders = [kylene, holder('k2', 'Kylene', 4, 0), holder('b', 'Ben', 3, 3)]
 const noop = () => {}
+// The tabs as the menu names them, Espresso shown as Classic.
+const LABELS: Record<string, string> = {
+  signature: 'Signature', 'matcha-series': 'Matcha Series', meal: 'Meal',
+  espresso: 'Classic', 'non-coffee': 'Non-Coffee', waffle: 'Waffle', snack: 'Snack',
+}
+const copy = loyaltyCopy((id) => LABELS[id])
 const latte: OrderItem = { lineId: 'cafe-latte__hot', name: 'Cafe Latte', variant: 'hot', price: 110, qty: 1, categoryId: 'espresso' }
 const chocolate: OrderItem = { lineId: 'chocolate__ice', name: 'Chocolate', variant: 'ice', price: 120, qty: 1, categoryId: 'non-coffee' }
 const ten = (over: Partial<LoyaltyTenControls> = {}): LoyaltyTenControls => ({
@@ -20,7 +26,7 @@ const ten = (over: Partial<LoyaltyTenControls> = {}): LoyaltyTenControls => ({
 const field = (over: Partial<CustomerNameFieldProps>) => renderToStaticMarkup(
   <CustomerNameField
     value="" disabled={false} onChange={noop} holders={holders} linked={null} onLink={noop} onUnlink={noop}
-    orderStamps={0} ten={ten()} hasFreeDrinkLine={false} freeActive={false} {...over}
+    orderStamps={0} ten={ten()} hasFreeDrinkLine={false} freeActive={false} copy={copy} {...over}
   />,
 )
 
@@ -86,7 +92,7 @@ describe('CustomerNameField', () => {
 
   it('asks the customer to add an item the 10% can go on when the order has none', () => {
     const html = field({ value: 'Kylene', linked: kylene, orderStamps: 1, ten: ten({ choosing: true }) })
-    expect(html).toContain('The 10% off is for one Espresso, Non-Coffee, Waffle or Snack item. Ask the customer to add one to use it.')
+    expect(html).toContain('The 10% off is for one Classic, Non-Coffee, Waffle or Snack item. Ask the customer to add one to use it.')
   })
 
   it('writes half stamps as ½: on a suggestion, on the card and for this order', () => {
@@ -105,7 +111,7 @@ describe('CustomerNameField', () => {
 
   it('says how to use a ready free drink', () => {
     const full = holder('f', 'Ana', 9, 11, 1)
-    expect(field({ value: 'Ana', linked: full })).toContain('add an Espresso or Non-Coffee drink')
+    expect(field({ value: 'Ana', linked: full })).toContain('add a Classic or Non-Coffee drink')
     expect(field({ value: 'Ana', linked: full, hasFreeDrinkLine: true })).toContain('tap “Make free”')
   })
 
@@ -129,7 +135,7 @@ describe('CustomerNameField', () => {
 
   it('says no stamps come from this order, not that the card has none, and what earns them now', () => {
     expect(field({ value: 'Kylene', linked: kylene, orderStamps: 0 })).toContain(
-      'No stamps from this order yet: Signature, Matcha Series and Meal items earn 1, Espresso, Non-Coffee, Waffle and Snack items ½.',
+      'No stamps from this order yet: Signature, Matcha Series and Meal items earn 1, Classic, Non-Coffee, Waffle and Snack items ½.',
     )
   })
 

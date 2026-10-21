@@ -27,17 +27,7 @@ export const menuItem = defineType({
       name: 'category',
       title: 'Category',
       type: 'string',
-      description: 'Must match a category id: signature, espresso (shown as Classic), non-coffee, meal, waffle, snack, or a custom one.',
-      options: {
-        list: [
-          { title: 'Signature', value: 'signature' },
-          { title: 'Classic', value: 'espresso' },
-          { title: 'Non-Coffee', value: 'non-coffee' },
-          { title: 'Meal', value: 'meal' },
-          { title: 'Waffle', value: 'waffle' },
-          { title: 'Snack', value: 'snack' },
-        ],
-      },
+      description: 'The id of a tab on the POS, for example signature or espresso (shown as Classic).',
     }),
     // ── Pricing ──────────────────────────────────────────────────
     defineField({
@@ -81,17 +71,6 @@ export const menuItem = defineType({
       type: 'array',
       description: 'Only used for Add-ons items — which menu categories show this add-on in the POS order panel. Leave empty to show for every category.',
       of: [{ type: 'string' }],
-      options: {
-        list: [
-          { title: 'Signature', value: 'signature' },
-          { title: 'Classic', value: 'espresso' },
-          { title: 'Non-Coffee', value: 'non-coffee' },
-          { title: 'Matcha Series', value: 'matcha-series' },
-          { title: 'Meal', value: 'meal' },
-          { title: 'Waffle', value: 'waffle' },
-          { title: 'Snack', value: 'snack' },
-        ],
-      },
     }),
     defineField({
       name: 'image',

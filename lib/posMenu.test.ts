@@ -7,16 +7,17 @@ const { sanityFetch, getResolvedCategories } = vi.hoisted(() => ({
 vi.mock('@/sanity/lib/client', () => ({ client: { withConfig: () => ({ fetch: sanityFetch }) } }))
 vi.mock('@/lib/menuCategories', () => ({ getResolvedCategories }))
 
-import { loadPosMenu, MENU_LOAD_TIMEOUT_MS } from './posMenu'
+import { loadPosMenu, readMenu, MENU_LOAD_TIMEOUT_MS } from './posMenu'
 
 const categories = [
-  { id: 'espresso', label: 'Espresso', type: 'drink', order: 2, isBuiltIn: true },
-  { id: 'signature', label: 'Signature', type: 'drink', order: 1, isBuiltIn: true },
+  { id: 'espresso', label: 'Classic', type: 'drink', order: 2, _sanityId: 'menu-category-espresso' },
+  { id: 'signature', label: 'Signature', type: 'drink', order: 1, _sanityId: 'menu-category-signature' },
 ]
 const items = [
   {
     _id: 'sanity-ube', name: 'Ube Cream Latte', subtitle: null, category: 'signature', priceHot: null,
     priceIce: 170, priceFixed: null, addonType: null, hiddenFromPos: false, applicableCategories: null,
+    description: null, image: null, ingredients: null,
   },
 ]
 
@@ -37,24 +38,18 @@ afterEach(() => {
 })
 
 describe('loadPosMenu', () => {
-  it('reads the categories, items and settings the POS menu is built from', async () => {
-    answer({ hiddenItemIds: ['cereal-cream-latte'], categoryOrder: ['espresso', 'signature'] })
-    expect(await loadPosMenu()).toEqual({
-      categories,
-      items,
-      hiddenItemIds: ['cereal-cream-latte'],
-      categoryOrder: ['espresso', 'signature'],
-    })
+  it('reads the tabs, items and saved tab order the menu is built from', async () => {
+    answer({ categoryOrder: ['espresso', 'signature'] })
+    expect(await loadPosMenu()).toEqual({ categories, items, categoryOrder: ['espresso', 'signature'] })
   })
 
-  it('treats a missing settings document as nothing hidden and no saved order', async () => {
+  it('treats a missing settings document as no saved order', async () => {
     answer(null)
     const menu = await loadPosMenu()
-    expect(menu?.hiddenItemIds).toEqual([])
     expect(menu?.categoryOrder).toEqual([])
   })
 
-  it('gives null when any part cannot be read, so the POS shows its built-in menu', async () => {
+  it('gives null when any part cannot be read, so the POS shows its fallback', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     answer(null)
     getResolvedCategories.mockRejectedValue(new Error('Sanity is down'))
@@ -69,5 +64,27 @@ describe('loadPosMenu', () => {
     const menu = loadPosMenu()
     await vi.advanceTimersByTimeAsync(MENU_LOAD_TIMEOUT_MS)
     expect(await menu).toBeNull()
+  })
+})
+
+describe('the menu reader', () => {
+  it('asks Sanity for items in the order they were added, past the cache, for the POS', async () => {
+    answer(null)
+    await loadPosMenu()
+    const [query, , options] = sanityFetch.mock.calls.find(([q]) => String(q).includes('"menuItem"'))!
+    expect(query).toContain('order(_createdAt asc, _id asc)')
+    expect(query).toContain('description')
+    expect(query).toContain('image')
+    expect(query).toContain('ingredients')
+    expect(options).toEqual({ cache: 'no-store' })
+    expect(getResolvedCategories).toHaveBeenCalledWith({ noStore: true })
+  })
+
+  it('reads the same menu for /menu without opting the page out of its cache', async () => {
+    answer(null)
+    await readMenu({ noStore: false })
+    const [, , options] = sanityFetch.mock.calls.find(([q]) => String(q).includes('"menuItem"'))!
+    expect(options).toEqual({})
+    expect(getResolvedCategories).toHaveBeenCalledWith({ noStore: false })
   })
 })

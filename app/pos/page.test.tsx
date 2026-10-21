@@ -17,9 +17,8 @@ vi.mock('@/lib/sales/loadOpenSale', () => ({ loadOpenSale: async () => ({ proble
 import POSPage from './page'
 
 const live: PosMenu = {
-  categories: [{ id: 'signature', label: 'Signature', type: 'drink', order: 1, isBuiltIn: true }],
+  categories: [{ id: 'signature', label: 'Signature', type: 'drink', order: 1, _sanityId: 'menu-category-signature' }],
   items: [],
-  hiddenItemIds: [],
   categoryOrder: ['signature'],
 }
 

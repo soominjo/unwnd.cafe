@@ -93,9 +93,71 @@ export function isTenOffLine(line: StampLine): boolean {
   return !isAddonLine(line) && Boolean(line.categoryId && TEN_OFF_CATEGORY_IDS.includes(line.categoryId))
 }
 
-/** What the routes answer when an order's rewards have no item of their own to go on. */
-export const REWARDS_NEED_ITEMS =
-  'Each loyalty reward needs its own item: an Espresso or Non-Coffee drink for the free drink, and an Espresso, Non-Coffee, Waffle or Snack item for the 10%.'
+/** The rewards refusal when the tabs' names can't be read: it names no tab. */
+export const REWARDS_NEED_ITEMS_GENERIC =
+  'Each loyalty reward needs its own item in the order: one for the free drink and another for the 10% off.'
+
+/** The staff-facing loyalty sentences, naming tabs as the menu calls them today. */
+export interface LoyaltyCopy {
+  noStampsYet: string
+  freeDrinkTap: string
+  freeDrinkAdd: string
+  tenNeedsItem: string
+  rewardsNeedItems: string
+}
+
+const NO_FREE_DRINK_TAB = 'Free drink ready, but no tab on the menu takes it.'
+const WHOLE_STAMP_IDS = [...STAMPS_PER_ITEM].filter(([, n]) => n === 1).map(([id]) => id)
+const HALF_STAMP_IDS = [...STAMPS_PER_ITEM].filter(([, n]) => n === 0.5).map(([id]) => id)
+
+/** "A, B and C" or "A, B or C"; empty when there are none. */
+function joinNames(names: readonly string[], word: 'and' | 'or'): string {
+  if (names.length <= 1) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} ${word} ${names[names.length - 1]}`
+}
+
+const withArticle = (phrase: string) => `${/^[aeiou]/i.test(phrase) ? 'an' : 'a'} ${phrase}`
+
+/**
+ * The loyalty hints and the rewards refusal, built from the tabs' names on the menu now. `labelOf`
+ * gives a tab's name, or undefined for a tab no longer on the menu, which is left out.
+ */
+export function loyaltyCopy(labelOf: (categoryId: string) => string | undefined): LoyaltyCopy {
+  const names = (ids: readonly string[]) => ids.map(labelOf).filter((name): name is string => Boolean(name))
+  const whole = joinNames(names(WHOLE_STAMP_IDS), 'and')
+  const half = joinNames(names(HALF_STAMP_IDS), 'and')
+  const classic = joinNames(names(CLASSIC_DRINK_CATEGORY_IDS), 'or')
+  const ten = joinNames(names(TEN_OFF_CATEGORY_IDS), 'or')
+  const stampParts = whole && half
+    ? `: ${whole} items earn 1, ${half} items ½`
+    : whole ? `: ${whole} items earn 1` : half ? `: ${half} items earn ½` : ''
+  return {
+    noStampsYet: `No stamps from this order yet${stampParts}.`,
+    freeDrinkTap: classic ? `Free drink ready: tap “Make free” on ${withArticle(classic)} drink.` : NO_FREE_DRINK_TAB,
+    freeDrinkAdd: classic ? `Free drink ready: add ${withArticle(classic)} drink to use it.` : NO_FREE_DRINK_TAB,
+    tenNeedsItem: ten
+      ? `The 10% off is for one ${ten} item. Ask the customer to add one to use it.`
+      : 'The 10% off needs an item from a tab that takes it, and none is on the menu.',
+    rewardsNeedItems: classic && ten
+      ? `Each loyalty reward needs its own item: ${withArticle(classic)} drink for the free drink, and ${withArticle(ten)} item for the 10%.`
+      : REWARDS_NEED_ITEMS_GENERIC,
+  }
+}
+
+export interface LoyaltyPerks {
+  stamps: boolean
+  freeDrink: boolean
+  tenOff: boolean
+}
+
+/** What a tab gives on loyalty cards under today's rules, for the warning before it is deleted. */
+export function loyaltyPerksOf(categoryId: string): LoyaltyPerks {
+  return {
+    stamps: STAMPS_PER_ITEM.has(categoryId),
+    freeDrink: CLASSIC_DRINK_CATEGORY_IDS.includes(categoryId),
+    tenOff: TEN_OFF_CATEGORY_IDS.includes(categoryId),
+  }
+}
 
 /** Whether the order has an item for each reward it uses: a classic drink for the free one, and another unit the 10% can go on. */
 export function rewardsFitOrder(lines: readonly StampLine[], rewards: readonly string[]): boolean {

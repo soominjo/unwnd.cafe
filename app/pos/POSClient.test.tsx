@@ -7,11 +7,11 @@ import type { OpenOrder } from './addToOrder'
 // Next's font loader only exists inside a running Next app (ReceiptPreview uses it at import).
 vi.mock('next/font/google', () => ({ IBM_Plex_Mono: () => ({ className: '' }) }))
 
-// The live menu as the server reads it: two tabs, one Sanity item, one built-in hidden.
+// The live menu as the server reads it: two tabs and one item, all saved in Sanity.
 const live: PosMenu = {
   categories: [
-    { id: 'signature', label: 'Signature', type: 'drink', order: 1, isBuiltIn: true },
-    { id: 'espresso', label: 'Espresso', type: 'drink', order: 2, isBuiltIn: true },
+    { id: 'signature', label: 'Signature', type: 'drink', order: 1, _sanityId: 'menu-category-signature' },
+    { id: 'espresso', label: 'Classic', type: 'drink', order: 2, _sanityId: 'menu-category-espresso' },
   ],
   items: [
     {
@@ -19,7 +19,6 @@ const live: PosMenu = {
       priceIce: 170, priceFixed: null, addonType: null, hiddenFromPos: false, applicableCategories: null,
     },
   ],
-  hiddenItemIds: ['cereal-cream-latte'],
   categoryOrder: ['signature', 'espresso'],
 }
 
@@ -34,21 +33,17 @@ describe('POSClient first paint', () => {
     // No drink comes from code any more: a saved one renamed (say, with a ⭐) can't bring an old copy back.
     expect(html).not.toContain('White Mocha Americano')
     expect(html).not.toContain('Cereal Cream Latte')
-    // Only the live tabs, not the built-in menu's six.
+    // Only the saved tabs, under their saved names; none comes from code.
+    expect(html).toContain('>Classic</button>')
     expect(html).not.toContain('Non-Coffee')
   })
 
-  it('shows the built-in menu when the live one could not be read, and says so', () => {
+  it('shows no menu and asks for a reload when the live menu could not be read', () => {
     const html = firstPaint(null)
-    expect(html).not.toContain('Cereal Cream Latte')
-    expect(html).toContain('Non-Coffee')
-    // Taken off the menu by the owner on Oct 20, 2026 (Signature is the tab on screen), and Espresso renamed Classic.
-    expect(html).not.toContain('Amber Cream Latte')
-    expect(html).toContain('>Classic</button>')
-    expect(html).not.toContain('>Espresso</button>')
-    // Its prices can be out of date, so the cashier must know it is the fallback.
-    expect(html).toContain('Showing the built-in menu')
-    expect(firstPaint(live)).not.toContain('Showing the built-in menu')
+    expect(html).toContain('Could not load the menu. Reload to try again.')
+    expect(html).not.toContain('>Signature</button>')
+    expect(html).not.toContain('Showing the built-in menu')
+    expect(firstPaint(live)).not.toContain('Could not load')
   })
 
   it('keeps all menu editing behind the manager PIN, on the live menu and the fallback alike', () => {
@@ -76,11 +71,12 @@ describe('POSClient first paint', () => {
     expect(html).toContain('>Lock</span>')
     expect(html).not.toContain('>Manager</span>')
     expect(html).toContain('title="Edit item"')
+    expect(html).toContain('title="Delete item"')
     expect(html).toContain('title="Manage menu"')
     expect(html).toContain('draggable="true"')
   })
 
-  it('keeps editing off on the built-in fallback even when it was left on: there is nothing saved to edit', () => {
+  it('keeps editing off on the fallback even when it was left on: there is nothing saved to edit', () => {
     const html = renderToStaticMarkup(<POSClient initialMenu={null} initialCardHolders={[]} initialMenuEditing />)
     expect(html).toContain('>Manager</span>')
     expect(html).not.toContain('>Lock</span>')

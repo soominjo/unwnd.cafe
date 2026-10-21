@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getWriteClient } from '@/sanity/lib/writeClient'
 import { requirePosAuth } from '@/lib/requirePosAuth'
 import { isValidMenuItemInput } from '@/lib/validateMenuItemInput'
@@ -56,6 +57,8 @@ export async function POST(request: NextRequest) {
       applicableCategories: applicableCategories ?? null,
       available: true,
     })
+    // The customer-facing menu follows the POS: its next visit shows the new item.
+    revalidatePath('/menu')
 
     return NextResponse.json({
       success: true,

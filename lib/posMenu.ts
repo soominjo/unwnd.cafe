@@ -15,9 +15,15 @@ export interface PosMenuItem {
   applicableCategories: string[] | null
 }
 
-/** The menu-settings document: built-in items hidden from the POS, and the dragged tab order. */
+/** A menu item as the shared reader returns it: the POS fields, plus what /menu shows. */
+export interface MenuItemDoc extends PosMenuItem {
+  description: string | null
+  image: { asset: { _ref: string } } | null
+  ingredients: string[] | null
+}
+
+/** The menu-settings document: the tab order set by dragging tabs on the POS. */
 export interface MenuSettings {
-  hiddenItemIds: string[]
   categoryOrder: string[]
 }
 
@@ -27,19 +33,27 @@ export interface PosMenu extends MenuSettings {
   items: PosMenuItem[]
 }
 
+/** The whole menu as the shared reader returns it, for /pos and /menu alike. */
+export interface MenuData extends MenuSettings {
+  categories: ResolvedCategory[]
+  items: MenuItemDoc[]
+}
+
 export const MENU_SETTINGS_ID = 'menu-settings'
 
 /**
- * How long the /pos page waits for Sanity before rendering the built-in menu
- * instead. The server reaches Sanity in well under a second when it is healthy.
+ * How long the /pos page waits for Sanity before showing its fallback instead.
+ * The server reaches Sanity in well under a second when it is healthy.
  */
 export const MENU_LOAD_TIMEOUT_MS = 3000
 
 const fresh = client.withConfig({ useCdn: false })
+const fetchOptions = (noStore: boolean) => (noStore ? { cache: 'no-store' as const } : {})
 
-export async function fetchPosMenuItems(): Promise<PosMenuItem[]> {
-  return fresh.fetch<PosMenuItem[]>(
-    `*[_type == "menuItem" && available != false] {
+/** Every available item, in the order it was added: the same order on /pos and /menu. */
+export async function fetchPosMenuItems({ noStore = true }: { noStore?: boolean } = {}): Promise<MenuItemDoc[]> {
+  return fresh.fetch<MenuItemDoc[]>(
+    `*[_type == "menuItem" && available != false] | order(_createdAt asc, _id asc) {
       _id,
       name,
       subtitle,
@@ -49,20 +63,37 @@ export async function fetchPosMenuItems(): Promise<PosMenuItem[]> {
       "priceFixed": price,
       addonType,
       hiddenFromPos,
-      applicableCategories
+      applicableCategories,
+      description,
+      image,
+      ingredients
     }`,
     {},
-    { cache: 'no-store' }
+    fetchOptions(noStore)
   )
 }
 
-export async function fetchMenuSettings(): Promise<MenuSettings> {
-  const doc = await fresh.fetch<{ hiddenItemIds?: string[]; categoryOrder?: string[] } | null>(
-    `*[_type == "menuSettings" && _id == $id][0]{ hiddenItemIds, categoryOrder }`,
+export async function fetchMenuSettings({ noStore = true }: { noStore?: boolean } = {}): Promise<MenuSettings> {
+  const doc = await fresh.fetch<{ categoryOrder?: string[] } | null>(
+    `*[_type == "menuSettings" && _id == $id][0]{ categoryOrder }`,
     { id: MENU_SETTINGS_ID },
-    { cache: 'no-store' }
+    fetchOptions(noStore)
   )
-  return { hiddenItemIds: doc?.hiddenItemIds ?? [], categoryOrder: doc?.categoryOrder ?? [] }
+  return { categoryOrder: doc?.categoryOrder ?? [] }
+}
+
+/**
+ * The menu, read from Sanity alone, for both the POS (`noStore: true`) and /menu (`noStore:
+ * false`, so that page stays static until a POS save revalidates it). Throws when Sanity can't
+ * be read.
+ */
+export async function readMenu({ noStore }: { noStore: boolean }): Promise<MenuData> {
+  const [categories, items, settings] = await Promise.all([
+    getResolvedCategories({ noStore }),
+    fetchPosMenuItems({ noStore }),
+    fetchMenuSettings({ noStore }),
+  ])
+  return { categories, items, ...settings }
 }
 
 function rejectAfter(ms: number): { promise: Promise<never>; cancel: () => void } {
@@ -76,18 +107,14 @@ function rejectAfter(ms: number): { promise: Promise<never>; cancel: () => void 
 /**
  * The live menu for the /pos page to render with, so its first paint already
  * shows the real tabs and items. Never throws: null when Sanity cannot be read
- * in time, and the POS falls back to its built-in menu.
+ * in time, and the POS shows its fallback.
  */
 export async function loadPosMenu(): Promise<PosMenu | null> {
   const timeout = rejectAfter(MENU_LOAD_TIMEOUT_MS)
   try {
-    const [categories, items, settings] = await Promise.race([
-      Promise.all([getResolvedCategories(), fetchPosMenuItems(), fetchMenuSettings()]),
-      timeout.promise,
-    ])
-    return { categories, items, ...settings }
+    return await Promise.race([readMenu({ noStore: true }), timeout.promise])
   } catch (error) {
-    console.error('POS menu could not be loaded; showing the built-in menu', error)
+    console.error('POS menu could not be loaded', error)
     return null
   } finally {
     timeout.cancel()

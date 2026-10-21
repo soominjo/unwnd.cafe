@@ -36,7 +36,7 @@ export const menuCategory = defineType({
       name: 'order',
       title: 'Display Order',
       type: 'number',
-      description: 'Lower numbers appear first in POS tabs. Built-in categories use 1–6.',
+      description: 'Lower numbers appear first among tabs that have no place in the order set by dragging tabs on the POS.',
       initialValue: 99,
       validation: (rule) => rule.required().min(0),
     }),

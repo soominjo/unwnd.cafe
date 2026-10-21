@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback, memo, Fragment, useEffect, type DragEvent, type ReactNode } from 'react'
 import Link from 'next/link'
-import { MENU } from './menuData'
 import { variantClass, groupOrderItems, addonLineId } from './utils'
 import type {
   MenuItem,
@@ -23,6 +22,8 @@ import OrderReviewModal from './OrderReviewModal'
 import ReceiptPreviewModal from './ReceiptPreviewModal'
 import ItemActionModal, { type ItemModalMode } from './ItemActionModal'
 import { canEditMenu } from './canEditMenu'
+import { withoutTab } from './categoryEdits'
+import { readSavedMenu, saveMenu } from './savedMenu'
 import CustomerNameField from './CustomerNameField'
 import { forgetMenuEditing } from './manager/managerUnlock'
 import { ClockIcon, LockIcon, StampCardIcon, UnlockIcon } from './sales/icons'
@@ -45,7 +46,7 @@ import type { OrderType, PaymentInput } from '@/lib/sales/payments'
 import { ADDON_CATEGORY_ID } from './constants'
 import { buildAddedItemsPrints, buildCheckoutPrints, type SalePrints } from '@/lib/printer/receiptFromSale'
 import type { PosMenu, PosMenuItem } from '@/lib/posMenu'
-import { LOYALTY_CARD_CHANGED, addOrderToTotals, cardState, isClassicDrinkLine, loyaltyKey, type CardHolderWithCard } from '@/lib/loyalty'
+import { LOYALTY_CARD_CHANGED, addOrderToTotals, cardState, isClassicDrinkLine, loyaltyCopy, loyaltyKey, type CardHolderWithCard } from '@/lib/loyalty'
 import { ORDER_CHANGED, ORDER_COMPLETED, ORDER_GONE } from '@/lib/sales/addItems'
 import type { OpenSaleProblem } from '@/lib/sales/loadOpenSale'
 import { resolveLoyaltyOrder, sameLoyaltyChoice } from './loyaltyOrder'
@@ -57,7 +58,7 @@ import { AddingBanner, OpenOrderNotice } from './AddingBanner'
 import SavedOrderLines from './SavedOrderLines'
 
 interface POSClientProps {
-  /** The live menu, read on the server for this page load; null when it could not be read (the built-in menu shows). */
+  /** The live menu, read on the server for this page load; null when it could not be read (the POS shows its fallback). */
   initialMenu: PosMenu | null
   /** Loyalty card holders, read on the server with the menu; null when they could not be read (no loyalty this load). */
   initialCardHolders: CardHolderWithCard[] | null
@@ -112,19 +113,19 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   // The menu as the server read it for this page load, then kept in step with edits made here.
   const [dynamicCategories, setDynamicCategories] = useState<DynamicCategory[]>(initialMenu?.categories ?? [])
   const [dynamicItems, setDynamicItems]         = useState<PosMenuItem[]>(initialMenu?.items ?? [])
-  // Built-in items hidden from the POS; nothing on this page changes the list.
-  const [hiddenBuiltInIds]                      = useState<string[]>(initialMenu?.hiddenItemIds ?? [])
   const [deletingItemId, setDeletingItemId]     = useState<string | null>(null)
   const [deleteError, setDeleteError]           = useState<string | null>(null)
   const [addItemCategory, setAddItemCategory]   = useState<string | null>(null)
   const [editingItem, setEditingItem]           = useState<{ item: MenuItem & { _sanityId: string }; categoryId: string } | null>(null)
   const [categoryOrder, setCategoryOrder]       = useState<string[]>(initialMenu?.categoryOrder ?? [])
+  // The live menu could not be read, and the last menu this tablet loaded is showing instead.
+  const [showingSavedMenu, setShowingSavedMenu] = useState(false)
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null)
   const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null)
   // Manager mode unlocks every menu edit: adding, editing and deleting items, the
   // category manager, and dragging tabs to reorder. It is turned on from the Manager page
   // (Menu → Edit the menu, after the manager PIN) and stays on, through reloads, until Lock.
-  // The built-in fallback menu has nothing saved to edit, so it never opens unlocked.
+  // With no live menu there is nothing saved to edit, so it never opens unlocked.
   const [managerUnlocked, setManagerUnlocked]   = useState(initialMenuEditing && initialMenu !== null)
   const menuEditable = canEditMenu(managerUnlocked, initialMenu)
 
@@ -138,6 +139,25 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     setDraggedCategoryId(null)
     setDragOverCategoryId(null)
   }, [])
+
+  // The live menu, with this session's edits, is kept on the tablet for a load that fails.
+  useEffect(() => {
+    if (initialMenu) saveMenu({ categories: dynamicCategories, items: dynamicItems, categoryOrder })
+  }, [initialMenu, dynamicCategories, dynamicItems, categoryOrder])
+
+  // A load that failed shows the last menu this tablet loaded, if it has one. Read after the
+  // first paint, which the server rendered with no menu.
+  useEffect(() => {
+    if (initialMenu) return
+    void Promise.resolve().then(() => {
+      const saved = readSavedMenu()
+      if (!saved) return
+      setDynamicCategories(saved.categories)
+      setDynamicItems(saved.items)
+      setCategoryOrder(saved.categoryOrder)
+      setShowingSavedMenu(true)
+    })
+  }, [initialMenu])
 
   // Who is on shift, for the count on the header's Time clock.
   useEffect(() => {
@@ -508,8 +528,8 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     } : i))
   }
 
-  // A menu item's edit (✎) and delete (×) buttons: only in manager mode, and only for
-  // items stored in Sanity — the built-in ones have no record to edit or delete.
+  // A menu item's edit (✎) and delete (×) buttons: only in manager mode. Every item is saved
+  // in Sanity, so every item has them.
   function editItemAction(item: MenuItem, categoryId: string): (() => void) | undefined {
     const sanityId = item._sanityId
     if (!menuEditable || !sanityId) return undefined
@@ -555,9 +575,17 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     setDynamicCategories((prev) => [...prev, cat].sort((a, b) => a.order - b.order))
   }
 
-  function handleCategoryDeleted(sanityId: string) {
-    setDynamicCategories((prev) => prev.filter((c) => c._sanityId !== sanityId))
-    setActiveCategoryId(null)
+  function handleCategoryRenamed(tab: DynamicCategory) {
+    setDynamicCategories((prev) => prev.map((c) => (c._sanityId === tab._sanityId ? { ...c, label: tab.label } : c)))
+  }
+
+  // The tab went with its items and its place in the tab order; an open tab moves to the first.
+  function handleCategoryDeleted(tab: DynamicCategory) {
+    const next = withoutTab({ categories: dynamicCategories, items: dynamicItems, categoryOrder, activeCategoryId }, tab.id)
+    setDynamicCategories(next.categories)
+    setDynamicItems(next.items)
+    setCategoryOrder(next.categoryOrder)
+    setActiveCategoryId(next.activeCategoryId)
   }
 
   async function persistCategoryOrder(order: string[]) {
@@ -589,32 +617,13 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     persistCategoryOrder(next)
   }
 
-  const mergedMenu = useMemo<MenuCategory[]>(() => {
-    if (dynamicCategories.length === 0) {
-      return MENU.map((cat) => ({
-        ...cat,
-        items: cat.items.filter((item) => !hiddenBuiltInIds.includes(item.id)),
-      }))
-    }
-    // Discard Sanity items that share a name with a hardcoded item but sit in a
-    // different category — stale duplicates saved under the wrong tab.
-    // A Sanity entry only replaces a hardcoded item when name AND category match.
-    const hardcodedCategoryByName = new Map<string, string>()
-    MENU.forEach((cat) => {
-      cat.items.forEach((item) => {
-        hardcodedCategoryByName.set(item.name.toLowerCase().trim(), cat.id)
-      })
-    })
-    const validDynamicItems = dynamicItems.filter((i) => {
-      const canonical = hardcodedCategoryByName.get(i.name.toLowerCase().trim())
-      return canonical === undefined || i.category === canonical
-    })
-    const validSanityNames = new Set(validDynamicItems.map((i) => i.name.toLowerCase().trim()))
-
-    return dynamicCategories.map((cat) => {
-      const hardcoded = (MENU.find((m) => m.id === cat.id)?.items ?? [])
-        .filter((item) => !hiddenBuiltInIds.includes(item.id))
-      const sanityItems: MenuItem[] = validDynamicItems
+  // The menu on screen: every tab and item as saved in Sanity, items in the order they were
+  // added (the server reads them that way, and a new one is appended). Nothing comes from code.
+  const mergedMenu = useMemo<MenuCategory[]>(() => (
+    dynamicCategories.map((cat) => ({
+      id: cat.id,
+      label: cat.label,
+      items: dynamicItems
         .filter((i) => i.category === cat.id)
         .map((i) => ({
           id: i._id,
@@ -627,13 +636,9 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
           addonType: i.addonType,
           hiddenFromPos: i.hiddenFromPos ?? false,
           applicableCategories: i.applicableCategories ?? null,
-        }))
-      const uniqueHardcoded = hardcoded.filter(
-        (item) => !validSanityNames.has(item.name.toLowerCase().trim())
-      )
-      return { id: cat.id, label: cat.label, items: [...uniqueHardcoded, ...sanityItems] }
-    })
-  }, [dynamicCategories, dynamicItems, hiddenBuiltInIds])
+        })),
+    }))
+  ), [dynamicCategories, dynamicItems])
 
   // Reflects any saved drag-and-drop reorder of the category tabs. Categories
   // not yet in categoryOrder (new ones) keep their mergedMenu relative order,
@@ -650,11 +655,16 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
 
   const category = sortedMenu.find((c) => c.id === activeCategoryId) ?? sortedMenu[0]
 
-  const categoriesForModal = useMemo<DynamicCategory[]>(() => (
-    dynamicCategories.length > 0
-      ? dynamicCategories
-      : MENU.map((m, i) => ({ id: m.id, label: m.label, type: (i < 3 ? 'drink' : 'food') as 'drink' | 'food', order: i + 1, isBuiltIn: true }))
-  ), [dynamicCategories])
+  const categoriesForModal = dynamicCategories
+  // The category manager lists tabs as the tab bar shows them, with each tab's item count.
+  const tabsInOrder = sortedMenu
+    .map((t) => dynamicCategories.find((c) => c.id === t.id))
+    .filter((c): c is DynamicCategory => c !== undefined)
+  const itemCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const item of dynamicItems) counts[item.category] = (counts[item.category] ?? 0) + 1
+    return counts
+  }, [dynamicItems])
 
   // Items filed under the "Add ons" category are the attachable add-ons shown
   // in the per-item modal — not orderable menu items in their own right.
@@ -692,6 +702,8 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
 
   // Adding to a saved order: its name can be typed or changed, with no card linked while adding;
   // an order on a loyalty card keeps the card holder's name and card, fixed.
+  // The loyalty hints name tabs as the menu does now (Espresso shows as Classic, and renames follow).
+  const loyaltyText = useMemo(() => loyaltyCopy((id) => dynamicCategories.find((c) => c.id === id)?.label), [dynamicCategories])
   const onCard = openOrder?.loyaltyMemberId != null
   const customerNameField = (
     <CustomerNameField
@@ -716,6 +728,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
       }}
       hasFreeDrinkLine={orderItems.some(isClassicDrinkLine)}
       freeActive={loyalty.freeLineId !== null}
+      copy={loyaltyText}
     />
   )
   const freeDrinkReady = !blocked.includes('free') && (loyaltyCard?.freeReady ?? 0) > 0
@@ -807,11 +820,13 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
         {/* Left: menu */}
         <div className="flex-1 flex flex-col overflow-hidden bg-background">
 
-          {/* The live menu could not be read for this page load. Say so: the built-in menu's prices can be out of date. */}
+          {/* The live menu could not be read for this page load: say so, with a way to try again. */}
           {!initialMenu && (
             <div role="status" className="flex items-center justify-between gap-3 px-6 py-2.5 bg-amber-50 border-b border-amber-200 shrink-0">
               <span className="text-xs text-amber-800 font-medium">
-                Could not load the live menu. Showing the built-in menu, whose prices may be out of date.
+                {showingSavedMenu
+                  ? 'Could not load the live menu. Showing the last menu this tablet loaded; prices may be out of date.'
+                  : 'Could not load the menu. Reload to try again.'}
               </span>
               <button
                 onClick={() => {
@@ -991,9 +1006,11 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
       {/* ── Manage menu modal ── */}
       {showManageMenu && (
         <ManageMenuModal
-          categories={categoriesForModal}
+          categories={tabsInOrder}
+          itemCounts={itemCounts}
           onClose={() => setShowManageMenu(false)}
           onCategoryAdded={handleCategoryAdded}
+          onCategoryRenamed={handleCategoryRenamed}
           onCategoryDeleted={handleCategoryDeleted}
         />
       )}

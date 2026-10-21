@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
+  REWARDS_NEED_ITEMS_GENERIC,
+  loyaltyCopy,
+  loyaltyPerksOf,
   LOYALTY_CARD_SIZE,
   stampsIn,
   isClassicDrinkLine,
@@ -260,5 +263,48 @@ describe('cardHolderNameProblem', () => {
     expect(cardHolderNameProblem(' J ')).toBe(tooShortOrLong)
     expect(cardHolderNameProblem('a'.repeat(61))).toBe(tooShortOrLong)
     expect(cardHolderNameProblem('Jo')).toBeNull()
+  })
+})
+
+const LABELS: Record<string, string> = {
+  signature: 'Signature', 'matcha-series': 'Matcha Series', meal: 'Meal',
+  espresso: 'Classic', 'non-coffee': 'Non-Coffee', waffle: 'Waffle', snack: 'Snack',
+}
+
+describe('loyalty copy', () => {
+  it('names the tabs as the menu calls them now', () => {
+    expect(loyaltyCopy((id) => LABELS[id])).toEqual({
+      noStampsYet: 'No stamps from this order yet: Signature, Matcha Series and Meal items earn 1, Classic, Non-Coffee, Waffle and Snack items ½.',
+      freeDrinkTap: 'Free drink ready: tap “Make free” on a Classic or Non-Coffee drink.',
+      freeDrinkAdd: 'Free drink ready: add a Classic or Non-Coffee drink to use it.',
+      tenNeedsItem: 'The 10% off is for one Classic, Non-Coffee, Waffle or Snack item. Ask the customer to add one to use it.',
+      rewardsNeedItems: 'Each loyalty reward needs its own item: a Classic or Non-Coffee drink for the free drink, and a Classic, Non-Coffee, Waffle or Snack item for the 10%.',
+    })
+  })
+
+  it('says "an" before a name that starts with a vowel', () => {
+    expect(loyaltyCopy((id) => ({ ...LABELS, espresso: 'Espresso' })[id]).freeDrinkAdd)
+      .toBe('Free drink ready: add an Espresso or Non-Coffee drink to use it.')
+  })
+
+  it('leaves out tabs no longer on the menu, and still reads as sentences when a rule has none left', () => {
+    const left = (id: string) => (['signature', 'meal', 'waffle', 'snack'].includes(id) ? LABELS[id] : undefined)
+    expect(loyaltyCopy(left)).toEqual({
+      noStampsYet: 'No stamps from this order yet: Signature and Meal items earn 1, Waffle and Snack items ½.',
+      freeDrinkTap: 'Free drink ready, but no tab on the menu takes it.',
+      freeDrinkAdd: 'Free drink ready, but no tab on the menu takes it.',
+      tenNeedsItem: 'The 10% off is for one Waffle or Snack item. Ask the customer to add one to use it.',
+      rewardsNeedItems: REWARDS_NEED_ITEMS_GENERIC,
+    })
+    expect(loyaltyCopy((id) => (id === 'waffle' ? 'Waffle' : undefined)).noStampsYet).toBe('No stamps from this order yet: Waffle items earn ½.')
+    expect(loyaltyCopy(() => undefined).noStampsYet).toBe('No stamps from this order yet.')
+    expect(loyaltyCopy(() => undefined).tenNeedsItem).toBe('The 10% off needs an item from a tab that takes it, and none is on the menu.')
+  })
+
+  it('says what a tab gives, for the warning before it is deleted', () => {
+    expect(loyaltyPerksOf('espresso')).toEqual({ stamps: true, freeDrink: true, tenOff: true })
+    expect(loyaltyPerksOf('waffle')).toEqual({ stamps: true, freeDrink: false, tenOff: true })
+    expect(loyaltyPerksOf('signature')).toEqual({ stamps: true, freeDrink: false, tenOff: false })
+    expect(loyaltyPerksOf('add-ons')).toEqual({ stamps: false, freeDrink: false, tenOff: false })
   })
 })
