@@ -65,7 +65,9 @@ export default function ItemSheet({ item, categoryLabel, temp, onTemp, onAdd, on
       {item && (
         <div className={photo ? 'sm:grid sm:grid-cols-[1.05fr_1fr]' : undefined}>
           {photo && (
-            <div className="relative aspect-[4/3] bg-photo sm:aspect-square">
+            // Square at every width: the photos are tall cup shots cropped square, and a wider box
+            // would cut off the lid and the base.
+            <div className="relative aspect-square bg-photo">
               <Image
                 src={photoSrc(photo)}
                 loader={photoLoader(photo)}
