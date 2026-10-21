@@ -1,6 +1,14 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import FadeUp from '@/components/FadeUp'
+import RatingPill from '@/components/reviews/RatingPill'
+import ReviewsSection from '@/components/reviews/ReviewsSection'
+import { loadGoogleReviews } from '@/lib/googleReviews'
+import { UNWND_SHOP } from '@/lib/printer/shopDetails'
+
+// The Google reviews come from Studio, so the page is rebuilt at most once a minute to pick up
+// a publish there.
+export const revalidate = 60
 
 // ─── Map embed ───────────────────────────────────────────────────────────────
 const MAP_EMBED_SRC = 'https://maps.google.com/maps?q=Unwnd+Cafe+Bacoor+Tuesday+St+Niog+I+Saint+Joseph+Village+Bacoor+Cavite&output=embed&z=17'
@@ -10,7 +18,9 @@ const HOURS = [
   { days: 'Friday – Sunday',   time: '5:00 pm – 12:00 am' },
 ]
 
-export default function HomePage() {
+export default async function HomePage() {
+  const reviews = await loadGoogleReviews()
+
   return (
     <main className="bg-background text-foreground">
 
@@ -29,6 +39,11 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-linear-to-b from-foreground/30 via-foreground/20 to-foreground/70 pointer-events-none" />
 
         <div className="relative z-10 px-8 pb-16 md:px-16 md:pb-24">
+          {reviews?.rating != null && (
+            <FadeUp delay={0} className="mb-5">
+              <RatingPill rating={reviews.rating} count={reviews.count} />
+            </FadeUp>
+          )}
           <FadeUp delay={0.1}>
             <h1
               className="font-logo text-cream lowercase leading-none tracking-tight"
@@ -150,6 +165,11 @@ export default function HomePage() {
         </div>
 
       </section>
+
+      {/* ════════════════════════════════════════════════
+          GOOGLE REVIEWS — only once the owner publishes some in Studio
+      ════════════════════════════════════════════════ */}
+      {reviews && <ReviewsSection reviews={reviews} reviewUrl={UNWND_SHOP.reviewUrl} />}
 
       {/* ════════════════════════════════════════════════
           CONTACT

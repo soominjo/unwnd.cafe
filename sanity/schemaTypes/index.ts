@@ -9,7 +9,8 @@ import { salePayment } from './salePayment'
 import { loyaltyMember } from './loyaltyMember'
 import { staffMember } from './staffMember'
 import { timeShift } from './timeShift'
+import { googleReviews } from './googleReviews'
 
 export const schema: { types: SchemaTypeDefinition[] } = {
-  types: [menuCategory, menuItem, menuSettings, saleItem, saleDiscount, salePayment, sale, loyaltyMember, staffMember, timeShift],
+  types: [menuCategory, menuItem, menuSettings, saleItem, saleDiscount, salePayment, sale, loyaltyMember, staffMember, timeShift, googleReviews],
 }
