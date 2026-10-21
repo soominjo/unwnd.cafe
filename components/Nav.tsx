@@ -20,6 +20,10 @@ const ALL_LINKS = [
 
 const EASE: [number, number, number, number] = [0.76, 0, 0.24, 1]
 
+// Vercel re-renders the home page (revalidated every minute) under the path "/index". The
+// server-rendered header has to count that as home too, or it is served solid over the hero.
+const isHomePath = (pathname: string) => pathname === '/' || pathname === '/index'
+
 const overlayVariants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { duration: 0.4, ease: EASE } },
@@ -52,7 +56,7 @@ export default function Nav() {
 
   // Intersection-based detection: stay transparent while hero is in view
   useEffect(() => {
-    if (pathname !== '/') {
+    if (!isHomePath(pathname)) {
       startTransition(() => setScrolled(false))
       return
     }
@@ -79,7 +83,7 @@ export default function Nav() {
 
   if (pathname.startsWith('/studio')) return null
 
-  const isHomePage = pathname === '/'
+  const isHomePage = isHomePath(pathname)
   // Transparent only on homepage before scrolling
   const isAtTop = isHomePage && !scrolled
 
