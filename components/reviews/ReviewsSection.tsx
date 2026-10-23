@@ -1,5 +1,6 @@
 import FadeUp from '@/components/FadeUp'
 import type { ShownReviews } from '@/lib/googleReviews'
+import ReviewsMarquee from './ReviewsMarquee'
 import Stars from './Stars'
 
 interface ReviewsSectionProps {
@@ -14,8 +15,8 @@ const reviewsOnGoogle = (count: number | null) =>
 const BUTTON =
   'inline-flex min-h-11.5 items-center justify-center gap-2 px-5.5 text-[11.5px] uppercase tracking-[0.2em] transition-colors duration-300'
 
-// "kind words.": the Google rating and the reviews the owner picked in Studio. Phones swipe
-// through the cards; wide screens see three across.
+// "kind words.": the Google rating and every review published in Studio, sliding by as a marquee
+// (ReviewsMarquee) that the guest can pause.
 export default function ReviewsSection({ reviews, reviewUrl }: ReviewsSectionProps) {
   const { rating, count, reviews: list } = reviews
 
@@ -53,40 +54,12 @@ export default function ReviewsSection({ reviews, reviewUrl }: ReviewsSectionPro
             </div>
             <p className="max-w-[36ch] text-[14.5px] font-light text-ink-2">
               What guests say after a night at <span className="font-logo">unwnd.</span>
-              {list.length > 1 && <span className="lg:hidden whitespace-nowrap text-xs"> Swipe for more →</span>}
             </p>
           </div>
         </FadeUp>
       </div>
 
-      {list.length > 0 && (
-        <ul
-          role="list"
-          className={`mt-7 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-8 pt-0.5 pb-2.5 scroll-px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-4 md:px-16 md:scroll-px-16 lg:grid lg:gap-5 lg:overflow-visible ${
-            // Four in one row rather than three and one left on its own.
-            list.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
-          }`}
-        >
-          {list.map((review) => (
-            <li key={review.key} className="shrink-0 basis-[84%] snap-start sm:basis-[44%] lg:basis-auto">
-              <figure className="m-0 flex h-full flex-col gap-3 rounded-[14px] border border-hair bg-paper px-5 pt-5.5 pb-4.5">
-                <Stars
-                  filled={review.stars}
-                  label={`${review.stars} out of 5 stars`}
-                  className="text-sm tracking-[0.08em] text-gold"
-                />
-                <blockquote className="m-0 font-serif text-[1.32rem] italic leading-tight">
-                  “{review.quote}”
-                </blockquote>
-                <figcaption className="mt-auto text-[12.5px] text-ink-2">
-                  {review.name}
-                  {review.month && ` · ${review.month}`}
-                </figcaption>
-              </figure>
-            </li>
-          ))}
-        </ul>
-      )}
+      {list.length > 0 && <ReviewsMarquee reviews={list} />}
 
       <div className="flex flex-wrap gap-2.5 px-8 pt-6.5 pb-12 md:px-16 md:pb-16">
         <a

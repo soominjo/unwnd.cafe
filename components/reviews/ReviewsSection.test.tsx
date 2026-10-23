@@ -61,14 +61,19 @@ describe('ReviewsSection', () => {
     expect(text(noReviews)).toContain('34 reviews on Google')
   })
 
-  it('lays four reviews in one row on wide screens, so none sits alone', () => {
-    const four = render({ ...data, reviews: [ana, ben, { ...ana, key: 'c' }, { ...ben, key: 'd' }] })
-    expect(four).toMatch(/<ul[^>]*class="[^"]*lg:grid-cols-4/)
-    expect(render(data)).toMatch(/<ul[^>]*class="[^"]*lg:grid-cols-3/)
+  it('shows every published review, not just the first few, each read out once', () => {
+    const twelve = Array.from({ length: 12 }, (_, i) => ({ ...ana, key: `r${i + 1}`, quote: `Review ${i + 1}` }))
+    const html = render({ ...data, reviews: twelve })
+    const heard = [...html.matchAll(/<li\b([^>]*)>([\s\S]*?)<\/li>/g)]
+      .filter(([, attrs]) => !attrs.includes('aria-hidden="true"'))
+      .map(([, , inner]) => /“(Review \d+)”/.exec(text(inner))?.[1])
+    expect(heard.sort()).toEqual([
+      'Review 1', 'Review 10', 'Review 11', 'Review 12', 'Review 2', 'Review 3',
+      'Review 4', 'Review 5', 'Review 6', 'Review 7', 'Review 8', 'Review 9',
+    ])
   })
 
-  it('offers swiping only when there is more than one review', () => {
-    expect(text(render({ ...data, reviews: [ana] }))).not.toContain('Swipe for more')
-    expect(text(render(data))).toContain('Swipe for more')
+  it('moves the reviews, with a Pause button', () => {
+    expect(render(data)).toContain('aria-label="Pause the reviews"')
   })
 })

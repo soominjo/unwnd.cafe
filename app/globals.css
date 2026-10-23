@@ -61,3 +61,9 @@ body {
 @keyframes tray-pulse {
   40% { transform: scale(1.03); }
 }
+
+/* A row of the reviews marquee holds its loop twice, so sliding it left by half its width brings
+   it back to where it started (components/reviews/ReviewsMarquee.tsx). */
+@keyframes marquee {
+  to { transform: translateX(-50%); }
+}
