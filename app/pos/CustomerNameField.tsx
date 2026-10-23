@@ -95,7 +95,7 @@ export default function CustomerNameField(props: CustomerNameFieldProps) {
           disabled={disabled}
           maxLength={MAX_NOTES_LENGTH}
           onChange={e => onChange(e.target.value)}
-          className={`w-full border border-foreground/13 rounded-sm px-2.5 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/40 disabled:opacity-30 bg-transparent ${value.length > 70 ? 'pr-7' : ''}`}
+          className={`w-full border border-foreground/13 rounded-sm px-2.5 py-2 text-sm max-sm:text-base text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/40 disabled:opacity-30 bg-transparent ${value.length > 70 ? 'pr-7' : ''}`}
         />
         {value.length > 70 && (
           <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums pointer-events-none ${value.length >= 95 ? 'text-red-400' : 'text-foreground/30'}`}>

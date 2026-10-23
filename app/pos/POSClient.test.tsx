@@ -57,6 +57,46 @@ describe('POSClient first paint', () => {
     }
   })
 
+  // The grid scrolls inside a fixed-height area and its cards hide what spills over, so rows
+  // left to fit that area were squeezed on a phone (and on a tablet in a long tab): prices cut off.
+  it('sizes the menu rows to their cards, so no card is cut short', () => {
+    expect(firstPaint(live)).toMatch(/<div class="[^"]*grid-cols-2[^"]*auto-rows-max[^"]*"/)
+  })
+
+  // The floating "View Order" pill (below 1024px) sits over the bottom of the grid: the last row's
+  // prices were hidden behind it, however far the cashier scrolled.
+  it('keeps room under the last row for the View Order pill, below 1024px only', () => {
+    const grid = firstPaint(live).match(/<div class="([^"]*grid-cols-2[^"]*)"/)?.[1] ?? ''
+    expect(grid.split(' ')).toEqual(expect.arrayContaining(['pb-28', 'lg:pb-5']))
+  })
+
+  it('breaks a long item name rather than run it under the edit and delete buttons', () => {
+    const html = renderToStaticMarkup(<POSClient initialMenu={live} initialCardHolders={[]} initialMenuEditing />)
+    expect(html).toMatch(/<p class="[^"]*wrap-break-word[^"]*">Ube Cream Latte<\/p>/)
+  })
+
+  it('keeps the header to one line on a phone: the wordmark and Order never wrap', () => {
+    const html = firstPaint(live)
+    expect(html).toMatch(/<a class="[^"]*whitespace-nowrap[^"]*" href="\/">unwnd\. pos<\/a>/)
+    expect(html).toMatch(/<button class="[^"]*whitespace-nowrap[^"]*">Order<span class="max-sm:hidden"> ›<\/span><\/button>/)
+  })
+
+  // The words fit beside the wordmark only once the Order button gives way to the order panel (lg);
+  // below that they wrapped ("TIME / CLOCK") on a tablet held upright.
+  it('names Time clock, Manager and Loyalty in words from 1024px, as icons below', () => {
+    const html = firstPaint(live)
+    for (const label of ['Time clock', 'Manager', 'Loyalty']) expect(html).toContain(`<span class="hidden lg:inline">${label}</span>`)
+    expect(html).toContain('Sales<span class="hidden lg:inline"> ↗</span>')
+  })
+
+  it('leaves room beside an item’s name for the edit and delete buttons while the menu is edited', () => {
+    const html = renderToStaticMarkup(<POSClient initialMenu={live} initialCardHolders={[]} initialMenuEditing />)
+    // On a phone the two buttons stack, so the name keeps more of a narrow card's width.
+    expect(html).toMatch(/<div class="[^"]*pr-18 max-sm:pr-10[^"]*"><p[^>]*>Ube Cream Latte<\/p>/)
+    expect(html).toMatch(/<div class="[^"]*max-sm:flex-col[^"]*"><button title="Edit item"/)
+    expect(firstPaint(live)).not.toMatch(/<div class="[^"]*pr-18[^"]*"><p[^>]*>Ube Cream Latte<\/p>/)
+  })
+
   it('offers Manager with or without the live menu: its page holds the staff hours too', () => {
     for (const html of [firstPaint(live), firstPaint(null)]) {
       expect(html).toContain('>Manager</span>')

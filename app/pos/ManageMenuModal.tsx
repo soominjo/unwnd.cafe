@@ -98,7 +98,7 @@ export function CategoryRow({ tab, itemCount, mode, busy, onRename, onDelete, on
           maxLength={MAX_CATEGORY_LABEL}
           aria-label={`New name for ${tab.label}`}
           autoFocus
-          className="min-w-0 flex-1 border border-foreground/20 rounded-sm px-2 py-1 text-xs text-foreground focus:outline-none focus:border-foreground/50 bg-transparent"
+          className="min-w-0 flex-1 border border-foreground/20 rounded-sm px-2 py-1 text-xs max-sm:text-base text-foreground focus:outline-none focus:border-foreground/50 bg-transparent"
         />
         <button type="submit" disabled={busy || name.trim() === ''} className={`${ROW_BUTTON} border-foreground/30 text-foreground hover:border-foreground/60`}>Save</button>
         <button type="button" onClick={onCancel} disabled={busy} className={`${ROW_BUTTON} border-foreground/15 text-foreground/55 hover:text-foreground`}>Cancel</button>
@@ -261,7 +261,7 @@ function CategoriesTab({
             onChange={(e) => setLabel(e.target.value)}
             placeholder="e.g. Frappe"
             maxLength={MAX_CATEGORY_LABEL}
-            className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
+            className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm max-sm:text-base text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
           />
           {previewId && (
             <p className="text-[10px] text-foreground/35 mt-1">ID: <span className="font-mono">{previewId}</span></p>

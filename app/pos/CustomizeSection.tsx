@@ -69,7 +69,7 @@ export default function CustomizeSection({ note, onSave }: CustomizeSectionProps
         onChange={e => setCustom(e.target.value)}
         onBlur={commitCustom}
         onKeyDown={e => { if (e.key === 'Enter') commitCustom() }}
-        className="w-full border border-foreground/15 rounded-sm px-3 py-3 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-amber-400"
+        className="w-full border border-foreground/15 rounded-sm px-3 py-3 text-sm max-sm:text-base text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-amber-400"
       />
     </div>
   )

@@ -19,7 +19,7 @@ interface StaffAdminProps {
   onRemove: (row: BoardRow) => Promise<string | null>
 }
 
-const PIN_INPUT = 'h-10 w-28 rounded-md border border-foreground/25 bg-white px-2.5 text-sm tracking-[0.3em] tabular-nums'
+const PIN_INPUT = 'h-10 w-28 rounded-md border border-foreground/25 bg-white px-2.5 text-sm max-sm:text-base tracking-[0.3em] tabular-nums'
 const digitsOnly = (value: string) => value.replace(/\D/g, '').slice(0, STAFF_PIN_LENGTH)
 
 // Staff on the Manager page: who is on the time clock, and their PINs. A PIN can't be read back,
@@ -170,7 +170,7 @@ export default function StaffAdmin({ board, onAdd, onChangePin, onRemove }: Staf
               setName(e.target.value)
               setError(null)
             }}
-            className="h-10 min-w-0 flex-1 basis-52 rounded-md border border-foreground/25 bg-white px-2.5 text-sm"
+            className="h-10 min-w-0 flex-1 basis-52 rounded-md border border-foreground/25 bg-white px-2.5 text-sm max-sm:text-base"
           />
           <label htmlFor="add-staff-pin" className="sr-only">Their PIN, 4 digits</label>
           <input

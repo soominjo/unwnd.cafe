@@ -734,22 +734,24 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   const freeDrinkReady = !blocked.includes('free') && (loyaltyCard?.freeReady ?? 0) > 0
 
   return (
-    <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
+    // h-dvh: the height a phone actually shows, so Safari's toolbar never covers the bottom of the menu.
+    <div className="h-dvh bg-background text-foreground flex flex-col overflow-hidden select-none">
 
       {/* ── Header ── */}
-      <header className="bg-foreground flex items-center justify-between px-6 py-4 shrink-0">
-        <Link href="/" className="font-logo text-2xl lowercase tracking-tight text-cream hover:text-cream/70 transition-colors">unwnd. pos</Link>
+      {/* One line from a 360px phone up: tighter spacing below 640px, and a smaller wordmark below 380px. */}
+      <header className="bg-foreground flex items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-4 shrink-0">
+        <Link href="/" className="font-logo text-xl max-[380px]:text-lg sm:text-2xl whitespace-nowrap lowercase tracking-tight text-cream hover:text-cream/70 transition-colors">unwnd. pos</Link>
         {/* Tighter on phones, where Time clock, Manager and Loyalty show as icons beside the Order button. */}
-        <div className="flex items-center gap-1 sm:gap-4">
+        <div className="flex items-center sm:gap-4">
           {/* Time clock and Manager open their own pages, asking first when an order is on screen. */}
           <button
             onClick={() => openPosPage('/pos/timeclock', itemCount)}
             aria-label={onShiftCount > 0 ? `Time clock, ${onShiftCount} on shift` : 'Time clock'}
             title="Time clock: clock in or out with your PIN"
-            className="h-9 px-2 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
+            className="h-9 px-1.5 min-[390px]:px-2.5 sm:px-3 flex items-center gap-1 sm:gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
           >
             <ClockIcon width={14} height={14} />
-            <span className="hidden sm:inline">Time clock</span>
+            <span className="hidden lg:inline">Time clock</span>
             {onShiftCount > 0 && (
               <span className="min-w-4.5 h-4.5 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold tracking-normal flex items-center justify-center">
                 {onShiftCount}
@@ -763,20 +765,20 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
               aria-pressed="true"
               aria-label="Lock menu editing"
               title="Lock menu editing"
-              className="h-9 px-2 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] transition-colors bg-amber-400 text-foreground font-bold hover:bg-amber-300"
+              className="h-9 px-1.5 min-[390px]:px-2.5 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] transition-colors bg-amber-400 text-foreground font-bold hover:bg-amber-300"
             >
               <UnlockIcon width={14} height={14} />
-              <span className="hidden sm:inline">Lock</span>
+              <span className="hidden lg:inline">Lock</span>
             </button>
           ) : (
             <button
               onClick={() => openPosPage('/pos/manager', itemCount)}
               aria-label="Manager"
               title="Manager: hours, staff and PINs, menu editing"
-              className="h-9 px-2 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
+              className="h-9 px-1.5 min-[390px]:px-2.5 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
             >
               <LockIcon width={14} height={14} />
-              <span className="hidden sm:inline">Manager</span>
+              <span className="hidden lg:inline">Manager</span>
             </button>
           )}
           {/* Loyalty cards: see a card's stamps, and give or remove a card (no PIN). */}
@@ -784,20 +786,20 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
             onClick={() => setShowLoyalty(true)}
             aria-label="Loyalty cards"
             title="Loyalty cards: give a card, see stamps"
-            className="h-9 px-2 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
+            className="h-9 px-1.5 min-[390px]:px-2.5 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
           >
             <StampCardIcon width={14} height={14} />
-            <span className="hidden sm:inline">Loyalty</span>
+            <span className="hidden lg:inline">Loyalty</span>
           </button>
           {/* Sales at every width: a sale no longer opens it by itself. */}
           <a
             href="/pos/sales"
-            className="h-9 px-2 sm:px-3 flex items-center rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
+            className="h-9 px-1.5 min-[390px]:px-2.5 sm:px-3 flex items-center rounded-full text-xs uppercase tracking-[0.08em] sm:tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
           >
-            Sales<span className="hidden sm:inline">&nbsp;↗</span>
+            Sales<span className="hidden lg:inline">&nbsp;↗</span>
           </a>
           <button
-            className="lg:hidden flex items-center gap-2 sm:gap-3 text-sm text-cream/85 hover:text-cream transition-colors py-2 px-3 sm:px-4 border border-cream/30 rounded-sm"
+            className="lg:hidden ml-1 flex items-center gap-1 sm:gap-3 whitespace-nowrap text-sm text-cream/85 hover:text-cream transition-colors py-2 px-2 sm:px-4 border border-cream/30 rounded-sm"
             onClick={() => setMobileDrawer(true)}
           >
             {itemCount > 0 && (
@@ -805,7 +807,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
                 {itemCount}
               </span>
             )}
-            Order ›
+            Order<span className="max-sm:hidden"> ›</span>
           </button>
         </div>
       </header>
@@ -840,7 +842,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
           )}
 
           {/* Category tabs — draggable to reorder in manager mode */}
-          <div className="flex gap-2 px-6 py-4 border-b border-foreground/10 shrink-0 overflow-x-auto scrollbar-none">
+          <div className="flex gap-2 px-4 py-3 sm:px-6 sm:py-4 border-b border-foreground/10 shrink-0 overflow-x-auto scrollbar-none">
             {sortedMenu.map((cat) => (
               <button
                 key={cat.id}
@@ -884,8 +886,10 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
             </div>
           )}
 
-          {/* Product grid */}
-          <div className="flex-1 overflow-y-auto p-5 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 content-start">
+          {/* Product grid. auto-rows-max: rows as tall as their cards. Left to fit this fixed-height
+              area, a long tab's rows were squeezed and the cards cut off their prices. pb-28 below
+              1024px: room under the last row for the floating View Order pill. */}
+          <div className="flex-1 overflow-y-auto px-4 pt-4 pb-28 sm:px-5 sm:pt-5 lg:pb-5 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 auto-rows-max gap-3 content-start">
             {category?.id === ADDON_CATEGORY_ID ? (
               (category?.items ?? []).map(item => (
                 <AddonTile
@@ -956,7 +960,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
         <div className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-30">
           <button
             onClick={() => setMobileDrawer(true)}
-            className="bg-foreground text-cream text-sm uppercase tracking-widest font-bold px-8 py-4 rounded-full shadow-2xl flex items-center gap-3"
+            className="bg-foreground text-cream text-sm uppercase tracking-[0.12em] sm:tracking-widest whitespace-nowrap font-bold px-6 sm:px-8 py-4 rounded-full shadow-2xl flex items-center gap-3"
           >
             <span className="bg-cream text-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
               {itemCount}
@@ -1119,8 +1123,8 @@ const ItemCard = memo(function ItemCard({
       <CardActions onEdit={onEdit} onDelete={onDelete} isBusy={isDeleting} />
 
       {/* Name + subtitle */}
-      <div className="flex-1 px-5 pt-5 pb-5">
-        <p className="font-bold text-[1.05rem] leading-snug tracking-tight text-foreground">
+      <div className={`flex-1 px-5 pt-5 pb-5 ${onEdit || onDelete ? 'pr-18 max-sm:pr-10' : ''}`}>
+        <p className="font-bold text-[1.05rem] leading-snug tracking-tight wrap-break-word text-foreground">
           {item.name}
         </p>
         {item.subtitle && (
@@ -1201,8 +1205,8 @@ const AddonTile = memo(function AddonTile({
     <div className={`relative bg-white text-foreground flex flex-col overflow-hidden border border-foreground/10 hover:border-foreground/22 hover:shadow-md transition-all duration-200 rounded-xl ${isDeleting ? 'opacity-40 pointer-events-none' : ''} ${isHidden ? 'opacity-55' : ''}`}>
       <CardActions onEdit={onEdit} onDelete={onDelete} isBusy={isDeleting} />
 
-      <div className="flex-1 px-5 pt-5 pb-5">
-        <p className="font-bold text-[1.05rem] leading-snug tracking-tight text-foreground">{item.name}</p>
+      <div className={`flex-1 px-5 pt-5 pb-5 ${onEdit || onDelete ? 'pr-18 max-sm:pr-10' : ''}`}>
+        <p className="font-bold text-[1.05rem] leading-snug tracking-tight wrap-break-word text-foreground">{item.name}</p>
         {item.subtitle && (
           <p className="text-[11px] text-foreground/55 mt-2.5 leading-relaxed line-clamp-2">{item.subtitle}</p>
         )}
@@ -1316,11 +1320,12 @@ function OrderPanel({
                     <div
                       data-item-row
                       onClick={() => onSelectItem(item.lineId)}
-                      className={`flex items-start gap-3 py-2.5 border-b border-foreground/[0.07] cursor-pointer transition-all ${
+                      // On a phone the buttons take a row of their own under the name, at full finger size.
+                      className={`flex flex-wrap sm:flex-nowrap items-start gap-x-3 gap-y-2 py-2.5 border-b border-foreground/[0.07] cursor-pointer transition-all ${
                         isSelected ? 'border-l-2 border-l-emerald-500 pl-1 -ml-1' : ''
                       }`}
                     >
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 max-sm:basis-full">
                         <p className="text-[0.9rem] font-semibold leading-tight text-foreground">{item.name}</p>
                         {item.variant && (
                           <p className={`text-[10px] uppercase tracking-wider mt-0.5 font-bold ${variantClass(item.variant)}`}>
@@ -1352,11 +1357,11 @@ function OrderPanel({
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0 max-sm:w-full">
                         <button
                           onClick={e => { e.stopPropagation(); onOpenItemModal(item.lineId, 'addons') }}
                           title="Add-ons and customizations (extra shot, less sweet, etc.)"
-                          className={`w-8 h-8 flex items-center justify-center text-base font-bold rounded-full border transition-colors ${
+                          className={`w-8 h-8 max-sm:w-10 max-sm:h-10 flex items-center justify-center text-base font-bold rounded-full border transition-colors ${
                             childAddons.length > 0 || item.note
                               ? 'bg-sky-500 text-white border-sky-500 shadow-sm'
                               : 'bg-sky-50 border-sky-300 text-sky-600 hover:bg-sky-100 hover:border-sky-500'
@@ -1367,7 +1372,7 @@ function OrderPanel({
                         <button
                           onClick={e => { e.stopPropagation(); onOpenItemModal(item.lineId, 'discount') }}
                           title="Discount (PWD/Senior 20%, Google Review 10% — one unit)"
-                          className={`w-8 h-8 flex items-center justify-center text-[10px] font-bold rounded-full border transition-colors ${
+                          className={`w-8 h-8 max-sm:w-10 max-sm:h-10 flex items-center justify-center text-[10px] font-bold rounded-full border transition-colors ${
                             hasDiscount
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                               : 'bg-emerald-50 border-emerald-300 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-500'
@@ -1375,10 +1380,10 @@ function OrderPanel({
                         >
                           %
                         </button>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 max-sm:ml-auto">
                           <button
                             onClick={e => { e.stopPropagation(); onAdjust(item.lineId, -1) }}
-                            className="w-8 h-8 flex items-center justify-center text-foreground/50 hover:text-foreground border border-foreground/12 hover:border-foreground/30 rounded-sm text-base transition-colors"
+                            className="w-8 h-8 max-sm:w-10 max-sm:h-10 flex items-center justify-center text-foreground/50 hover:text-foreground border border-foreground/12 hover:border-foreground/30 rounded-sm text-base transition-colors"
                           >
                             −
                           </button>
@@ -1386,7 +1391,7 @@ function OrderPanel({
                           <button
                             data-qty-plus
                             onClick={e => { e.stopPropagation(); onAdjust(item.lineId, 1) }}
-                            className="w-8 h-8 flex items-center justify-center text-foreground/50 hover:text-foreground border border-foreground/12 hover:border-foreground/30 rounded-sm text-base transition-colors"
+                            className="w-8 h-8 max-sm:w-10 max-sm:h-10 flex items-center justify-center text-foreground/50 hover:text-foreground border border-foreground/12 hover:border-foreground/30 rounded-sm text-base transition-colors"
                           >
                             +
                           </button>
@@ -1408,14 +1413,14 @@ function OrderPanel({
                         <div className="ml-auto flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => onAdjust(addon.lineId, -1)}
-                            className="w-7 h-7 flex items-center justify-center text-foreground/35 hover:text-foreground border border-foreground/10 hover:border-foreground/25 rounded-sm text-sm transition-colors"
+                            className="w-7 h-7 max-sm:w-9 max-sm:h-9 flex items-center justify-center text-foreground/35 hover:text-foreground border border-foreground/10 hover:border-foreground/25 rounded-sm text-sm transition-colors"
                           >
                             −
                           </button>
                           <span className="w-5 text-center text-xs tabular-nums text-foreground/55">{addon.qty}</span>
                           <button
                             onClick={() => onAdjust(addon.lineId, 1)}
-                            className="w-7 h-7 flex items-center justify-center text-foreground/35 hover:text-foreground border border-foreground/10 hover:border-foreground/25 rounded-sm text-sm transition-colors"
+                            className="w-7 h-7 max-sm:w-9 max-sm:h-9 flex items-center justify-center text-foreground/35 hover:text-foreground border border-foreground/10 hover:border-foreground/25 rounded-sm text-sm transition-colors"
                           >
                             +
                           </button>
@@ -1436,9 +1441,9 @@ function OrderPanel({
                     <p className="text-[0.85rem] font-medium text-foreground/60">+ {addon.name}</p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <button onClick={() => onAdjust(addon.lineId, -1)} className="w-8 h-8 flex items-center justify-center text-foreground/50 hover:text-foreground border border-foreground/12 hover:border-foreground/30 rounded-sm text-base transition-colors">−</button>
+                    <button onClick={() => onAdjust(addon.lineId, -1)} className="w-8 h-8 max-sm:w-10 max-sm:h-10 flex items-center justify-center text-foreground/50 hover:text-foreground border border-foreground/12 hover:border-foreground/30 rounded-sm text-base transition-colors">−</button>
                     <span className="w-6 text-center text-sm tabular-nums font-bold text-foreground">{addon.qty}</span>
-                    <button onClick={() => onAdjust(addon.lineId, 1)} className="w-8 h-8 flex items-center justify-center text-foreground/50 hover:text-foreground border border-foreground/12 hover:border-foreground/30 rounded-sm text-base transition-colors">+</button>
+                    <button onClick={() => onAdjust(addon.lineId, 1)} className="w-8 h-8 max-sm:w-10 max-sm:h-10 flex items-center justify-center text-foreground/50 hover:text-foreground border border-foreground/12 hover:border-foreground/30 rounded-sm text-base transition-colors">+</button>
                   </div>
                   <span className="text-sm tabular-nums w-16 text-right font-bold text-foreground">₱{(addon.price * addon.qty).toFixed(0)}</span>
                 </div>

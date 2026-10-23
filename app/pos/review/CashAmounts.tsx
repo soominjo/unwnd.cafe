@@ -48,7 +48,7 @@ export default function CashAmounts({ due, pay, onChange, disabled = false }: Ca
             const text = e.target.value
             onChange({ ...pay, receivedText: text, received: pesosTyped(text) ?? (text.trim() ? 0 : null) })
           }}
-          className="min-w-0 flex-1 bg-transparent py-2 text-[15px] tabular-nums text-foreground placeholder:text-foreground/35 focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent py-2 text-[15px] max-sm:text-base tabular-nums text-foreground placeholder:text-foreground/35 focus:outline-none"
         />
       </label>
     </div>

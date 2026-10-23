@@ -15,7 +15,7 @@ interface ShiftEditorProps {
 }
 
 const FIELD = 'grid gap-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-foreground/60'
-const INPUT = 'h-10 rounded-md border border-foreground/25 bg-white px-2.5 text-sm normal-case tracking-normal text-foreground'
+const INPUT = 'h-10 rounded-md border border-foreground/25 bg-white px-2.5 text-sm max-sm:text-base normal-case tracking-normal text-foreground'
 
 // A manager's fix to one shift, in Manila time: most often the real time out of a forgotten
 // clock-out. The server runs the same checks, and also looks for overlaps with their other shifts.

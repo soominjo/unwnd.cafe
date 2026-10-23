@@ -340,7 +340,7 @@ function ReviewNameField({ name, onChange }: { name: string; onChange: (value: s
           value={name}
           maxLength={MAX_NOTES_LENGTH}
           onChange={e => onChange(e.target.value)}
-          className="min-w-0 w-56 rounded-full border border-foreground/25 px-4 py-1.5 text-sm text-foreground focus:outline-none focus:border-foreground/50"
+          className="min-w-0 w-56 rounded-full border border-foreground/25 px-4 py-1.5 text-sm max-sm:text-base text-foreground focus:outline-none focus:border-foreground/50"
         />
         <button type="submit" className="h-9 px-3 rounded-full bg-foreground text-cream text-xs font-bold uppercase tracking-widest shrink-0">
           Done

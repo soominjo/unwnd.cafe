@@ -191,7 +191,7 @@ function OrderName({ order, onRename }: { order: Sale; onRename: OrderCardProps[
           // Held while the name saves: text typed meanwhile would be dropped unseen.
           readOnly={saving}
           onChange={e => setDraft(e.target.value)}
-          className="h-9 w-44 rounded-md border border-foreground/25 bg-white px-2.5 text-sm text-foreground read-only:bg-foreground/5 focus:border-foreground/50 focus:outline-none"
+          className="h-9 w-44 rounded-md border border-foreground/25 bg-white px-2.5 text-sm max-sm:text-base text-foreground read-only:bg-foreground/5 focus:border-foreground/50 focus:outline-none"
         />
         <ActionButton tone="primary" type="submit" busy={saving}>Save</ActionButton>
         <ActionButton tone="ghost" onClick={cancel} disabled={saving}>Cancel</ActionButton>

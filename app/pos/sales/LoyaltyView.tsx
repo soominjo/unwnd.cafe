@@ -206,7 +206,7 @@ export function GiveCardForm({ draft, onDraftChange, holders, busy = false, erro
           autoComplete="off"
           aria-invalid={problem !== null}
           aria-describedby="give-card-hint"
-          className="min-w-0 flex-1 basis-56 rounded-md border border-foreground/20 bg-white px-3 py-2.5 text-sm text-foreground placeholder:text-foreground/30 focus:border-foreground/50 focus:outline-none"
+          className="min-w-0 flex-1 basis-56 rounded-md border border-foreground/20 bg-white px-3 py-2.5 text-sm max-sm:text-base text-foreground placeholder:text-foreground/30 focus:border-foreground/50 focus:outline-none"
         />
         <ActionButton tone="primary" type="submit" busy={busy} disabled={!ready}>Give card</ActionButton>
       </div>

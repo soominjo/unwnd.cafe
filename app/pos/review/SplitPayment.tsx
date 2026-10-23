@@ -53,7 +53,7 @@ export default function SplitPayment({ due, split, onChange, disabled = false }:
             value={split.firstText}
             disabled={disabled}
             onChange={e => onChange({ ...split, firstText: e.target.value, firstAmount: pesosTyped(e.target.value) })}
-            className="min-w-0 flex-1 bg-transparent py-2 text-[15px] tabular-nums text-foreground placeholder:text-foreground/35 focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent py-2 text-[15px] max-sm:text-base tabular-nums text-foreground placeholder:text-foreground/35 focus:outline-none"
           />
         </label>
       </div>

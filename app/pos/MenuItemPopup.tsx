@@ -123,7 +123,7 @@ export default function MenuItemPopup({
               placeholder="e.g. Brown Sugar Oat Latte"
               maxLength={80}
               autoFocus
-              className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
+              className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm max-sm:text-base text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
             />
           </div>
 
@@ -135,7 +135,7 @@ export default function MenuItemPopup({
               onChange={(e) => setSubtitle(e.target.value)}
               placeholder="Ingredients or short description"
               maxLength={200}
-              className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
+              className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm max-sm:text-base text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
             />
           </div>
 
@@ -150,7 +150,7 @@ export default function MenuItemPopup({
                   onChange={(e) => setPriceHot(e.target.value)}
                   placeholder="—"
                   min={0}
-                  className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
+                  className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm max-sm:text-base text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
                 />
               </div>
               <div>
@@ -162,7 +162,7 @@ export default function MenuItemPopup({
                   onChange={(e) => setPriceIce(e.target.value)}
                   placeholder="—"
                   min={0}
-                  className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
+                  className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm max-sm:text-base text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
                 />
               </div>
             </div>
@@ -176,7 +176,7 @@ export default function MenuItemPopup({
                 onChange={(e) => setPriceFixed(e.target.value)}
                 placeholder="e.g. 150"
                 min={0}
-                className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
+                className="w-full border border-foreground/20 rounded-sm px-3 py-2 text-sm max-sm:text-base text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-foreground/50 bg-transparent"
               />
             </div>
           )}

@@ -81,7 +81,7 @@ function DateField({ label, value, min, max, onChange }: DateFieldProps) {
         min={min}
         max={max}
         onChange={(e) => onChange(e.target.value)}
-        className="h-9 rounded-md border border-foreground/20 bg-white px-3 text-sm font-medium normal-case tracking-normal text-foreground focus:border-foreground/50 focus:outline-none"
+        className="h-9 rounded-md border border-foreground/20 bg-white px-3 text-sm max-sm:text-base font-medium normal-case tracking-normal text-foreground focus:border-foreground/50 focus:outline-none"
       />
     </label>
   )

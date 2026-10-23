@@ -13,9 +13,9 @@ interface PageHeaderProps {
 // wordmark, and ← POS back to the till with a full page load.
 export function PageHeader({ title, note, children }: PageHeaderProps) {
   return (
-    <header className="flex items-center justify-between gap-3 bg-foreground px-6 py-4">
+    <header className="flex items-center justify-between gap-3 bg-foreground px-4 py-3 sm:px-6 sm:py-4">
       <div className="flex min-w-0 items-baseline gap-3">
-        <span className="font-logo text-2xl lowercase tracking-tight text-cream">{title}</span>
+        <span className="font-logo text-xl sm:text-2xl whitespace-nowrap lowercase tracking-tight text-cream">{title}</span>
         {note && <span className="hidden text-[10px] uppercase tracking-[0.25em] text-cream/40 sm:inline" suppressHydrationWarning>{note}</span>}
       </div>
       <div className="flex shrink-0 items-center gap-3">
