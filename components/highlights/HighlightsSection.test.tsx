@@ -8,16 +8,16 @@ const render = () => renderToStaticMarkup(<HighlightsSection />)
 const decode = (s: string) => s.replaceAll('&amp;', '&').replaceAll('&quot;', '"')
 
 describe('HighlightsSection', () => {
-  // The owner's second order, 2026-10-23: outside 1, entrance 1, cashier, inside 2, inside 1, outside 3, outside 2.
-  it('runs in the owner’s order: patio, driveway, order window, tables, mirror, big umbrella, garden', () => {
+  // The owner's third order, 2026-10-23: outside 1, entrance 1, cashier, inside 1, inside 2, outside 2, outside 3.
+  it('runs in the owner’s order: patio, driveway, order window, mirror, tables, garden, big umbrella', () => {
     expect(HIGHLIGHT_PHOTOS.map((photo) => photo.src)).toEqual([
       '/highlights/patio.jpg',
       '/highlights/entrance.jpg',
       '/highlights/order-window.jpg',
-      '/highlights/tables.jpg',
       '/highlights/mirror.jpg',
-      '/highlights/umbrella.jpg',
+      '/highlights/tables.jpg',
       '/highlights/garden.jpg',
+      '/highlights/umbrella.jpg',
     ])
   })
 
