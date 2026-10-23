@@ -24,6 +24,17 @@ describe('the home page', () => {
     expect(html).toContain('href="https://maps.app.goo.gl/ubi9AsWpWSRoBMVj9?g_st=ic"')
   })
 
+  it('shows the café’s photos between About and the reviews', async () => {
+    loadGoogleReviews.mockResolvedValue({ rating: 5, count: 34, reviews: [] })
+    const html = await renderHome()
+    const about = html.indexOf('id="about"')
+    const highlights = html.indexOf('id="highlights"')
+    const reviews = html.indexOf('id="reviews"')
+    expect(about).toBeGreaterThan(-1)
+    expect(highlights).toBeGreaterThan(about)
+    expect(reviews).toBeGreaterThan(highlights)
+  })
+
   it('puts the reviews between About and Find us', async () => {
     loadGoogleReviews.mockResolvedValue({ rating: 5, count: 34, reviews: [] })
     const html = await renderHome()

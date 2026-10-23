@@ -3,6 +3,7 @@ import Image from 'next/image'
 import FadeUp from '@/components/FadeUp'
 import RatingPill from '@/components/reviews/RatingPill'
 import ReviewsSection from '@/components/reviews/ReviewsSection'
+import HighlightsSection from '@/components/highlights/HighlightsSection'
 import { loadGoogleReviews } from '@/lib/googleReviews'
 import { UNWND_SHOP } from '@/lib/printer/shopDetails'
 
@@ -168,6 +169,11 @@ export default async function HomePage() {
         </div>
 
       </section>
+
+      {/* ════════════════════════════════════════════════
+          HIGHLIGHTS — the café in seven photos, sliding along
+      ════════════════════════════════════════════════ */}
+      <HighlightsSection />
 
       {/* ════════════════════════════════════════════════
           GOOGLE REVIEWS — only once the owner publishes some in Studio
