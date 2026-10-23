@@ -21,8 +21,7 @@ export default async function MenuPage() {
       {/* ── Header ── */}
       <header className="bg-foreground text-cream pt-[calc(var(--nav-h)+1.875rem)] pb-8.5">
         <div className={WRAP}>
-          {/* Cormorant, not font-logo: the brand display font would add 76 KB to this page. */}
-          <p className="font-serif text-[17px] text-cream/65 mb-2.5">unwnd. café</p>
+          <p className="font-logo text-[17px] text-cream/65 mb-2.5">unwnd. café</p>
           <h1
             className="font-serif font-medium lowercase leading-[0.9] tracking-[-0.02em]"
             style={{ fontSize: 'clamp(3rem, 15vw, 6rem)' }}

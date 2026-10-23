@@ -27,4 +27,10 @@ describe('Nav', () => {
     nav.pathname = '/menu'
     expect(headerClass()).toContain('bg-background')
   })
+
+  it('names the café in the brand font', () => {
+    const logo = renderToStaticMarkup(<Nav />).match(/<a [^>]*>unwnd<\/a>/)?.[0] ?? ''
+    expect(logo).toContain('href="/"')
+    expect(logo).toContain('font-logo')
+  })
 })

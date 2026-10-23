@@ -145,7 +145,7 @@ export default function Nav() {
             <Link
               href="/"
               onClick={() => setMenuOpen(false)}
-              className={`${underline} font-serif text-3xl lowercase tracking-tighter transition-colors ${textBase}`}
+              className={`${underline} font-logo text-3xl lowercase tracking-tight transition-colors ${textBase}`}
             >
               unwnd
             </Link>
@@ -230,7 +230,7 @@ export default function Nav() {
               exit={{ opacity: 0 }}
               className="flex items-center justify-between border-t border-cream/10 pt-6"
             >
-              <span className="text-cream/40 text-[10px] uppercase tracking-[0.25em]">
+              <span className="font-logo text-lg lowercase text-cream/60">
                 unwnd. café
               </span>
               <button

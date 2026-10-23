@@ -38,11 +38,11 @@
   --font-display: var(--font-poppins);
 }
 
-/* The brand wordmark: Noto Serif Display at its condensed width and a heavy weight,
-   the web stand-in for the Bodoni MT Condensed Bold on the cups (see lib/fonts.ts). */
+/* The brand wordmark, on every "unwnd" of the site and the POS: Noto Serif Display condensed and
+   ExtraBold, the web stand-in for the Bodoni MT Condensed Bold on the cups. The font file is that
+   one cut, so no font-stretch is needed (see lib/fonts.ts). */
 @utility font-logo {
   font-family: var(--font-noto-serif-display), 'Times New Roman', serif;
-  font-stretch: 62.5%;
   font-weight: 800;
 }
 

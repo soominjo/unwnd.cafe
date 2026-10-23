@@ -111,7 +111,9 @@ export default async function HomePage() {
               </FadeUp>
               <FadeUp delay={0.2}>
                 <p className="text-base font-light leading-relaxed text-foreground/70 mb-5">
-                  unwnd. is your neighborhood spot to breathe, belong, and sip something worth
+                  {/* {' '}, not a plain space: Next's compiler can drop a space after a tag in a
+                      multi-line text with a dash in it (it did in "Unwind With Us" below). */}
+                  <span className="font-logo">unwnd.</span>{' '}is your neighborhood spot to breathe, belong, and sip something worth
                   slowing down for. Rooted in Bacoor, we exist for the moments between the rush —
                   where great coffee, good music, and the right company make everything feel a
                   little lighter.
@@ -146,7 +148,7 @@ export default async function HomePage() {
               Unwind With Us
             </span>
             <p className="font-light leading-relaxed">
-              unwnd. is exactly what it sounds like — a place to slow down, exhale, and just
+              <span className="font-logo">unwnd.</span>{' '}is exactly what it sounds like — a place to slow down, exhale, and just
               be. Whether you&apos;re catching up with friends, spending time with family, or
               simply enjoying your own company, this is your space to decompress. Good vibes,
               good music, and no rush.

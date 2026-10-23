@@ -65,6 +65,10 @@ describe('MenuCard', () => {
     expect(text(html)).toContain('unwnd.')
   })
 
+  it('sets that quiet tile in the brand font', () => {
+    expect(card({ withPhoto: true })).toMatch(/<span aria-hidden="true" class="[^"]*font-logo[^"]*">unwnd\.<\/span>/)
+  })
+
   it('loads the photo up front only when the card is in the first row on screen', () => {
     const first = card({ item: { ...latte, image: PHOTO }, withPhoto: true, preload: true })
     expect(first).toContain('<link rel="preload" as="image"')

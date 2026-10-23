@@ -35,6 +35,14 @@ describe('the home page', () => {
     expect(contact).toBeGreaterThan(reviews)
   })
 
+  it('sets the café name in the brand font where the About copy says it', async () => {
+    loadGoogleReviews.mockResolvedValue(null)
+    // React marks where the {' '} after the name meets the sentence with an empty comment.
+    const html = (await renderHome()).replaceAll('<!-- -->', '')
+    expect(html).toContain('<span class="font-logo">unwnd.</span> is your neighborhood spot')
+    expect(html).toContain('<span class="font-logo">unwnd.</span> is exactly what it sounds like')
+  })
+
   it('shows neither when nothing is published', async () => {
     loadGoogleReviews.mockResolvedValue(null)
     const html = await renderHome()

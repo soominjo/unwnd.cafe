@@ -52,17 +52,11 @@ describe('the /menu page', () => {
     expect(html).not.toContain('aria-label="Menu categories"')
   })
 
-  // Lighthouse (mobile) measured it: the brand display font alone costs the menu 76 KB and
-  // about 3 performance points, enough to make it slower than the menu it replaced.
-  it('stays off the brand display font, which would slow the menu', async () => {
-    readMenu.mockResolvedValue(menu([
-      item({ _id: 'a', name: 'Americano', priceFixed: 120, image: { asset: { _ref: 'image-abc123-800x600-jpg' } } }),
-      item({ _id: 'b', name: 'Cafe Latte', priceFixed: 140 }),
-    ]))
+  // Every page loads the brand font anyway (9 KB since lib/fonts.ts holds only the wordmark's letters).
+  it('names the café in the brand font', async () => {
+    readMenu.mockResolvedValue(menu([item({ _id: 'a', name: 'Americano', priceFixed: 120 })]))
     const html = await renderPage()
-    expect(text(html)).toContain('unwnd. café')
-    expect(html).toContain('aria-label="See Cafe Latte"')
-    expect(html).not.toContain('font-logo')
+    expect(html).toMatch(/<p class="[^"]*font-logo[^"]*">unwnd\. café<\/p>/)
   })
 
   it('passes the blurred previews through to the photos', async () => {

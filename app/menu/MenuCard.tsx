@@ -46,8 +46,7 @@ export default function MenuCard({ item, withPhoto, temp, justAdded, onTemp, onA
               className="object-cover motion-safe:transition-transform motion-safe:duration-500 motion-safe:group-hover:scale-[1.04]"
             />
           ) : (
-            // In Cormorant like the rest of /menu: the brand display font would cost the page 76 KB.
-            <span aria-hidden="true" className="absolute inset-0 grid place-items-center font-serif text-[1.75rem] text-foreground/20">
+            <span aria-hidden="true" className="absolute inset-0 grid place-items-center font-logo text-[1.75rem] text-foreground/20">
               unwnd.
             </span>
           )}

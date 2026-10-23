@@ -44,7 +44,7 @@ export default function Footer() {
     <footer className="border-t border-border bg-background px-8 md:px-16 py-12">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-10">
         {/* Brand */}
-        <Link href="/" className="font-serif text-2xl lowercase tracking-tighter shrink-0">
+        <Link href="/" className="font-logo text-2xl lowercase tracking-tight shrink-0">
           unwnd.
         </Link>
 
@@ -79,7 +79,7 @@ export default function Footer() {
       </div>
 
       <p className="mt-10 text-[10px] text-muted tracking-[0.15em]">
-        © {new Date().getFullYear()} unwnd. café — prices for estimation only, order at counter.
+        © {new Date().getFullYear()} <span className="font-logo tracking-normal">unwnd.</span>{' '}café — prices for estimation only, order at counter.
       </p>
     </footer>
   )
