@@ -175,6 +175,13 @@ describe('buildCheckoutReceiptBlocks', () => {
     expect(blocks).toContainEqual({ kind: 'total', label: 'Change', value: 83 })
   })
 
+  // The owner's hours from 2026-10-23, on two lines: both ranges on one line don't fit 32 columns.
+  it('prints the opening hours under the address: Tue-Thu from 5 PM, Fri-Sun from 4 PM', () => {
+    const meta = buildCheckoutReceiptBlocks(payload, savedAt).flatMap((b) => (b.kind === 'meta' ? [b.text] : []))
+    expect(meta).toEqual(['Tuesday St., St. Joseph Village', 'Niog, Bacoor, Cavite', 'Tue-Thu 5:00 PM - 12:00 AM', 'Fri-Sun 4:00 PM - 12:00 AM', '@unwnd.cafe'])
+    for (const line of meta) expect(line.length).toBeLessThanOrEqual(32)
+  })
+
   it('counts the attached shot out of Items but the standalone oat milk in', () => {
     // 2 lattes + 1 croissant + 1 oat milk; the shot rides on a latte.
     expect(buildCheckoutReceiptBlocks(payload, savedAt)).toContainEqual({ kind: 'detail', label: 'Items', value: '4' })

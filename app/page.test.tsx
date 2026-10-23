@@ -43,6 +43,16 @@ describe('the home page', () => {
     expect(html).toContain('<span class="font-logo">unwnd.</span> is exactly what it sounds like')
   })
 
+  // The owner's hours from 2026-10-23: closed Mondays, open from 4 pm on weekends.
+  it('lists the opening hours: closed Monday, Tuesday to Thursday from 5 pm, Friday to Sunday from 4 pm', async () => {
+    loadGoogleReviews.mockResolvedValue(null)
+    const text = (await renderHome()).replace(/<[^>]+>/g, '')
+    const rows = ['MondayClosed', 'Tuesday – Thursday5:00 pm – 12:00 am', 'Friday – Sunday4:00 pm – 12:00 am']
+    const at = rows.map((row) => text.indexOf(row))
+    expect(at.every((i) => i > -1)).toBe(true)
+    expect(at).toEqual([...at].sort((a, b) => a - b))
+  })
+
   it('shows neither when nothing is published', async () => {
     loadGoogleReviews.mockResolvedValue(null)
     const html = await renderHome()

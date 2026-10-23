@@ -14,8 +14,9 @@ export const revalidate = 60
 const MAP_EMBED_SRC = 'https://maps.google.com/maps?q=Unwnd+Cafe+Bacoor+Tuesday+St+Niog+I+Saint+Joseph+Village+Bacoor+Cavite&output=embed&z=17'
 
 const HOURS = [
-  { days: 'Monday – Thursday', time: '5:00 pm – 11:00 pm' },
-  { days: 'Friday – Sunday',   time: '5:00 pm – 12:00 am' },
+  { days: 'Monday',             time: 'Closed' },
+  { days: 'Tuesday – Thursday', time: '5:00 pm – 12:00 am' },
+  { days: 'Friday – Sunday',    time: '4:00 pm – 12:00 am' },
 ]
 
 export default async function HomePage() {

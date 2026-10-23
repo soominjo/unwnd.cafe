@@ -8,7 +8,8 @@ export interface ShopDetails {
   name: string
   /** Street address, pre-split into lines that fit a 32-column receipt. */
   addressLines: readonly string[]
-  hours: string
+  /** Opening hours, pre-split into lines that fit a 32-column receipt. */
+  hoursLines: readonly string[]
   instagram: string
   /** Google Maps review link, printed as a scannable QR code. */
   reviewUrl: string
@@ -17,7 +18,8 @@ export interface ShopDetails {
 export const UNWND_SHOP: ShopDetails = {
   name: 'unwnd. cafe',
   addressLines: ['Tuesday St., St. Joseph Village', 'Niog, Bacoor, Cavite'],
-  hours: 'Open 5:00 PM - 12:00 AM',
+  // The owner's hours from 2026-10-23; closed Mondays.
+  hoursLines: ['Tue-Thu 5:00 PM - 12:00 AM', 'Fri-Sun 4:00 PM - 12:00 AM'],
   instagram: '@unwnd.cafe',
   reviewUrl: 'https://maps.app.goo.gl/ubi9AsWpWSRoBMVj9?g_st=ic',
 }

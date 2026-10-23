@@ -126,7 +126,7 @@ function headerBlocks(shop: ShopDetails, audience: ReceiptAudience, addedTo?: Da
     // The logo carries the brand; the shop name only prints if the bitmap can't be rendered.
     { kind: 'logo', fallbackText: shop.name },
     ...shop.addressLines.map((text): ReceiptBlock => ({ kind: 'meta', text })),
-    { kind: 'meta', text: shop.hours },
+    ...shop.hoursLines.map((text): ReceiptBlock => ({ kind: 'meta', text })),
     { kind: 'rule', style: 'double' },
   ]
 }
