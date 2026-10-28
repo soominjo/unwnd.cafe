@@ -214,7 +214,7 @@ function LinkedCard(props: CustomerNameFieldProps & { linked: CardHolderWithCard
           {freeUsable && (
             <span className="text-[11px] font-semibold text-emerald-700">
               {freeActive
-                ? 'Free drink applied.'
+                ? 'Free drink applied: it earns no stamp.'
                 : hasFreeDrinkLine
                   ? copy.freeDrinkTap
                   : copy.freeDrinkAdd}

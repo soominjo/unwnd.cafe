@@ -115,6 +115,11 @@ describe('CustomerNameField', () => {
     expect(field({ value: 'Ana', linked: full, hasFreeDrinkLine: true })).toContain('tap “Make free”')
   })
 
+  it('says the free drink earns no stamp once it is applied', () => {
+    const full = holder('f', 'Ana', 9, 11, 1)
+    expect(field({ value: 'Ana', linked: full, hasFreeDrinkLine: true, freeActive: true })).toContain('Free drink applied: it earns no stamp.')
+  })
+
   it('stays a plain name field when the card holders could not be loaded, and says so', () => {
     const html = field({ value: 'Kylene', holders: null })
     expect(html).not.toContain('Kylene · No.')

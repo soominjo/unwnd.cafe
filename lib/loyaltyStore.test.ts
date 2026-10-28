@@ -62,6 +62,20 @@ describe('fetchCardHolders, the stamp rules by date', () => {
   })
 })
 
+describe('fetchCardHolders, the free drink', () => {
+  it('asks for each linked sale’s discount rows, and counts no stamp for the drink made free', async () => {
+    const sales = [{
+      _createdAt: '2026-10-29T10:00:00Z', loyaltyMemberId: 'ben', loyaltyRewards: ['free'],
+      items: [{ lineId: 'f', qty: 1, categoryId: 'espresso' }, { lineId: 'g', qty: 1, categoryId: 'espresso' }],
+      discounts: [{ lineId: 'f', name: 'Loyalty free drink (Cafe Latte)' }],
+    }]
+    read.mockImplementation(async (query: string) => (query.includes('"loyaltyMember"') ? members : sales))
+    expect((await fetchCardHolders()).find(h => h._id === 'ben')?.card).toEqual({ earned: 0.5, usedTen: 0, usedFree: 1 })
+    const salesQuery = read.mock.calls.map(call => call[0] as string).find(query => query.includes('"sale"'))
+    expect(salesQuery).toContain('discounts')
+  })
+})
+
 describe('fetchCardTotals', () => {
   it('counts one card holder’s sales, or gives null when there is no such card holder', async () => {
     read.mockResolvedValueOnce({ exists: true, sales: linkedSales.slice(0, 2) })

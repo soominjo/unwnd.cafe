@@ -222,6 +222,15 @@ describe('POST /api/sales/[id]/items on a loyalty card holder’s order', () => 
     expect(store.doc('sale-152')).toMatchObject({ loyaltyRewards: ['ten', 'free'], subtotal: 550, total: 438 })
   })
 
+  it('counts no stamp for the free drink, so an added drink can’t earn itself free', async () => {
+    // Ten and a half stamps, this order's first part included: the Americano's half would be the eleventh.
+    fetchCardTotals.mockResolvedValue({ earned: 10.5, usedTen: 1, usedFree: 0 })
+    const res = await add('sale-152', { rev: revOf('sale-152'), items: [americanoNew], discounts: [free], loyaltyRewards: ['free'] })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'loyalty-card-changed', error: 'This card has no free drink ready.' })
+    expect(store.doc('sale-152')!.loyaltyRewards).toEqual(['ten'])
+  })
+
   it('refuses a reward the order already used, one with no new classic drink to go on, and one on an order with no card', async () => {
     fetchCardTotals.mockResolvedValue({ earned: 11, usedTen: 1, usedFree: 0 })
     const rev = revOf('sale-152')

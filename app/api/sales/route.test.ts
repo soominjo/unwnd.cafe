@@ -60,6 +60,20 @@ describe('POST /api/sales with a loyalty card', () => {
     expect((await post(sale({ ...waffleSale, loyaltyRewards: ['free'] }))).status).toBe(400)
   })
 
+  it('counts no stamp for the free drink, so a drink can’t earn itself free', async () => {
+    // Ten and a half stamps: this Cafe Latte's half would be the eleventh, but it is the free drink.
+    fetchCardTotals.mockResolvedValue({ earned: 10.5, usedTen: 0, usedFree: 0 })
+    const freeRow = { lineId: latte.lineId, name: 'Loyalty free drink (Cafe Latte)', amount: 110 }
+    const freeSale = { discounts: [freeRow], loyaltyMemberId: 'kylene', loyaltyRewards: ['free'] }
+    const own = await post(sale({ ...freeSale, items: [latte], subtotal: 110, total: 0, paymentAmount: 0 }))
+    expect(own.status).toBe(409)
+    expect(await own.json()).toMatchObject({ code: 'loyalty-card-changed', error: 'This card has no free drink ready.' })
+    expect(create).not.toHaveBeenCalled()
+    // A second Cafe Latte is paid: its half fills the card, so the first can be free.
+    const two = await post(sale({ ...freeSale, items: [{ ...latte, qty: 2 }], subtotal: 220, total: 110, paymentAmount: 110 }))
+    expect(two.status).toBe(200)
+  })
+
   it('refuses a malformed card link: a draft id, or a reward given twice', async () => {
     expect((await post(sale({ loyaltyMemberId: 'drafts.kylene' }))).status).toBe(400)
     expect((await post(sale({ loyaltyMemberId: 'kylene', loyaltyRewards: ['ten', 'ten'] }))).status).toBe(400)

@@ -72,12 +72,16 @@ function stampsPerItem(categoryId: string, orderedAt: string | null | undefined)
   return (before ? STAMPS_PER_ITEM_BEFORE : STAMPS_PER_ITEM).get(categoryId) ?? 0
 }
 
-/** The stamps an order's lines earn; a line added to it later counts from when it was added. */
-export function stampsIn(lines: readonly StampLine[], orderedAt?: string | null): number {
-  return lines.reduce(
-    (n, l) => n + (isAddonLine(l) || !l.categoryId ? 0 : stampsPerItem(l.categoryId, l.addedAt ?? orderedAt) * l.qty),
-    0,
-  )
+/**
+ * The stamps an order's lines earn; a line added to it later counts from when it was added.
+ * The free drink earns none: one unit of its line is left out.
+ */
+export function stampsIn(lines: readonly StampLine[], orderedAt?: string | null, freeLineId?: string | null): number {
+  return lines.reduce((n, l) => {
+    if (isAddonLine(l) || !l.categoryId) return n
+    const paidUnits = l.lineId === freeLineId ? Math.max(0, l.qty - 1) : l.qty
+    return n + stampsPerItem(l.categoryId, l.addedAt ?? orderedAt) * paidUnits
+  }, 0)
 }
 
 export function isClassicDrinkLine(line: StampLine): boolean {
@@ -182,13 +186,20 @@ export function cardState(totals: CardTotals): LoyaltyCard {
   }
 }
 
-export function cardTotals(
-  sales: readonly { _createdAt?: string | null; items?: readonly StampLine[] | null; loyaltyRewards?: readonly string[] | null }[],
-): CardTotals {
-  return sales.reduce<CardTotals>(
-    (t, sale) => addOrderToTotals(t, stampsIn(sale.items ?? [], sale._createdAt), sale.loyaltyRewards ?? []),
-    { earned: 0, usedTen: 0, usedFree: 0 },
-  )
+/** A linked sale, as far as its card's totals go. */
+interface CardSale {
+  _createdAt?: string | null
+  items?: readonly StampLine[] | null
+  /** Its free drink's row names the line that earned no stamp. */
+  discounts?: readonly SavedDiscountRow[] | null
+  loyaltyRewards?: readonly string[] | null
+}
+
+export function cardTotals(sales: readonly CardSale[]): CardTotals {
+  return sales.reduce<CardTotals>((t, sale) => {
+    const stamps = stampsIn(sale.items ?? [], sale._createdAt, freeDrinkLineOf(sale.discounts ?? []))
+    return addOrderToTotals(t, stamps, sale.loyaltyRewards ?? [])
+  }, { earned: 0, usedTen: 0, usedFree: 0 })
 }
 
 export function addOrderToTotals(totals: CardTotals, stamps: number, rewards: readonly string[]): CardTotals {
@@ -315,6 +326,17 @@ const SAVED_REWARD_ROWS: readonly (readonly [prefix: string, reward: LoyaltyRewa
 /** The loyalty reward a saved discount row stands for, read from its name; null for any other row. */
 export function rewardOfSavedDiscount(name: string): LoyaltyReward | null {
   return SAVED_REWARD_ROWS.find(([prefix]) => name.startsWith(prefix))?.[1] ?? null
+}
+
+/** A saved or posted discount row, as far as the loyalty rules read it. A row edited in Studio can lack either part. */
+export interface SavedDiscountRow {
+  lineId?: string | null
+  name?: string | null
+}
+
+/** The line an order's free drink went on, read from its discount rows; null when it has none. */
+export function freeDrinkLineOf(rows: readonly SavedDiscountRow[]): string | null {
+  return rows.find(row => rewardOfSavedDiscount(row.name ?? '') === 'free')?.lineId ?? null
 }
 
 /** Why a reward on this order can't be used (its stamps count straight away), or null when they all can. */

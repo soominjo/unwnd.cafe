@@ -9,6 +9,7 @@ import {
   classicUnitsIn,
   cardState,
   cardTotals,
+  freeDrinkLineOf,
   addOrderToTotals,
   loyaltyKey,
   matchCardHolders,
@@ -59,6 +60,19 @@ describe('stampsIn', () => {
   it('counts a missing or unreadable date by the new rules, and a line with no added date by its sale’s', () => {
     for (const date of [undefined, null, '', 'not a date']) expect(stampsIn([line('waffle', 2)], date)).toBe(1)
     expect(stampsIn([line('espresso', 1, { lineId: 'e', addedAt: null })], BEFORE)).toBe(0)
+  })
+
+  it('counts no stamp for the free drink: one unit of its line is left out', () => {
+    const latte = line('espresso', 1, { lineId: 'latte' })
+    expect(stampsIn([line('signature', 1), latte], AFTER, latte.lineId)).toBe(1)
+    // Two on the free drink's line: the one still paid earns its half.
+    const twoLattes = line('espresso', 2, { lineId: 'latte' })
+    expect(stampsIn([twoLattes], AFTER, twoLattes.lineId)).toBe(0.5)
+  })
+
+  it('takes nothing off for a free drink whose line was edited down to no units in Studio', () => {
+    const none = line('espresso', 0, { lineId: 'latte' })
+    expect(stampsIn([line('signature', 1), none], AFTER, none.lineId)).toBe(1)
   })
 
   it('counts no add-ons or lines without a category', () => {
@@ -129,14 +143,35 @@ describe('cardState', () => {
 
 describe('cardTotals', () => {
   it('adds up stamps, each sale by the rules of its date, and the rewards each linked sale used', () => {
+    const freeLatte = line('espresso', 1, { lineId: 'free' })
     const sales = [
       { _createdAt: BEFORE, items: [line('signature', 4), line('espresso', 2)], loyaltyRewards: [] },
       { _createdAt: AFTER, items: [line('matcha-series', 3), line('espresso', 1)], loyaltyRewards: ['ten'] },
-      { _createdAt: AFTER, items: [line('espresso', 1)], loyaltyRewards: ['free'] },
+      {
+        _createdAt: AFTER,
+        items: [freeLatte],
+        discounts: [{ lineId: freeLatte.lineId, name: 'Loyalty free drink (Cafe Latte)' }],
+        loyaltyRewards: ['free'],
+      },
       { _createdAt: AFTER, items: [line('meal', 1)] },
     ]
-    // 4 (the Espressos before Oct 5 earn nothing) + 3½ + ½ + 1.
-    expect(cardTotals(sales)).toEqual({ earned: 9, usedTen: 1, usedFree: 1 })
+    // 4 (the Espressos before Oct 5 earn nothing) + 3½ + 0 (the free drink earns none) + 1.
+    expect(cardTotals(sales)).toEqual({ earned: 8.5, usedTen: 1, usedFree: 1 })
+  })
+})
+
+describe('freeDrinkLineOf', () => {
+  it('reads the line the free drink went on from an order’s discount rows', () => {
+    expect(freeDrinkLineOf([
+      { lineId: 'fries', name: 'Loyalty -10% (Fries)' },
+      { lineId: 'latte', name: 'Loyalty free drink (Cafe Latte)' },
+    ])).toBe('latte')
+    expect(freeDrinkLineOf([{ lineId: 'latte', name: 'PWD Drink -20% (Cafe Latte)' }])).toBeNull()
+    expect(freeDrinkLineOf([])).toBeNull()
+  })
+
+  it('passes over a row with no name, as one edited by hand in Studio could be', () => {
+    expect(freeDrinkLineOf([{ lineId: 'x', name: null }, { lineId: 'latte', name: 'Loyalty free drink (Cafe Latte)' }])).toBe('latte')
   })
 })
 

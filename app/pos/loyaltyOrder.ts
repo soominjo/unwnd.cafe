@@ -26,11 +26,14 @@ export interface LoyaltyOrderInput {
 
 export interface LoyaltyOrder {
   holder: CardHolderWithCard | null
+  /** The stamps this order adds to the card: the free drink earns none. */
   orderStamps: number
   /** The linked card with this order's stamps counted: a reward can be used on the order that earns it. */
   card: LoyaltyCard | null
   /** The picked rewards that still apply: still ready, and their drink still in the order. */
   applied: LoyaltyChoice
+  /** The classic drinks the free drink can go on: the card has it ready without that drink's own stamp. */
+  freeLines: OrderItem[]
   /** The lines the 10% can go on (Espresso, Non-Coffee, Waffle, Snack): each has a unit that is not the free drink. */
   tenLines: OrderItem[]
   /** The rewards the sale records as used. */
@@ -41,18 +44,20 @@ export interface LoyaltyOrder {
 // the applied ones, so a reward that stops applying has to be tapped again to come back.
 export function resolveLoyaltyOrder({ holders, linkedHolderId, customerName, items, picked, blocked = [] }: LoyaltyOrderInput): LoyaltyOrder {
   const holder = holders?.find(h => h._id === linkedHolderId && loyaltyKey(h.name) === loyaltyKey(customerName)) ?? null
-  const orderStamps = stampsIn(items)
+  // The free drink earns no stamp, so it has to be ready without the stamp of the drink it goes on.
+  const freeLines = holder && !blocked.includes('free')
+    ? items.filter(i => isClassicDrinkLine(i) && cardState(addOrderToTotals(holder.card, stampsIn(items, null, i.lineId), [])).freeReady > 0)
+    : []
+  const freeLineId = freeLines.some(i => i.lineId === picked.freeLineId) ? picked.freeLineId : null
+  const orderStamps = stampsIn(items, null, freeLineId)
   const card = holder ? cardState(addOrderToTotals(holder.card, orderStamps, [])) : null
-  const freeLineId = !blocked.includes('free') && (card?.freeReady ?? 0) > 0 && items.some(i => i.lineId === picked.freeLineId && isClassicDrinkLine(i))
-    ? picked.freeLineId
-    : null
   // The free drink goes first: the 10% needs a unit of its drink still to pay.
   const tenLines = items.filter(i => isTenOffLine(i) && i.qty > (i.lineId === freeLineId ? 1 : 0))
   const tenLineId = !blocked.includes('ten') && (card?.tenReady ?? 0) > 0 && tenLines.some(i => i.lineId === picked.tenLineId)
     ? picked.tenLineId
     : null
   const rewards: LoyaltyReward[] = [...(tenLineId ? ['ten' as const] : []), ...(freeLineId ? ['free' as const] : [])]
-  return { holder, orderStamps, card, applied: { tenLineId, freeLineId }, tenLines, rewards }
+  return { holder, orderStamps, card, applied: { tenLineId, freeLineId }, freeLines, tenLines, rewards }
 }
 
 export function sameLoyaltyChoice(a: LoyaltyChoice, b: LoyaltyChoice): boolean {

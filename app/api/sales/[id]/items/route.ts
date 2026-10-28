@@ -15,7 +15,7 @@ import {
   type SaleItemInput,
 } from '@/lib/sales/validateSaleInput'
 import { ORDER_CHANGED, ORDER_COMPLETED, ORDER_GONE, type AddItemsBody } from '@/lib/sales/addItems'
-import { LOYALTY_CARD_CHANGED, rewardProblem, rewardsFitOrder, stampsIn, type CardTotals, type LoyaltyReward } from '@/lib/loyalty'
+import { LOYALTY_CARD_CHANGED, freeDrinkLineOf, rewardProblem, rewardsFitOrder, stampsIn, type CardTotals, type LoyaltyReward } from '@/lib/loyalty'
 import { fetchCardTotals } from '@/lib/loyaltyStore'
 import { rewardsRefusal } from '@/lib/sales/rewardsRefusal'
 import { PAYMENTS_DONT_ADD_UP, handedTotal, parsePayments, toSalePaymentDocs, type PaymentInput, type SalePayment } from '@/lib/sales/payments'
@@ -132,7 +132,8 @@ async function checkRewards(order: StoredSale, body: AddItemsBody): Promise<Next
     return refuse(503, 'Could not check the loyalty card. Try again.')
   }
   if (!totals) return refuse(409, 'This loyalty card was removed.', { code: LOYALTY_CARD_CHANGED })
-  const problem = rewardProblem(totals, stampsIn(body.items), rewards)
+  // The free drink earns no stamp, so it has to be ready without its own.
+  const problem = rewardProblem(totals, stampsIn(body.items, null, freeDrinkLineOf(body.discounts ?? [])), rewards)
   return problem ? refuse(409, problem, { code: LOYALTY_CARD_CHANGED }) : null
 }
 

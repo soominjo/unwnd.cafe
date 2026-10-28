@@ -78,6 +78,47 @@ describe('resolveLoyaltyOrder', () => {
     expect(resolve({ ...asAna, items: [signature, latte], picked: removed.applied }).applied.freeLineId).toBeNull()
   })
 
+  it('counts no stamp for the free drink: Ana’s free Cafe Latte adds nothing to her full card', () => {
+    const free = { tenLineId: null, freeLineId: latte.lineId }
+    const order = resolve({ ...asAna, items: [latte], picked: free })
+    expect(order.applied.freeLineId).toBe(latte.lineId)
+    expect(order.orderStamps).toBe(0)
+    expect(order.card?.onCard).toBe(0)
+    // A second Cafe Latte is paid, so it still earns its half.
+    expect(resolve({ ...asAna, items: [{ ...latte, qty: 2 }], picked: free }).orderStamps).toBe(0.5)
+  })
+
+  it('offers the free drink on each classic drink while the card has it ready, never on a Signature or a Waffle', () => {
+    expect(resolve({ ...asAna, items: [signature, latte, waffle, chocolate] }).freeLines.map(l => l.lineId)).toEqual([latte.lineId, chocolate.lineId])
+    // Kylene's card is not full, and Ana's free drink was used on this order already.
+    expect(resolve({}).freeLines).toEqual([])
+    expect(resolve({ ...asAna, blocked: ['free'] }).freeLines).toEqual([])
+  })
+
+  it('needs the free drink ready without its own stamp, so a drink can’t earn itself free', () => {
+    // Ben is on 10½: a Cafe Latte fills his card, but it can't be the free drink it earns.
+    const asBen = { holders: [holder('b', 'Ben', 10.5)], linkedHolderId: 'b', customerName: 'Ben' }
+    const free = { tenLineId: null, freeLineId: latte.lineId }
+    const one = resolve({ ...asBen, items: [latte], picked: free })
+    expect(one.freeLines).toEqual([])
+    expect(one.applied.freeLineId).toBeNull()
+    expect(one).toMatchObject({ orderStamps: 0.5, card: { freeReady: 1 } })
+    // With a Chocolate too, the paid drink's half fills the card, so either can be the free one.
+    const two = resolve({ ...asBen, items: [latte, chocolate], picked: free })
+    expect(two.freeLines.map(l => l.lineId)).toEqual([latte.lineId, chocolate.lineId])
+    expect(two).toMatchObject({ applied: { freeLineId: latte.lineId }, orderStamps: 0.5 })
+  })
+
+  it('counts the 10% without the free drink’s stamp too', () => {
+    // Cara's first card is full with its 10% used, and she is on 5 of the next: two Cafe Lattes make 6…
+    const asCara = { holders: [holder('c', 'Cara', 16, 1)], linkedHolderId: 'c', customerName: 'Cara' }
+    const twoLattes = [{ ...latte, qty: 2 }]
+    expect(resolve({ ...asCara, items: twoLattes }).card?.tenReady).toBe(1)
+    // …but with one of them free she is on 5½, short of the 10%.
+    const both = { tenLineId: latte.lineId, freeLineId: latte.lineId }
+    expect(resolve({ ...asCara, items: twoLattes, picked: both }).applied).toEqual({ tenLineId: null, freeLineId: latte.lineId })
+  })
+
   it('lets the free drink win a single drink picked for both, keeping the 10% for another drink', () => {
     const order = resolve({ ...asAna, items: [latte], picked: { tenLineId: latte.lineId, freeLineId: latte.lineId } })
     expect(order.applied).toEqual({ tenLineId: null, freeLineId: latte.lineId })

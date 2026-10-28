@@ -46,7 +46,7 @@ import type { OrderType, PaymentInput } from '@/lib/sales/payments'
 import { ADDON_CATEGORY_ID } from './constants'
 import { buildAddedItemsPrints, buildCheckoutPrints, type SalePrints } from '@/lib/printer/receiptFromSale'
 import type { PosMenu, PosMenuItem } from '@/lib/posMenu'
-import { LOYALTY_CARD_CHANGED, addOrderToTotals, cardState, isClassicDrinkLine, loyaltyCopy, loyaltyKey, type CardHolderWithCard } from '@/lib/loyalty'
+import { LOYALTY_CARD_CHANGED, addOrderToTotals, cardState, loyaltyCopy, loyaltyKey, type CardHolderWithCard } from '@/lib/loyalty'
 import { ORDER_CHANGED, ORDER_COMPLETED, ORDER_GONE } from '@/lib/sales/addItems'
 import type { OpenSaleProblem } from '@/lib/sales/loadOpenSale'
 import { resolveLoyaltyOrder, sameLoyaltyChoice } from './loyaltyOrder'
@@ -207,7 +207,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     () => resolveLoyaltyOrder({ holders: cardHolders, linkedHolderId, customerName: notes, items: orderItems, picked: loyaltyPicked, blocked }),
     [cardHolders, linkedHolderId, notes, orderItems, loyaltyPicked, blocked],
   )
-  const { holder: linkedHolder, orderStamps, card: loyaltyCard, applied: loyalty } = loyaltyOrder
+  const { holder: linkedHolder, orderStamps, applied: loyalty } = loyaltyOrder
   // A reward stays picked only while it applies. Left picked, it would come back by itself
   // when the cart changed back, and could replace a Google Review chosen in between.
   if (!sameLoyaltyChoice(loyalty, loyaltyPicked)) setLoyaltyPicked(loyalty)
@@ -726,12 +726,11 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
         onCancel: () => setChoosingTen(false),
         onClear: clearLoyaltyTen,
       }}
-      hasFreeDrinkLine={orderItems.some(isClassicDrinkLine)}
+      hasFreeDrinkLine={loyaltyOrder.freeLines.length > 0}
       freeActive={loyalty.freeLineId !== null}
       copy={loyaltyText}
     />
   )
-  const freeDrinkReady = !blocked.includes('free') && (loyaltyCard?.freeReady ?? 0) > 0
 
   return (
     // h-dvh: the height a phone actually shows, so Safari's toolbar never covers the bottom of the menu.
@@ -943,7 +942,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
             selectedLineId={selectedLineId}
             itemModal={itemModal}
             customerNameField={customerNameField}
-            freeDrinkReady={freeDrinkReady}
+            freeLines={loyaltyOrder.freeLines}
             freeLineId={loyalty.freeLineId}
             onToggleFree={toggleLoyaltyFree}
             onAdjust={adjustQty}
@@ -994,7 +993,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
               selectedLineId={selectedLineId}
               itemModal={itemModal}
               customerNameField={customerNameField}
-              freeDrinkReady={freeDrinkReady}
+              freeLines={loyaltyOrder.freeLines}
               freeLineId={loyalty.freeLineId}
               onToggleFree={toggleLoyaltyFree}
               onAdjust={adjustQty}
@@ -1250,7 +1249,7 @@ function OrderPanel({
   selectedLineId,
   itemModal,
   customerNameField,
-  freeDrinkReady,
+  freeLines,
   freeLineId,
   onToggleFree,
   onAdjust,
@@ -1271,8 +1270,8 @@ function OrderPanel({
   itemModal: { lineId: string; mode: ItemModalMode } | null
   /** The customer name field, with its loyalty card suggestions and stamp bar. */
   customerNameField: ReactNode
-  /** The linked card has a free drink ready, so Espresso and Non-Coffee lines offer "Make free". */
-  freeDrinkReady: boolean
+  /** The classic drinks the linked card's free drink can go on: each offers "Make free". */
+  freeLines: readonly OrderItem[]
   freeLineId: string | null
   onToggleFree: (lineId: string) => void
   onAdjust: (lineId: string, delta: number) => void
@@ -1337,7 +1336,7 @@ function OrderPanel({
                             {badge.kind === 'free' ? badge.text : `${badge.text} applied`}
                           </p>
                         ))}
-                        {freeDrinkReady && isClassicDrinkLine(item) && (
+                        {freeLines.some(line => line.lineId === item.lineId) && (
                           <button
                             type="button"
                             onClick={e => { e.stopPropagation(); onToggleFree(item.lineId) }}

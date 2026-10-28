@@ -1,6 +1,6 @@
 import { client } from '@/sanity/lib/client'
 import { getWriteClient } from '@/sanity/lib/writeClient'
-import { cardTotals, type CardHolderWithCard, type CardTotals, type StampLine } from '@/lib/loyalty'
+import { cardTotals, type CardHolderWithCard, type CardTotals, type SavedDiscountRow, type StampLine } from '@/lib/loyalty'
 
 // Server only: loyalty card holders and the sales linked to them. Stamps are never
 // stored; every read counts them again from the linked sales.
@@ -20,10 +20,13 @@ interface LinkedSale {
   loyaltyMemberId: string
   loyaltyRewards: string[] | null
   items: StampLine[] | null
+  /** The free drink's row names the line that earned no stamp. */
+  discounts: SavedDiscountRow[] | null
 }
 
 // Each sale's date and each line's added date: the stamp rules go by when an item was ordered.
-const LINKED_SALE = `{ _createdAt, loyaltyMemberId, loyaltyRewards, items[]{ lineId, qty, categoryId, isAddon, parentLineId, addedAt } }`
+// Its discount rows tell which drink was the free one, which earns no stamp.
+const LINKED_SALE = `{ _createdAt, loyaltyMemberId, loyaltyRewards, items[]{ lineId, qty, categoryId, isAddon, parentLineId, addedAt }, discounts[]{ lineId, name } }`
 const NO_STAMPS: CardTotals = { earned: 0, usedTen: 0, usedFree: 0 }
 /** Card numbers come from this counter, which only goes up, so a removed card's number is never given out again. */
 const CARD_COUNTER_ID = 'loyalty-card-counter'

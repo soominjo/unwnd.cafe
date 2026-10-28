@@ -13,7 +13,7 @@ import {
   type SaleDiscountInput,
   type SaleItemInput,
 } from '@/lib/sales/validateSaleInput'
-import { LOYALTY_CARD_CHANGED, parseSaleLoyalty, rewardProblem, rewardsFitOrder, stampsIn, type CardTotals, type SaleLoyalty } from '@/lib/loyalty'
+import { LOYALTY_CARD_CHANGED, freeDrinkLineOf, parseSaleLoyalty, rewardProblem, rewardsFitOrder, stampsIn, type CardTotals, type SaleLoyalty } from '@/lib/loyalty'
 import { fetchCardTotals } from '@/lib/loyaltyStore'
 import { rewardsRefusal } from '@/lib/sales/rewardsRefusal'
 import { PAYMENTS_DONT_ADD_UP, handedTotal, isOrderType, parsePayments, toSalePaymentDocs } from '@/lib/sales/payments'
@@ -54,11 +54,12 @@ function isValidSaleInput(body: unknown): body is SaleInput {
 
 /**
  * A linked card must still exist, and any reward used must really be ready, so two devices
- * can't spend the same reward. This order's stamps count straight away. Null when the sale
- * can be saved; otherwise the reply. A card that changed carries LOYALTY_CARD_CHANGED, so
- * the POS reads the cards again and keeps the order on screen.
+ * can't spend the same reward. This order's stamps count straight away, except the free
+ * drink's: it earns none. Null when the sale can be saved; otherwise the reply. A card that
+ * changed carries LOYALTY_CARD_CHANGED, so the POS reads the cards again and keeps the order
+ * on screen.
  */
-async function checkSaleLoyalty(loyalty: SaleLoyalty, items: SaleItemInput[]): Promise<NextResponse | null> {
+async function checkSaleLoyalty(loyalty: SaleLoyalty, items: SaleItemInput[], discounts: SaleDiscountInput[]): Promise<NextResponse | null> {
   // Each reward goes on its own unit: the free drink on a classic drink, the 10% on another
   // classic drink (espresso or non-coffee tab), waffle or snack item.
   if (!rewardsFitOrder(items, loyalty.rewards)) {
@@ -77,7 +78,7 @@ async function checkSaleLoyalty(loyalty: SaleLoyalty, items: SaleItemInput[]): P
   if (!totals) {
     return NextResponse.json({ success: false, code: LOYALTY_CARD_CHANGED, error: 'This loyalty card was removed.' }, { status: 409 })
   }
-  const problem = rewardProblem(totals, stampsIn(items), loyalty.rewards)
+  const problem = rewardProblem(totals, stampsIn(items, null, freeDrinkLineOf(discounts)), loyalty.rewards)
   return problem ? NextResponse.json({ success: false, code: LOYALTY_CARD_CHANGED, error: problem }, { status: 409 }) : null
 }
 
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
   const change = paymentAmount - total
 
   if (loyalty) {
-    const refused = await checkSaleLoyalty(loyalty, items)
+    const refused = await checkSaleLoyalty(loyalty, items, discounts ?? [])
     if (refused) return refused
   }
 
