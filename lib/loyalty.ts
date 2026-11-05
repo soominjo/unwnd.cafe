@@ -7,9 +7,10 @@ export const LOYALTY_TEN_OFF_AT = 6
 /** When today's stamp rules start: Oct 5, 2026, 12:00 AM in Manila. */
 export const STAMP_RULES_FROM = '2026-10-04T16:00:00Z'
 // What one item earns, hot or iced: a whole stamp, or half (two half-stamp items make one).
-// Add-ons and any other category earn none.
+// Add-ons and any other category earn none. The Espresso Frappe, Cream Frappe and Slush tabs
+// joined on Nov 5, 2026; no order had them before, so no card changed.
 const STAMPS_PER_ITEM = new Map<string, number>([
-  ['signature', 1], ['matcha-series', 1], ['meal', 1],
+  ['signature', 1], ['matcha-series', 1], ['espresso-frappe', 1], ['cream-frappe', 1], ['slush', 1], ['meal', 1],
   ['espresso', 0.5], ['non-coffee', 0.5], ['waffle', 0.5], ['snack', 0.5],
 ])
 // Before STAMP_RULES_FROM: only Signature and Matcha Series earned, a stamp each. Orders from

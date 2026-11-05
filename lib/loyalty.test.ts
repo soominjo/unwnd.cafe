@@ -44,6 +44,12 @@ describe('stampsIn', () => {
     expect(stampsIn([line('waffle', 1)], AFTER)).toBe(0.5)
   })
 
+  it('1 for each Espresso Frappe, Cream Frappe and Slush drink, the tabs added on Nov 5', () => {
+    // An order on their first evening (6 PM in Manila), and one still on screen, with no date yet.
+    expect(stampsIn([line('espresso-frappe', 1), line('cream-frappe', 2), line('slush', 1)], '2026-11-05T10:00:00Z')).toBe(4)
+    expect(stampsIn([line('slush', 1), line('espresso', 1)])).toBe(1.5)
+  })
+
   it('counts the order on screen, which has no date yet, by the new rules', () => {
     expect(stampsIn([line('espresso', 3)])).toBe(1.5)
   })
@@ -303,13 +309,14 @@ describe('cardHolderNameProblem', () => {
 
 const LABELS: Record<string, string> = {
   signature: 'Signature', 'matcha-series': 'Matcha Series', meal: 'Meal',
+  'espresso-frappe': 'Espresso Frappe', 'cream-frappe': 'Cream Frappe', slush: 'Slush',
   espresso: 'Classic', 'non-coffee': 'Non-Coffee', waffle: 'Waffle', snack: 'Snack',
 }
 
 describe('loyalty copy', () => {
   it('names the tabs as the menu calls them now', () => {
     expect(loyaltyCopy((id) => LABELS[id])).toEqual({
-      noStampsYet: 'No stamps from this order yet: Signature, Matcha Series and Meal items earn 1, Classic, Non-Coffee, Waffle and Snack items ½.',
+      noStampsYet: 'No stamps from this order yet: Signature, Matcha Series, Espresso Frappe, Cream Frappe, Slush and Meal items earn 1, Classic, Non-Coffee, Waffle and Snack items ½.',
       freeDrinkTap: 'Free drink ready: tap “Make free” on a Classic or Non-Coffee drink.',
       freeDrinkAdd: 'Free drink ready: add a Classic or Non-Coffee drink to use it.',
       tenNeedsItem: 'The 10% off is for one Classic, Non-Coffee, Waffle or Snack item. Ask the customer to add one to use it.',
@@ -340,6 +347,10 @@ describe('loyalty copy', () => {
     expect(loyaltyPerksOf('espresso')).toEqual({ stamps: true, freeDrink: true, tenOff: true })
     expect(loyaltyPerksOf('waffle')).toEqual({ stamps: true, freeDrink: false, tenOff: true })
     expect(loyaltyPerksOf('signature')).toEqual({ stamps: true, freeDrink: false, tenOff: false })
+    // The frappes and slushes earn stamps, but the rewards stay on the classics, Waffle and Snack.
+    for (const id of ['espresso-frappe', 'cream-frappe', 'slush']) {
+      expect(loyaltyPerksOf(id)).toEqual({ stamps: true, freeDrink: false, tenOff: false })
+    }
     expect(loyaltyPerksOf('add-ons')).toEqual({ stamps: false, freeDrink: false, tenOff: false })
   })
 })
