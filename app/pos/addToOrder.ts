@@ -115,7 +115,7 @@ const rowKey = (row: { lineId: string; name: string; amount: number }) => `${row
  * only its reply was lost. 'saved': every line and discount row is there exactly as sent.
  * 'partly': some are, or at other amounts (the cart changed after that save). 'not': none are.
  */
-export function savedState(sale: Sale, sent: Pick<AddItemsBody, 'items' | 'discounts'>): SavedState {
+export function savedState(sale: Pick<Sale, 'items' | 'discounts'>, sent: Pick<AddItemsBody, 'items' | 'discounts'>): SavedState {
   const onOrder = new Map(sale.items.map(i => [i.lineId, i]))
   const there = sent.items.filter(i => onOrder.has(i.lineId))
   if (there.length === 0) return 'not'

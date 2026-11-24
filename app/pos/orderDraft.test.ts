@@ -7,8 +7,11 @@ import {
   forgetKeptLines,
   forgetKeptOrder,
   keepOrder,
+  keptOrderOf,
+  noticeOnScreen,
   readKeptOrder,
   type KeptOrder,
+  type PosCart,
 } from './orderDraft'
 import type { OpenOrder } from './addToOrder'
 
@@ -177,6 +180,11 @@ const SAVED_ORDER: OpenOrder = {
   payments: [],
 }
 
+const SAVED_WITH_COOKIE: OpenOrder = {
+  ...SAVED_ORDER,
+  items: [...SAVED_ORDER.items, { lineId: 'cookie__fixed__a1b2c', name: 'Cookie', variant: null, price: 90, qty: 1, addedAt: '2026-11-24T02:10:00.000Z' }],
+}
+
 describe('findKeptOrder', () => {
   it('brings nothing back when nothing is kept', () => {
     expect(findKeptOrder(null, null)).toEqual({ kind: 'none' })
@@ -201,13 +209,82 @@ describe('findKeptOrder', () => {
   })
 
   it('reports lines the order already holds as added, not as new lines to save again', () => {
-    const saved = { ...SAVED_ORDER, items: [...SAVED_ORDER.items, { lineId: 'cookie__fixed__a1b2c', name: 'Cookie', variant: null, price: 90, qty: 1, addedAt: '2026-11-24T02:10:00.000Z' }] }
-    expect(findKeptOrder(saved, ADDING)).toEqual({ kind: 'already-added' })
+    expect(findKeptOrder(SAVED_WITH_COOKIE, ADDING)).toEqual({ kind: 'already-added' })
+  })
+
+  it('reports lines saved at other amounts as such: the cart changed after a save whose reply was lost', () => {
+    const twoCookies: KeptOrder = { ...ADDING, items: [{ ...ADDING.items[0], qty: 2 }] }
+    expect(findKeptOrder(SAVED_WITH_COOKIE, twoCookies)).toEqual({ kind: 'added-other-amounts' })
+  })
+
+  it('reports lines of which only some were saved as other amounts', () => {
+    const cookieAndBrownie: KeptOrder = { ...ADDING, items: [...ADDING.items, { lineId: 'brownie__fixed__a1b2c', name: 'Brownie', variant: null, price: 95, qty: 1, categoryId: 'snack' }] }
+    expect(findKeptOrder(SAVED_WITH_COOKIE, cookieAndBrownie)).toEqual({ kind: 'added-other-amounts' })
+  })
+
+  it('tells a discount put on after the save from one saved with the lines', () => {
+    const pwdCookie: KeptOrder = { ...ADDING, items: [{ ...ADDING.items[0], discounts: { pwd: 'solo' } }] }
+    expect(findKeptOrder(SAVED_WITH_COOKIE, pwdCookie)).toEqual({ kind: 'added-other-amounts' })
+    const savedWithRow: OpenOrder = { ...SAVED_WITH_COOKIE, discounts: [{ lineId: 'cookie__fixed__a1b2c', name: 'PWD Food -20% (Cookie)', amount: 18 }] }
+    expect(findKeptOrder(savedWithRow, pwdCookie)).toEqual({ kind: 'already-added' })
   })
 
   it('takes a name changed on another device, a clear included, else keeps the one typed', () => {
     // Kept while the order was named Ana, with "Ana B" typed: Ana B stays (the case above).
     expect(findKeptOrder({ ...SAVED_ORDER, name: 'Bea' }, ADDING)).toEqual({ kind: 'order', order: { ...ADDING, name: 'Bea' } })
     expect(findKeptOrder({ ...SAVED_ORDER, name: '' }, ADDING)).toEqual({ kind: 'order', order: { ...ADDING, name: '' } })
+  })
+})
+
+describe('noticeOnScreen', () => {
+  it('drops "may be saved already" once the cart it was about is empty', () => {
+    expect(noticeOnScreen('maybe-saved', [])).toBeNull()
+  })
+
+  it('keeps it while that order is on screen', () => {
+    expect(noticeOnScreen('maybe-saved', NEW_ORDER.items)).toBe('maybe-saved')
+  })
+
+  it('keeps the notices about added items, which come with an empty cart', () => {
+    expect(noticeOnScreen('already-added', [])).toBe('already-added')
+    expect(noticeOnScreen('added-other-amounts', [])).toBe('added-other-amounts')
+    expect(noticeOnScreen(null, [])).toBeNull()
+  })
+})
+
+describe('keptOrderOf', () => {
+  // The POS as it shows a new order: what keptOrderOf turns into the order kept on the tablet.
+  const onScreen: PosCart = {
+    openOrder: null,
+    addedAndPrinting: false,
+    items: NEW_ORDER.items,
+    name: 'Ana',
+    cardHolderId: 'loyaltyMember.ana',
+    rewards: { tenLineId: 'spanish-latte__hot', freeLineId: null },
+    orderType: 'take-out',
+    lineSuffix: '',
+    saving: false,
+    notice: null,
+  }
+
+  it('keeps a new order as it is on screen', () => {
+    expect(keptOrderOf(onScreen)).toEqual(NEW_ORDER)
+  })
+
+  it('keeps lines being added under their order, with no card: the order keeps its own', () => {
+    const adding: PosCart = { ...onScreen, openOrder: SAVED_ORDER, items: ADDING.items, name: 'Ana B', rewards: { tenLineId: null, freeLineId: null }, orderType: 'dine-in', lineSuffix: '__a1b2c' }
+    expect(keptOrderOf(adding)).toEqual(ADDING)
+  })
+
+  it('keeps nothing of added lines once they are saved and their receipt is up', () => {
+    expect(keptOrderOf({ ...onScreen, openOrder: SAVED_ORDER, addedAndPrinting: true }).items).toEqual([])
+    expect(keptOrderOf({ ...onScreen, addedAndPrinting: true }).items).toEqual(NEW_ORDER.items)
+  })
+
+  it('marks the order sending while it saves, and while "may be saved already" is up', () => {
+    expect(keptOrderOf({ ...onScreen, saving: true }).sending).toBe(true)
+    expect(keptOrderOf({ ...onScreen, notice: 'maybe-saved' }).sending).toBe(true)
+    expect(keptOrderOf({ ...onScreen, notice: 'already-added' }).sending).toBe(false)
+    expect(keptOrderOf(onScreen).sending).toBe(false)
   })
 })

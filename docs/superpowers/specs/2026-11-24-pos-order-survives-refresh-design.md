@@ -56,6 +56,9 @@ The owner, on /pos: a customer orders a Spanish latte and more, the cashier ring
 
 - **Leaving Add items asks first.** `leaveWarning` in `navigation.ts` decides it. While items are being added to a saved order, Time clock and Manager ask first: "Leave the POS? The new items stay kept for this order: to finish them, open Add items on it in Sales." The reason: "← POS" opens a new order, so only Add items brings those items back. A kept new order still leaves without asking.
 - **Cancel or "Make it a new order" forgets only that order's kept lines** (`forgetKeptLines`). Lines kept for another order stay.
+- **"May be saved already" goes with its order.** Once the order's last line is removed, the notice goes (`noticeOnScreen`), so the next customer's order doesn't inherit the warning.
+- **Added lines saved with other amounts say so.** Example: a save went through, its reply was lost, the cashier added one more, then the page reloaded. The reload runs the lost-reply check (`savedState`) on the kept lines. Exactly as kept gives "saved just before the page reloaded". Other amounts gives "An earlier save of the new items went through just before the page reloaded, with other amounts. The order shows what was saved: add anything still missing." In both cases the cart comes back empty.
+- **What gets kept is one tested function** (`keptOrderOf`).
 - **Back shows the order as kept now.** When the browser brings /pos back from its back-forward cache and the tablet keeps orders, the page loads again, with menu editing locked first, as before. Another page may have completed or changed the order meanwhile. Where storage is refused, the old behavior stays: the modals close and the order on screen stays.
 
 ## Known limits

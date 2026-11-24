@@ -56,7 +56,7 @@ import { postAddItems } from './postAddItems'
 import { leaveFor, leaveWarning, openPosPage } from './navigation'
 import { AddingBanner, OpenOrderNotice } from './AddingBanner'
 import SavedOrderLines from './SavedOrderLines'
-import { EMPTY_KEPT_ORDER, canKeepOrders, findKeptOrder, forgetKeptLines, forgetKeptOrder, keepOrder, readKeptOrder, type KeptOrder } from './orderDraft'
+import { EMPTY_KEPT_ORDER, canKeepOrders, findKeptOrder, forgetKeptLines, forgetKeptOrder, keepOrder, keptOrderOf, noticeOnScreen, readKeptOrder, type KeptOrder } from './orderDraft'
 import { KeptOrderNotice, type KeptNotice } from './KeptOrderNotice'
 
 interface POSClientProps {
@@ -187,9 +187,9 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
       if (!current || keptLooked.current) return
       const found = findKeptOrder(initialOpenOrder, readKeptOrder(initialOpenOrder ? 'adding' : 'new'))
       if (found.kind === 'order') bringBack(found.order)
-      if (found.kind === 'already-added') {
+      if (found.kind === 'already-added' || found.kind === 'added-other-amounts') {
         forgetKeptOrder('adding')
-        setKeptNotice('already-added')
+        setKeptNotice(found.kind)
       }
       keptLooked.current = true
     })
@@ -198,20 +198,23 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     }
   }, [initialOpenOrder, bringBack])
 
-  // Every change is kept: a new order under its key, lines being added to a saved order under
-  // theirs. An empty cart removes it: Complete, Clear, the last line gone, or the added lines saved.
+  // Every change is kept (keptOrderOf): a new order under its key, lines being added to a saved
+  // order under theirs. An empty cart removes it: Complete, Clear, the last line gone, or the added
+  // lines saved.
   useEffect(() => {
     if (!keptLooked.current) return
-    orderKept.current = keepOrder({
-      items: openOrder && newOrderAfterReceipt ? [] : orderItems,
+    orderKept.current = keepOrder(keptOrderOf({
+      openOrder,
+      addedAndPrinting: newOrderAfterReceipt,
+      items: orderItems,
       name: notes,
-      cardHolderId: openOrder ? null : linkedHolderId,
+      cardHolderId: linkedHolderId,
       rewards: loyaltyPicked,
       orderType,
       lineSuffix,
-      sending: saving || keptNotice === 'maybe-saved',
-      addingTo: openOrder ? { id: openOrder.id, name: openOrder.name } : null,
-    })
+      saving,
+      notice: keptNotice,
+    }))
   }, [orderItems, notes, linkedHolderId, loyaltyPicked, orderType, lineSuffix, saving, keptNotice, openOrder, newOrderAfterReceipt])
 
   // Who is on shift, for the count on the header's Time clock.
@@ -273,6 +276,10 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   // A reward stays picked only while it applies. Left picked, it would come back by itself
   // when the cart changed back, and could replace a Google Review chosen in between.
   if (!sameLoyaltyChoice(loyalty, loyaltyPicked)) setLoyaltyPicked(loyalty)
+  // "May be saved already" goes with the order it was about, once its last line is removed
+  // (noticeOnScreen): the next customer's order must not inherit it.
+  const noticeNow = noticeOnScreen(keptNotice, orderItems)
+  if (noticeNow !== keptNotice) setKeptNotice(noticeNow)
 
   // One row per discount on each line — a single transaction can bundle several
   // customers' orders, each with its own PWD/Senior ID or Google review.

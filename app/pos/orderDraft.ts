@@ -1,6 +1,6 @@
 import { isOrderType, type OrderType } from '@/lib/sales/payments'
-import { nameAfterRefresh, type OpenOrder } from './addToOrder'
-import { NO_LOYALTY } from './discounts'
+import { buildAddItemsBody, nameAfterRefresh, savedState, type OpenOrder } from './addToOrder'
+import { NO_LOYALTY, buildDiscountLines } from './discounts'
 import type { LineDiscountKind, LineDiscountScope, LineDiscounts, LoyaltyChoice, OrderItem } from './types'
 
 // The order on screen, kept in this tablet's localStorage so a refresh, a browser restart or a
@@ -104,21 +104,88 @@ export function canKeepOrders(storage?: Pick<Storage, 'setItem' | 'removeItem'>)
   }
 }
 
+/**
+ * Why the order on screen needs a look after a reload cut a save short: a new order may be saved
+ * already; or lines being added were saved, exactly as kept or with other amounts.
+ */
+export type KeptNotice = 'maybe-saved' | 'already-added' | 'added-other-amounts'
+
+/**
+ * The notice that stays as the cart changes. "May be saved already" is about the order the reload
+ * brought back: once its cart is empty that order is gone, and the next one mustn't inherit the
+ * warning. The notices about added items come with an empty cart and stay until OK.
+ */
+export function noticeOnScreen(notice: KeptNotice | null, items: readonly OrderItem[]): KeptNotice | null {
+  return notice === 'maybe-saved' && items.length === 0 ? null : notice
+}
+
+/** What the POS has on screen that the order kept on the tablet is made from. */
+export interface PosCart {
+  /** The saved order the cart's lines go onto (Add items), or null for a new order. */
+  openOrder: Pick<OpenOrder, 'id' | 'name'> | null
+  /** The lines added to openOrder are saved and their receipt is up. */
+  addedAndPrinting: boolean
+  items: OrderItem[]
+  name: string
+  cardHolderId: string | null
+  rewards: LoyaltyChoice
+  orderType: OrderType
+  lineSuffix: string
+  /** Complete + Print (or Save + Print) is saving the cart now. */
+  saving: boolean
+  notice: KeptNotice | null
+}
+
+/**
+ * The order to keep for what is on screen. Lines being added go under their order, with no card,
+ * since the order keeps its own; once they are saved and their receipt is up, nothing of them is
+ * left to keep. The order counts as sending while it saves, and while "may be saved already" is up,
+ * so another reload still warns.
+ */
+export function keptOrderOf(cart: PosCart): KeptOrder {
+  const { openOrder } = cart
+  return {
+    items: openOrder && cart.addedAndPrinting ? [] : cart.items,
+    name: cart.name,
+    cardHolderId: openOrder ? null : cart.cardHolderId,
+    rewards: cart.rewards,
+    orderType: cart.orderType,
+    lineSuffix: cart.lineSuffix,
+    sending: cart.saving || cart.notice === 'maybe-saved',
+    addingTo: openOrder ? { id: openOrder.id, name: openOrder.name } : null,
+  }
+}
+
 /** What a page load brings back: the kept order, nothing, or word that kept lines were saved already. */
-export type FoundOrder = { kind: 'none' } | { kind: 'order'; order: KeptOrder } | { kind: 'already-added' }
+export type FoundOrder =
+  | { kind: 'none' }
+  | { kind: 'order'; order: KeptOrder }
+  | { kind: 'already-added' }
+  | { kind: 'added-other-amounts' }
 
 /**
  * What the page that just loaded brings back of the order kept. A new order comes back on a new
  * order's page. Lines being added come back only to the order they were kept for, as it loads now.
  * If it already holds any of them, a save went through before the reload, and none come back
- * (they'd be saved twice). The name the order has now wins only if it changed on another device.
+ * (they'd be saved twice). The check is the one a lost reply gets (savedState): exactly as kept,
+ * or with other amounts when the cart changed after that save. The name the order has now wins
+ * only if it changed on another device.
  */
 export function findKeptOrder(openOrder: OpenOrder | null, kept: KeptOrder | null): FoundOrder {
   if (!kept) return { kind: 'none' }
   if (!openOrder) return kept.addingTo ? { kind: 'none' } : { kind: 'order', order: kept }
   if (!kept.addingTo || kept.addingTo.id !== openOrder.id) return { kind: 'none' }
-  const savedIds = new Set(openOrder.items.map(item => item.lineId))
-  if (kept.items.some(item => savedIds.has(item.lineId))) return { kind: 'already-added' }
+  const sent = buildAddItemsBody({
+    order: openOrder,
+    items: kept.items,
+    discountLines: buildDiscountLines(kept.items, kept.rewards),
+    payments: [],
+    name: kept.name,
+    rewards: [],
+  })
+  const saved = savedState(openOrder, sent)
+  if (saved === 'saved') return { kind: 'already-added' }
+  if (saved === 'partly') return { kind: 'added-other-amounts' }
   return { kind: 'order', order: { ...kept, sending: false, name: nameAfterRefresh(kept.addingTo.name, kept.name, openOrder.name) } }
 }
 

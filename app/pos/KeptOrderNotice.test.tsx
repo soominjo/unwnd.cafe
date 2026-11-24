@@ -34,6 +34,13 @@ describe('KeptOrderNotice', () => {
     expect(html).not.toContain('Check Sales before charging')
   })
 
+  it('says an earlier save of the added items went through with other amounts, and to add what is missing', () => {
+    const html = renderToStaticMarkup(<KeptOrderNotice notice="added-other-amounts" onDismiss={() => {}} />)
+    expect(html).toContain('with other amounts')
+    expect(html).toContain('add anything still missing')
+    expect(html).not.toContain('Print their receipt')
+  })
+
   it('goes away on OK', () => {
     const onDismiss = vi.fn()
     buttonLabelled(KeptOrderNotice({ notice: 'maybe-saved', onDismiss }), 'OK')?.onClick()

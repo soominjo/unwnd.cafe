@@ -1,9 +1,11 @@
-/** Why the order on screen needs a look after a reload: a save the reload cut short. */
-export type KeptNotice = 'maybe-saved' | 'already-added'
+import type { KeptNotice } from './orderDraft'
+
+export type { KeptNotice }
 
 const MESSAGES: Record<KeptNotice, string> = {
   'maybe-saved': 'The page reloaded while this order was being saved, so it may be saved already. Check Sales before charging again.',
   'already-added': 'The new items were saved just before the page reloaded. Print their receipt from Sales.',
+  'added-other-amounts': 'An earlier save of the new items went through just before the page reloaded, with other amounts. The order shows what was saved: add anything still missing.',
 }
 
 interface KeptOrderNoticeProps {
