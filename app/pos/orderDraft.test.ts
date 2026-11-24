@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   KEPT_ADDING_KEY,
+  canKeepOrders,
   KEPT_ORDER_KEY,
   findKeptOrder,
+  forgetKeptLines,
   forgetKeptOrder,
   keepOrder,
   readKeptOrder,
@@ -91,6 +93,23 @@ describe('keepOrder and readKeptOrder', () => {
     forgetKeptOrder('adding', storage)
     expect(readKeptOrder('adding', storage)).toBeNull()
     expect(readKeptOrder('new', storage)).toEqual(NEW_ORDER)
+  })
+
+  it('forgets lines kept for that order, and leaves lines kept for another order', () => {
+    const storage = memoryStorage()
+    keepOrder(ADDING, storage)
+    forgetKeptLines('sale-2', storage)
+    expect(readKeptOrder('adding', storage)).toEqual(ADDING)
+    forgetKeptLines('sale-1', storage)
+    expect(readKeptOrder('adding', storage)).toBeNull()
+    expect(() => forgetKeptLines('sale-1', refusingStorage)).not.toThrow()
+  })
+
+  it('says whether the tablet can keep an order, and leaves nothing behind asking', () => {
+    const storage = memoryStorage()
+    expect(canKeepOrders(storage)).toBe(true)
+    expect(storage.data.size).toBe(0)
+    expect(canKeepOrders(refusingStorage)).toBe(false)
   })
 
   it('reads nothing when a kept order sits under the other kind’s key', () => {

@@ -53,10 +53,10 @@ import { resolveLoyaltyOrder, sameLoyaltyChoice } from './loyaltyOrder'
 import { refetchCardHolders } from './refetchCardHolders'
 import { blockedRewards, buildAddItemsBody, nameAfterRefresh, newLineSuffix, openOrderFromSale, reviewLockedBy, savedState, type OpenOrder } from './addToOrder'
 import { postAddItems } from './postAddItems'
-import { leaveFor, openPosPage } from './navigation'
+import { leaveFor, leaveWarning, openPosPage } from './navigation'
 import { AddingBanner, OpenOrderNotice } from './AddingBanner'
 import SavedOrderLines from './SavedOrderLines'
-import { EMPTY_KEPT_ORDER, findKeptOrder, forgetKeptOrder, keepOrder, readKeptOrder, type KeptOrder } from './orderDraft'
+import { EMPTY_KEPT_ORDER, canKeepOrders, findKeptOrder, forgetKeptLines, forgetKeptOrder, keepOrder, readKeptOrder, type KeptOrder } from './orderDraft'
 import { KeptOrderNotice, type KeptNotice } from './KeptOrderNotice'
 
 interface POSClientProps {
@@ -225,11 +225,18 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     }
   }, [])
 
-  // Close all modals when the page is restored from the browser's back-forward cache.
-  // Without this, any overlay that was open before navigating away blocks all clicks.
-  // Manager mode locks again too, the same as on a reload.
+  // The page is restored from the browser's back-forward cache. Another POS page may have
+  // completed, changed or replaced the kept order since this one was left, so a tablet that keeps
+  // orders loads the page again, showing the order as kept now. Menu editing locks again first,
+  // as it always has on coming back. Where orders can't be kept, the order on screen is the only
+  // copy: it stays, and every modal closes (an overlay left open would block all clicks).
   useEffect(() => {
     function onPageShow(e: PageTransitionEvent) {
+      if (e.persisted && canKeepOrders()) {
+        forgetMenuEditing()
+        window.location.reload()
+        return
+      }
       if (e.persisted) {
         setShowConfirm(false)
         setMobileDrawer(false)
@@ -521,7 +528,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   // The order can no longer take items: the cart, with the customer's name and card, is
   // charged as a new order instead.
   function makeNewOrder() {
-    forgetKeptOrder('adding')
+    if (openOrder) forgetKeptLines(openOrder.id)
     setOpenOrder(null)
     setAddRefused(false)
     setSubmitError(null)
@@ -798,10 +805,11 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
         <Link href="/" className="font-logo text-xl max-[380px]:text-lg sm:text-2xl whitespace-nowrap lowercase tracking-tight text-cream hover:text-cream/70 transition-colors">unwnd. pos</Link>
         {/* Tighter on phones, where Time clock, Manager and Loyalty show as icons beside the Order button. */}
         <div className="flex items-center sm:gap-4">
-          {/* Time clock and Manager open their own pages. The order on screen is kept on the tablet and
-              comes back; they ask first only when it couldn't be kept (storage refused). */}
+          {/* Time clock and Manager open their own pages. A new order kept on the tablet is back on /pos;
+              they ask first while items are being added to a saved order (only Add items brings those
+              back) and when the tablet couldn't keep the order. */}
           <button
-            onClick={() => openPosPage('/pos/timeclock', orderKept.current ? 0 : itemCount)}
+            onClick={() => openPosPage('/pos/timeclock', leaveWarning({ items: itemCount, kept: orderKept.current, adding: openOrder !== null }))}
             aria-label={onShiftCount > 0 ? `Time clock, ${onShiftCount} on shift` : 'Time clock'}
             title="Time clock: clock in or out with your PIN"
             className="h-9 px-1.5 min-[390px]:px-2.5 sm:px-3 flex items-center gap-1 sm:gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
@@ -828,7 +836,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
             </button>
           ) : (
             <button
-              onClick={() => openPosPage('/pos/manager', orderKept.current ? 0 : itemCount)}
+              onClick={() => openPosPage('/pos/manager', leaveWarning({ items: itemCount, kept: orderKept.current, adding: openOrder !== null }))}
               aria-label="Manager"
               title="Manager: hours, staff and PINs, menu editing"
               className="h-9 px-1.5 min-[390px]:px-2.5 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
@@ -869,7 +877,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
       </header>
 
       {/* ── Adding to a saved order ("Add items" on Sales), or why that order could not be opened ── */}
-      {openOrder && <AddingBanner order={openOrder} newItems={itemCount} onCancel={() => { forgetKeptOrder('adding'); leaveFor('/pos/sales') }} />}
+      {openOrder && <AddingBanner order={openOrder} newItems={itemCount} onCancel={() => { forgetKeptLines(openOrder.id); leaveFor('/pos/sales') }} />}
       {!openOrder && openProblem && <OpenOrderNotice problem={openProblem} onDismiss={() => setOpenProblem(null)} />}
       {keptNotice && <KeptOrderNotice notice={keptNotice} onDismiss={() => setKeptNotice(null)} />}
 

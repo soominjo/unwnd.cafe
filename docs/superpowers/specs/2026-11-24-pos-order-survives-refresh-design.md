@@ -52,6 +52,12 @@ The owner, on /pos: a customer orders a Spanish latte and more, the cashier ring
 - **Leaving no longer warns.** Time clock, Manager and Reload stop asking "The order in progress will be cleared" once the order is kept. They still ask when the tablet refuses storage.
 - **Dropping lines:** "Drop them" on the adding banner, and "Make it a new order" after a refused add, remove that order's kept lines.
 
+## Revisions after the code review of 4c81202
+
+- **Leaving Add items asks first.** `leaveWarning` in `navigation.ts` decides it. While items are being added to a saved order, Time clock and Manager ask first: "Leave the POS? The new items stay kept for this order: to finish them, open Add items on it in Sales." The reason: "← POS" opens a new order, so only Add items brings those items back. A kept new order still leaves without asking.
+- **Cancel or "Make it a new order" forgets only that order's kept lines** (`forgetKeptLines`). Lines kept for another order stay.
+- **Back shows the order as kept now.** When the browser brings /pos back from its back-forward cache and the tablet keeps orders, the page loads again, with menu editing locked first, as before. Another page may have completed or changed the order meanwhile. Where storage is refused, the old behavior stays: the modals close and the order on screen stays.
+
 ## Known limits
 
 - One tablet only. Two POS tabs on the same tablet share the kept new order.

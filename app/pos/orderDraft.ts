@@ -85,6 +85,25 @@ export function forgetKeptOrder(kind: KeptKind, storage?: Pick<Storage, 'removeI
   }
 }
 
+/** Forgets the lines kept for that saved order; lines kept for another order stay. */
+export function forgetKeptLines(orderId: string, storage?: Pick<Storage, 'getItem' | 'removeItem'>): void {
+  if (readKeptOrder('adding', storage)?.addingTo?.id === orderId) forgetKeptOrder('adding', storage)
+}
+
+const PROBE_KEY = 'unwnd.pos.canKeep'
+
+/** Whether this tablet's storage takes a kept order now: a private window or blocked site data refuses it. */
+export function canKeepOrders(storage?: Pick<Storage, 'setItem' | 'removeItem'>): boolean {
+  try {
+    const target = storage ?? globalThis.localStorage
+    target.setItem(PROBE_KEY, '1')
+    target.removeItem(PROBE_KEY)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** What a page load brings back: the kept order, nothing, or word that kept lines were saved already. */
 export type FoundOrder = { kind: 'none' } | { kind: 'order'; order: KeptOrder } | { kind: 'already-added' }
 
