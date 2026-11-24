@@ -22,6 +22,13 @@ export const dynamic = 'force-dynamic'
 
 const fresh = client.withConfig({ useCdn: false })
 
+// The two lists on Sales. An order with some items out is in both: Recent for what is still to
+// serve, Completed for what went out (lib/sales/served.ts). Only top-level lines carry servedAt.
+/** Recent orders: every order not completed. */
+const PENDING_FILTER = 'isCompleted != true'
+/** Completed: orders completed, and orders with any item out. In brackets, so it stays one && term. */
+const COMPLETED_FILTER = '(isCompleted == true || count(items[defined(servedAt)]) > 0)'
+
 interface SaleInput {
   total:         number
   paymentAmount: number
@@ -169,7 +176,7 @@ export async function GET(request: NextRequest) {
   // Whole-period pagination/counts per completion status, not just the current page —
   // the Recent/Completed tabs would otherwise only ever reflect the newest 20 sales overall.
   const statusFilter =
-    statusRaw === 'completed' ? ' && isCompleted == true' : statusRaw === 'pending' ? ' && isCompleted != true' : ''
+    statusRaw === 'completed' ? ` && ${COMPLETED_FILTER}` : statusRaw === 'pending' ? ` && ${PENDING_FILTER}` : ''
 
   try {
     const [sales, total] = await Promise.all([

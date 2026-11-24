@@ -61,3 +61,35 @@ describe('GET /api/sales/summary', () => {
     expect(fetch.mock.calls[0][0]).toMatch(/payments\[\]\{[^}]*movedFrom[^}]*movedAt/)
   })
 })
+
+describe('GET /api/sales/summary, items served one by one', () => {
+  const fries = { name: 'Classic Fries', variant: null, price: 120, qty: 1, categoryId: 'snack' }
+  // As Sanity sends them: servedCount is how many of the order's lines went out.
+  const served = [
+    // Completed before items were ticked one by one: no times, and still completed.
+    { _id: 'old', _createdAt: '2026-10-11T08:00:00.000Z', total: 130, isCompleted: true, items: [latte], servedCount: 0 },
+    // Every item went out.
+    { _id: 'done', _createdAt: '2026-10-11T09:00:00.000Z', total: 250, isCompleted: true, items: [latte, fries], servedCount: 2 },
+    // Bea's latte went out, her fries are still to serve: in both tabs.
+    { _id: 'bea', _createdAt: '2026-10-11T10:00:00.000Z', total: 250, notes: 'Bea', items: [latte, fries], servedCount: 1 },
+    // Nothing out yet.
+    { _id: 'new', _createdAt: '2026-10-11T11:00:00.000Z', total: 130, items: [latte], servedCount: 0 },
+  ]
+
+  it('counts a partly served order under Recent and under Completed, and still as one order', async () => {
+    fetch.mockResolvedValueOnce(served)
+    const { data } = await (await get(range)).json()
+    expect(data).toMatchObject({ orderCount: 4, totalRevenue: 760, pendingCount: 2, completedCount: 3, partlyServedCount: 1 })
+  })
+
+  it('counts no order as partly served when nothing is out, or when it is completed', async () => {
+    fetch.mockResolvedValueOnce(served.filter(sale => sale._id !== 'bea'))
+    const { data } = await (await get(range)).json()
+    expect(data).toMatchObject({ orderCount: 3, pendingCount: 1, completedCount: 2, partlyServedCount: 0 })
+  })
+
+  it('reads from Sanity how many of each order’s items went out', async () => {
+    await get(range)
+    expect(fetch.mock.calls[0][0]).toMatch(/"servedCount":\s*count\(items\[defined\(servedAt\)\]\)/)
+  })
+})

@@ -22,4 +22,21 @@ describe('ViewTabs', () => {
     expect(html).toContain('>Top Items')
     expect(html).not.toContain('>Recent Orders')
   })
+
+  it('counts only fully completed orders as completed on a long period: a partly served one is still pending', () => {
+    // 3 not completed, 2 of them partly served; 5 completed or partly served: 3 fully completed.
+    const html = renderToStaticMarkup(
+      <ViewTabs view="tally" onChange={() => {}} pendingCount={3} completedCount={5} partlyServedCount={2} loading={false} detailed={false} />,
+    )
+    expect(html).toContain('<span>3 pending</span>')
+    expect(html).toContain('<span>3 completed</span>')
+  })
+
+  it('counts a partly served order under both tabs on a day', () => {
+    const html = renderToStaticMarkup(
+      <ViewTabs view="recent" onChange={() => {}} pendingCount={3} completedCount={5} partlyServedCount={2} loading={false} detailed />,
+    )
+    expect(html).toMatch(/Recent Orders<span[^>]*>3<\/span>/)
+    expect(html).toMatch(/Completed<span[^>]*>5<\/span>/)
+  })
 })

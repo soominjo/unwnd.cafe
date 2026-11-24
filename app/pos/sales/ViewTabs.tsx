@@ -3,8 +3,12 @@ export type View = 'recent' | 'completed' | 'tally' | 'summary' | 'names'
 interface ViewTabsProps {
   view: View
   onChange: (view: View) => void
+  /** Orders not completed: the Recent Orders badge. */
   pendingCount: number
+  /** Orders completed or with any item out: the Completed badge. A partly served order is in both. */
   completedCount: number
+  /** Orders with some items out and some still to serve (absent = 0). */
+  partlyServedCount?: number
   loading: boolean
   /** False for Week/Month/Year/a long Custom range — Recent/Completed aren't shown at all then. */
   detailed: boolean
@@ -23,15 +27,16 @@ const SUMMARY_ONLY_TABS: ReadonlyArray<{ key: View; label: string }> = ALL_TABS.
   (tab) => tab.key === 'tally' || tab.key === 'summary' || tab.key === 'names',
 )
 
-export default function ViewTabs({ view, onChange, pendingCount, completedCount, loading, detailed }: ViewTabsProps) {
+export default function ViewTabs({ view, onChange, pendingCount, completedCount, partlyServedCount = 0, loading, detailed }: ViewTabsProps) {
   const tabs = detailed ? ALL_TABS : SUMMARY_ONLY_TABS
   return (
     <div className="flex flex-col items-center gap-2">
+      {/* With no tabs to hold them, each order counts once: completed means everything went out. */}
       {!detailed && !loading && (
         <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-foreground/50">
           <span>{pendingCount} pending</span>
           <span aria-hidden="true">·</span>
-          <span>{completedCount} completed</span>
+          <span>{completedCount - partlyServedCount} completed</span>
         </div>
       )}
       <nav aria-label="Views" className="flex justify-center">

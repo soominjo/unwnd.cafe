@@ -338,3 +338,26 @@ describe('POST /api/sales/[id]/items, the new lines paid for then', () => {
     expect((store.doc('sale-paid')!.payments as unknown[])).toHaveLength(3)
   })
 })
+
+describe('POST /api/sales/[id]/items on an order served item by item', () => {
+  // When the Tiramisu went out, ticked on Sales before the follow-up.
+  const OUT = '2026-10-03T06:20:00.000Z'
+
+  it('keeps the times of items already out, and the new lines start to serve, whatever the POS sends', async () => {
+    const partly = [{ ...screenshotItems[0], servedAt: OUT }, ...screenshotItems.slice(1)]
+    store.touch('sale-214', { items: partly })
+    const res = await add('sale-214', { rev: revOf('sale-214'), items: [{ ...latteNew, servedAt: OUT }] })
+    expect(res.status).toBe(200)
+    expect(store.doc('sale-214')!.items).toEqual([...partly, stamped(latteNew)])
+    expect(store.doc('sale-214')).not.toHaveProperty('isCompleted')
+  })
+
+  it('refuses an order completed by ticking its last item, adding nothing', async () => {
+    const allOut = screenshotItems.map(item => ({ ...item, servedAt: OUT }))
+    store.touch('sale-214', { isCompleted: true, items: allOut })
+    const res = await add('sale-214', { rev: revOf('sale-214'), items: [latteNew] })
+    expect(res.status).toBe(409)
+    expect((await res.json()).code).toBe('order-completed')
+    expect(store.doc('sale-214')!.items).toEqual(allOut)
+  })
+})

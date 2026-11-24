@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const { requirePosAuth, create, fetchCardTotals } = vi.hoisted(() => ({
-  requirePosAuth: vi.fn(), create: vi.fn(), fetchCardTotals: vi.fn(),
+const { requirePosAuth, create, fetchCardTotals, fetch } = vi.hoisted(() => ({
+  requirePosAuth: vi.fn(), create: vi.fn(), fetchCardTotals: vi.fn(), fetch: vi.fn(),
 }))
 vi.mock('@/lib/requirePosAuth', () => ({ requirePosAuth }))
 vi.mock('@/sanity/lib/writeClient', () => ({ getWriteClient: () => ({ create }) }))
-vi.mock('@/sanity/lib/client', () => ({ client: { withConfig: () => ({ fetch: vi.fn() }) } }))
+vi.mock('@/sanity/lib/client', () => ({ client: { withConfig: () => ({ fetch }) } }))
 vi.mock('@/lib/loyaltyStore', () => ({ fetchCardTotals }))
 vi.mock('@/lib/sales/rewardsRefusal', () => ({ rewardsRefusal: async () => 'Rewards need items (named by the menu).' }))
 
-import { POST } from './route'
+import { GET, POST } from './route'
 
 const signature = { lineId: 'tiramisu__ice', name: 'Tiramisu', variant: 'ice', price: 160, qty: 1, categoryId: 'signature' }
 const latte = { lineId: 'cafe-latte__hot', name: 'Cafe Latte', variant: 'hot', price: 110, qty: 1, categoryId: 'espresso' }
@@ -25,6 +25,8 @@ beforeEach(() => {
   requirePosAuth.mockReset().mockResolvedValue(null)
   create.mockReset().mockResolvedValue({ _id: 'sale-1' })
   fetchCardTotals.mockReset().mockResolvedValue(fiveStamps)
+  // The list query, then the count query.
+  fetch.mockReset().mockResolvedValueOnce([]).mockResolvedValueOnce(0)
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 
@@ -145,6 +147,43 @@ describe('POST /api/sales', () => {
     create.mockRejectedValueOnce(new Error('Sanity down'))
     expect((await post(sale({ total: 160 }))).status).toBe(500)
     expect(console.error).toHaveBeenCalled()
+  })
+
+  it('saves a new order with every item still to serve, whatever served times the till sends', async () => {
+    const early = '2026-11-24T11:53:00.000Z'
+    const res = await post(sale({ isCompleted: true, items: [{ ...signature, servedAt: early }, { ...latte, servedAt: early }] }))
+    expect(res.status).toBe(200)
+    const stored = create.mock.calls[0][0]
+    expect(stored.items).toEqual([
+      { _type: 'saleItem', _key: 'tiramisu__ice', lineId: 'tiramisu__ice', name: 'Tiramisu', variant: 'ice', price: 160, qty: 1, categoryId: 'signature' },
+      { _type: 'saleItem', _key: 'cafe-latte__hot', lineId: 'cafe-latte__hot', name: 'Cafe Latte', variant: 'hot', price: 110, qty: 1, categoryId: 'espresso' },
+    ])
+    expect(stored).not.toHaveProperty('isCompleted')
+  })
+})
+
+describe('GET /api/sales, the Recent and Completed lists', () => {
+  const list = (query: string) => GET(new NextRequest(`http://pos.test/api/sales?${query}`))
+  const day = 'from=2026-11-24T00:00:00.000Z&to=2026-11-24T15:59:59.999Z'
+  /** The page query and the count query, in that order. */
+  const queries = () => fetch.mock.calls.map(([query]) => String(query))
+
+  it('lists an order under Completed once it is completed or any item went out, on the page and in its count', async () => {
+    const res = await list(`${day}&status=completed`)
+    expect(res.status).toBe(200)
+    const [page, count] = queries()
+    // In brackets, so the date range and the sale type still hold for an order with items out.
+    expect(page).toContain('_createdAt <= $to && (isCompleted == true || count(items[defined(servedAt)]) > 0)] | order(_createdAt desc)')
+    expect(count).toContain('_createdAt <= $to && (isCompleted == true || count(items[defined(servedAt)]) > 0)])')
+  })
+
+  it('keeps a partly served order in Recent: Recent lists every order not completed', async () => {
+    const res = await list(`${day}&status=pending`)
+    expect(res.status).toBe(200)
+    const [page, count] = queries()
+    expect(page).toContain('_createdAt <= $to && isCompleted != true] | order(_createdAt desc)')
+    expect(count).toContain('_createdAt <= $to && isCompleted != true])')
+    expect(`${page}${count}`).not.toContain('servedAt')
   })
 })
 

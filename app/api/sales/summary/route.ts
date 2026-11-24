@@ -28,6 +28,8 @@ interface SaleRecord {
   notes?:        string
   orderType?:    OrderType
   payments?:     SalePayment[]
+  /** How many of its lines went out to the customer; null when it has no lines. */
+  servedCount?:  number | null
 }
 
 interface TopItem {
@@ -56,6 +58,16 @@ function isValidIso(s: string): boolean {
   return !isNaN(Date.parse(s))
 }
 
+/** Every item went out, or it was completed before items were ticked one by one. */
+function isCompletedSale(sale: SaleRecord): boolean {
+  return sale.isCompleted === true
+}
+
+/** At least one of its items went out. */
+function hasItemsOut(sale: SaleRecord): boolean {
+  return (sale.servedCount ?? 0) > 0
+}
+
 export async function GET(request: NextRequest) {
   const authError = await requirePosAuth()
   if (authError) return authError
@@ -74,7 +86,8 @@ export async function GET(request: NextRequest) {
         `*[_type == "sale" && _createdAt >= $from && _createdAt <= $to]{
           _id, _createdAt, total, paymentAmount, change, isCompleted, notes, orderType,
           items[]{ name, variant, price, qty, categoryId },
-          payments[]{ _key, method, amount, received, addedAt, movedFrom, movedAt }
+          payments[]{ _key, method, amount, received, addedAt, movedFrom, movedAt },
+          "servedCount": count(items[defined(servedAt)])
         }`,
         { from, to },
         { cache: 'no-store' }
@@ -85,8 +98,11 @@ export async function GET(request: NextRequest) {
     const orderCount     = sales.length
     const totalRevenue   = sales.reduce((sum, s) => sum + s.total, 0)
     const avgOrderValue  = orderCount > 0 ? totalRevenue / orderCount : 0
-    const completedCount = sales.filter((s) => s.isCompleted === true).length
-    const pendingCount   = orderCount - completedCount
+    // The tab counts. An order with some items out is under Recent and under Completed, so it is in
+    // both counts (partlyServedCount says how many), while orderCount still counts it once.
+    const pendingCount      = sales.filter((s) => !isCompletedSale(s)).length
+    const completedCount    = sales.filter((s) => isCompletedSale(s) || hasItemsOut(s)).length
+    const partlyServedCount = sales.filter((s) => !isCompletedSale(s) && hasItemsOut(s)).length
 
     const itemMap = new Map<string, TopItem>()
     for (const sale of sales) {
@@ -149,7 +165,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        totalRevenue, orderCount, avgOrderValue, topItems, topItemCategories, topCustomers, pendingCount, completedCount,
+        totalRevenue, orderCount, avgOrderValue, topItems, topItemCategories, topCustomers,
+        pendingCount, completedCount, partlyServedCount,
         paymentTally: tallyPayments(sales),
         orderTypes: countOrderTypes(sales),
         ...(wantsLines ? { paymentLines: paymentLines(sales) } : {}),

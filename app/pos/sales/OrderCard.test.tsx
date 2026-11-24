@@ -27,7 +27,6 @@ const props: OrderCardProps = {
   mode: 'recent',
   isConfirming: false,
   isDeleting: false,
-  isCompleting: false,
   confirmItemKey: null,
   deletingItemKey: null,
   onRequestDelete: noop,
@@ -37,10 +36,41 @@ const props: OrderCardProps = {
   onCancelDeleteItem: noop,
   onConfirmDeleteItem: noop,
   onCompleteOrder: noop,
+  onServeLine: noop,
+  onUnserveLine: noop,
+  onOpenOtherTab: noop,
   onAddItems: noop,
   onRename: async () => null,
   onChangeMethod: async () => null,
 }
+
+const OUT = '2026-11-24T11:46:00.000Z' // 7:46 PM in Manila
+
+/** Bea's order (7:40 PM). Pass the times the latte, Americano and nachos went out, and the fries'. */
+const bea = (out?: string, fries?: string, extra: Partial<Sale> = {}): Sale => ({
+  _id: 'bea',
+  _createdAt: '2026-11-24T11:40:00.000Z',
+  total: 580,
+  paymentAmount: 580,
+  change: 0,
+  notes: 'Bea',
+  items: [
+    { lineId: 'spanish-latte__ice', name: 'Spanish Latte', variant: 'ice', price: 150, qty: 1, ...(out ? { servedAt: out } : {}) },
+    { lineId: 'americano__hot', name: 'Americano', variant: 'hot', price: 120, qty: 1, ...(out ? { servedAt: out } : {}) },
+    { lineId: 'nachos__fixed', name: 'Cheesy Beef Nachos', variant: null, price: 190, qty: 1, ...(out ? { servedAt: out } : {}) },
+    { lineId: 'classic-fries__fixed', name: 'Classic Fries', variant: null, price: 120, qty: 1, ...(fries ? { servedAt: fries } : {}) },
+  ],
+  ...extra,
+})
+
+/** The opening tag of the element with this aria-label. */
+function tagLabelled(html: string, label: string): string {
+  const match = html.match(new RegExp(`<[a-z]+[^>]*aria-label="${label}"[^>]*>`))
+  if (!match) throw new Error(`Nothing labelled "${label}"`)
+  return match[0]
+}
+
+const count = (html: string, text: string) => html.split(text).length - 1
 
 describe('OrderCard, where it is eaten and how it was paid', () => {
   it('marks Take out in a filled badge, and Dine in plainly', () => {
@@ -142,5 +172,105 @@ describe('OrderCard', () => {
     expect(html.match(/bg-amber-400/g)).toHaveLength(2)
     expect(html).toMatch(/bg-amber-400[^"]*">×1<\/span>/)
     expect(html).toMatch(/bg-amber-400[^"]*">×2<\/span>/)
+  })
+})
+
+describe('OrderCard, serving items one by one', () => {
+  it('under Recent, shows only what is still to serve, each with a check to tick it', () => {
+    const html = renderToStaticMarkup(<OrderCard {...props} order={bea(OUT)} mode="recent" />)
+    expect(html).toContain('aria-label="Remove Classic Fries"')
+    for (const gone of ['Spanish Latte', 'Americano', 'Cheesy Beef Nachos']) expect(html).not.toContain(gone)
+    // One label whatever its state: aria-pressed says whether it is ticked.
+    expect(tagLabelled(html, 'Classic Fries served')).toContain('aria-pressed="false"')
+    expect(count(html, 'aria-pressed="false"')).toBe(1)
+  })
+
+  it('under Recent, says how much of a partly served order is out, and where the rest is', () => {
+    const html = renderToStaticMarkup(<OrderCard {...props} order={bea(OUT)} mode="recent" />)
+    expect(html).toContain('3 of 4 served')
+    expect(html).not.toContain('>Pending<')
+    expect(html).toContain('3 items already out, in Completed')
+    expect(html).toContain('style="width:75%"')
+    // Complete still ticks whatever is left.
+    expect(html).toContain('Complete</button>')
+    expect(html).toContain('Add items</button>')
+  })
+
+  it('under Recent, an order with nothing out yet reads Pending, with no strip and no bar', () => {
+    const html = renderToStaticMarkup(<OrderCard {...props} order={bea()} mode="recent" />)
+    expect(html).toContain('>Pending<')
+    expect(html).not.toContain('already out')
+    expect(html).not.toContain('style="width:')
+    expect(count(html, 'aria-pressed="false"')).toBe(4)
+  })
+
+  it('under Completed, shows what went out with its time, each tappable to send it back', () => {
+    const html = renderToStaticMarkup(<OrderCard {...props} order={bea(OUT)} mode="completed" />)
+    for (const out of ['Spanish Latte', 'Americano', 'Cheesy Beef Nachos']) expect(html).toContain(`aria-label="Remove ${out}"`)
+    expect(html).not.toContain('aria-label="Remove Classic Fries"')
+    expect(count(html, 'Served 7:46 PM')).toBe(3)
+    expect(tagLabelled(html, 'Spanish Latte served')).toContain('aria-pressed="true"')
+    expect(html).not.toContain('aria-pressed="false"')
+  })
+
+  it('under Completed, says what is still to serve on a partly served order, and offers no Complete or Add items', () => {
+    const html = renderToStaticMarkup(<OrderCard {...props} order={bea(OUT)} mode="completed" />)
+    expect(html).toContain('1 still to serve: Classic Fries')
+    expect(html).toContain('In Recent')
+    expect(html).toContain('3 of 4 served')
+    expect(html).not.toContain('✓ Done')
+    expect(html).toContain('style="width:75%"')
+    expect(html).not.toContain('Complete</button>')
+    expect(html).not.toContain('Add items')
+  })
+
+  it('under Completed, a fully served order reads Done, with no strip and no bar', () => {
+    const html = renderToStaticMarkup(<OrderCard {...props} order={bea(OUT, '2026-11-24T11:53:00.000Z', { isCompleted: true })} mode="completed" />)
+    expect(html).toContain('✓ Done')
+    expect(html).toContain('Served 7:53 PM')
+    expect(html).not.toContain('still to serve')
+    expect(html).not.toContain('style="width:')
+  })
+
+  it('shows an order completed before ticking as fully served, with no times', () => {
+    const html = renderToStaticMarkup(<OrderCard {...props} order={bea(undefined, undefined, { isCompleted: true })} mode="completed" />)
+    expect(html).toContain('✓ Done')
+    for (const out of ['Spanish Latte', 'Americano', 'Cheesy Beef Nachos', 'Classic Fries']) expect(html).toContain(`aria-label="Remove ${out}"`)
+    expect(html).not.toContain('Served ')
+    expect(tagLabelled(html, 'Classic Fries served')).toContain('aria-pressed="true"')
+  })
+
+  it('keeps an add-on with its item: no check of its own, and on the same side as the item', () => {
+    // Only the mocha carries a time: an add-on goes out with its item.
+    const mochaOut: Sale = { ...order, items: order.items.map(item => (item.lineId === 'wcm__ice' ? { ...item, servedAt: OUT } : item)) }
+    const recent = renderToStaticMarkup(<OrderCard {...props} order={mochaOut} mode="recent" />)
+    expect(recent).toContain('aria-label="Remove Sea Salt Cookie"')
+    expect(recent).not.toContain('Espresso Shot')
+    const completed = renderToStaticMarkup(<OrderCard {...props} order={mochaOut} mode="completed" />)
+    expect(completed.indexOf('aria-label="Remove White Chocolate Mocha"')).toBeLessThan(completed.indexOf('aria-label="Remove Espresso Shot"'))
+    expect(completed).not.toContain('aria-label="Remove Sea Salt Cookie"')
+    // Nothing out yet: both items get a check, the shot rides with the mocha.
+    const pending = renderToStaticMarkup(<OrderCard {...props} mode="recent" />)
+    expect(count(pending, 'aria-pressed="false"')).toBe(2)
+    expect(pending).not.toContain('aria-label="Espresso Shot served"')
+  })
+
+  it('groups what the card shows by when it was ordered: the Added group shows where its lines are', () => {
+    const friesAdded: Sale = {
+      ...bea(OUT),
+      items: bea(OUT).items.map(item => (item.lineId === 'classic-fries__fixed' ? { ...item, addedAt: '2026-11-24T11:52:00.000Z' } : item)),
+    }
+    const recent = renderToStaticMarkup(<OrderCard {...props} order={friesAdded} mode="recent" />)
+    expect(recent).toContain('Added 7:52 PM · 1 item')
+    const completed = renderToStaticMarkup(<OrderCard {...props} order={friesAdded} mode="completed" />)
+    expect(completed).not.toContain('Added 7:52 PM · ')
+    expect(completed).toContain('aria-label="Remove Spanish Latte"')
+  })
+
+  it('warns that Delete takes the whole order when part of it is out, on either tab', () => {
+    for (const mode of ['recent', 'completed'] as const) {
+      expect(renderToStaticMarkup(<OrderCard {...props} order={bea(OUT)} mode={mode} isConfirming />)).toContain('Delete the whole order (4 items)?')
+    }
+    expect(renderToStaticMarkup(<OrderCard {...props} order={bea()} isConfirming />)).toContain('Delete this order?')
   })
 })

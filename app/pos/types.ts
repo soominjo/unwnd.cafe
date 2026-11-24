@@ -94,6 +94,12 @@ export interface SaleItem {
   categoryId?: string
   /** When the line was added to the order after its first checkout (Add items); absent on the first checkout's lines. */
   addedAt?: string
+  /**
+   * When the line went out to the customer (ticked on Sales). Only top-level lines carry it: an
+   * add-on goes out with its item. Absent while it is still to serve, and on orders completed
+   * before items were ticked one by one (see lib/sales/served.ts).
+   */
+  servedAt?: string
 }
 
 export interface Sale {
@@ -147,9 +153,16 @@ export interface SalesSummary {
   /** Only the categories actually present in topItems, in menu order — the Top Items sub-tabs. */
   topItemCategories: TopItemCategory[]
   topCustomers: TopCustomer[]
-  /** Whole-period counts (not just the current page) — what the Recent/Completed tab badges show. */
+  /**
+   * Whole-period counts (not just the current page) — what the Recent/Completed tab badges show.
+   * pendingCount: orders not completed (the Recent tab). completedCount: orders completed or with
+   * at least one item out (the Completed tab). A partly served order is in both tabs, so it is in
+   * both counts, and partlyServedCount says how many such orders there are.
+   */
   pendingCount: number
   completedCount: number
+  /** Orders with some items out and some still to serve. Absent from older replies: read it as 0. */
+  partlyServedCount?: number
   /** How the period was paid: always adds up to totalRevenue (the Tally tab). */
   paymentTally: PaymentTally
   orderTypes: OrderTypeCounts

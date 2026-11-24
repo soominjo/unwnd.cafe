@@ -246,6 +246,25 @@ describe('PATCH /api/sales/[id] { removeLineId }', () => {
     expect((await patch('kylene', { removeLineId: 'tiramisu__hot' })).status).toBe(404)
     expect(store.doc('sale-plain')?.items).toHaveLength(3)
   })
+
+  it('answers 404 when the order is deleted between its read and its write', async () => {
+    const read = store.client.getDocument
+    store.client.getDocument = async <T,>(id: string) => {
+      const doc = await read<T>(id)
+      void store.client.delete(id)
+      return doc
+    }
+    expect((await patch('sale-plain', { removeLineId: 'tiramisu__hot' })).status).toBe(404)
+  })
+
+  it('answers 500 and logs why when the item can’t be taken off', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    sanity.client = { ...store.client, getDocument: () => Promise.reject(new Error('Sanity is down')) }
+    const res = await patch('sale-plain', { removeLineId: 'tiramisu__hot' })
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ success: false, error: 'Failed to update order.' })
+    expect(error).toHaveBeenCalledWith('An item could not be taken off an order', { id: 'sale-plain', removeLineId: 'tiramisu__hot' }, expect.any(Error))
+  })
 })
 
 describe('PATCH /api/sales/[id] { removeLineId } on a paid order', () => {
@@ -359,5 +378,349 @@ describe('PATCH /api/sales/[id] { paymentKey, method }', () => {
     expect((await patch('sale-paid', { paymentKey: 'pay-0"]', method: 'card' })).status).toBe(400)
     expect((await patch('sale-gone', { paymentKey: 'pay-0', method: 'card' })).status).toBe(404)
     expect(store.doc('sale-paid')!.payments).toEqual(paid.payments)
+  })
+})
+
+// ── Serving items one by one (Sales) ─────────────────────────────────────────
+
+// Bea's order from the owner's example: a Spanish Latte with oat milk, an Americano, nachos and fries.
+const spanish = line('spanish-latte__ice', 'Spanish Latte', 150, 1, { variant: 'ice', categoryId: 'signature' })
+const oat = line('addon__oat-milk__spanish-latte__ice', 'Oat Milk', 30, 1, { variant: null, isAddon: true, parentLineId: 'spanish-latte__ice' })
+const americano = line('americano__hot', 'Americano', 100, 1, { categoryId: 'espresso' })
+const nachos = line('cheesy-beef-nachos__fixed', 'Cheesy Beef Nachos', 180, 1, { variant: null, categoryId: 'snack' })
+const fries = line('classic-fries__fixed', 'Classic Fries', 120, 1, { variant: null, categoryId: 'snack' })
+const beas: FakeDoc = {
+  _id: 'sale-bea', _type: 'sale', total: 580, subtotal: 580, paymentAmount: 580, change: 0, notes: 'Bea',
+  items: [spanish, oat, americano, nachos, fries],
+}
+// When the first items went out, and the server's clock for the request under test.
+const OUT = '2026-11-24T11:46:00.000Z'
+const NOW = '2026-11-24T11:53:00.000Z'
+const out = <T extends object>(item: T, at = OUT) => ({ ...item, servedAt: at })
+const CHANGED = 'This order changed on another device. Refresh, then try again.'
+
+/** Runs `change` right after each of the route's first `times` reads, as another device would; counts the reads. */
+const changeAfterRead = (times: number, change: (id: string) => void) => {
+  const read = store.client.getDocument
+  let reads = 0
+  store.client.getDocument = async <T,>(id: string) => {
+    const doc = await read<T>(id)
+    if (reads++ < times) change(id)
+    return doc
+  }
+  return () => reads
+}
+
+describe('Serving items one by one on Sales', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(NOW))
+    store = fakeSanityClient([beas, member])
+    sanity.client = store.client
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  describe('PATCH /api/sales/[id] { serveLineIds }', () => {
+    it('ticks an item as served at the server’s time; the order stays open while items are left', async () => {
+      const res = await patch('sale-bea', { serveLineIds: ['americano__hot'] })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ success: true, isCompleted: false, servedAt: NOW })
+      expect(store.doc('sale-bea')!.items).toEqual([spanish, oat, out(americano, NOW), nachos, fries])
+      expect(store.doc('sale-bea')!.isCompleted).toBe(false)
+    })
+
+    it('ticks several items at once; an add-on takes no time of its own, it goes out with its item', async () => {
+      await patch('sale-bea', { serveLineIds: ['spanish-latte__ice', 'cheesy-beef-nachos__fixed'] })
+      expect(store.doc('sale-bea')!.items).toEqual([out(spanish, NOW), oat, americano, out(nachos, NOW), fries])
+    })
+
+    it('completes the order when its last item goes out', async () => {
+      store.touch('sale-bea', { items: [out(spanish), oat, out(americano), out(nachos), fries] })
+      const res = await patch('sale-bea', { serveLineIds: ['classic-fries__fixed'] })
+      expect(await res.json()).toEqual({ success: true, isCompleted: true, servedAt: NOW })
+      expect(store.doc('sale-bea')!.isCompleted).toBe(true)
+      expect(store.doc('sale-bea')!.items).toEqual([out(spanish), oat, out(americano), out(nachos), out(fries, NOW)])
+    })
+
+    it('writes nothing for an item already out: it keeps its time', async () => {
+      store.touch('sale-bea', { items: [spanish, oat, out(americano), nachos, fries] })
+      const before = store.doc('sale-bea')
+      const res = await patch('sale-bea', { serveLineIds: ['americano__hot'] })
+      expect(await res.json()).toEqual({ success: true, isCompleted: false, servedAt: null })
+      expect(store.doc('sale-bea')).toEqual(before)
+    })
+
+    it('writes nothing on a completed order, whose items all count as out: no time is made up', async () => {
+      // Completed before items were ticked one by one, so no item has a time.
+      store.touch('sale-bea', { isCompleted: true })
+      const before = store.doc('sale-bea')
+      const res = await patch('sale-bea', { serveLineIds: ['classic-fries__fixed'] })
+      expect(await res.json()).toEqual({ success: true, isCompleted: true, servedAt: null })
+      expect(store.doc('sale-bea')).toEqual(before)
+    })
+
+    it('keeps a tick made on another device between its read and its write', async () => {
+      // This device ticks the fries while another ticks the nachos.
+      changeAfterRead(1, id => store.touch(id, { items: [spanish, oat, americano, out(nachos), fries] }))
+      const res = await patch('sale-bea', { serveLineIds: ['classic-fries__fixed'] })
+      expect(await res.json()).toEqual({ success: true, isCompleted: false, servedAt: NOW })
+      expect(store.doc('sale-bea')!.items).toEqual([spanish, oat, americano, out(nachos), out(fries, NOW)])
+    })
+
+    it('writes nothing when another device ticked the same item first, and says the order is now completed', async () => {
+      store.touch('sale-bea', { items: [out(spanish), oat, out(americano), out(nachos), fries] })
+      const allOut = [out(spanish), oat, out(americano), out(nachos), out(fries)]
+      changeAfterRead(1, id => store.touch(id, { isCompleted: true, items: allOut }))
+      const res = await patch('sale-bea', { serveLineIds: ['classic-fries__fixed'] })
+      expect(await res.json()).toEqual({ success: true, isCompleted: true, servedAt: null })
+      expect(store.doc('sale-bea')!.items).toEqual(allOut)
+    })
+
+    it('gives up after three tries when the order keeps changing, saying so, and writes nothing of its own', async () => {
+      const reads = changeAfterRead(Infinity, id => store.touch(id, { notes: 'Bea B.' }))
+      const res = await patch('sale-bea', { serveLineIds: ['classic-fries__fixed'] })
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({ success: false, error: CHANGED })
+      expect(reads()).toBe(3)
+      expect(store.doc('sale-bea')!.items).toEqual(beas.items)
+    })
+
+    it('refuses an add-on, or an item no longer on the order: the order changed on another device', async () => {
+      for (const lineId of ['addon__oat-milk__spanish-latte__ice', 'iced-tea__ice']) {
+        const res = await patch('sale-bea', { serveLineIds: ['americano__hot', lineId] })
+        expect(res.status).toBe(409)
+        expect(await res.json()).toEqual({ success: false, error: CHANGED })
+      }
+      expect(store.doc('sale-bea')!.items).toEqual(beas.items)
+      // A tick changes nothing on a completed order, but an item not on it is still a change elsewhere.
+      store.touch('sale-bea', { isCompleted: true })
+      expect((await patch('sale-bea', { serveLineIds: ['iced-tea__ice'] })).status).toBe(409)
+    })
+
+    it('answers 404 for an order that is gone, even when it goes between the read and the write, and for a document that is not an order', async () => {
+      expect((await patch('sale-gone', { serveLineIds: ['americano__hot'] })).status).toBe(404)
+      expect((await patch('kylene', { serveLineIds: ['americano__hot'] })).status).toBe(404)
+      changeAfterRead(1, id => void store.client.delete(id))
+      expect((await patch('sale-bea', { serveLineIds: ['americano__hot'] })).status).toBe(404)
+    })
+
+    it('answers 422 for an order whose lines it can’t read', async () => {
+      for (const items of ['Americano, fries', [{ _key: 'americano', name: 'Americano', price: 100, qty: 1 }]]) {
+        store.touch('sale-bea', { items })
+        expect((await patch('sale-bea', { serveLineIds: ['americano__hot'] })).status).toBe(422)
+      }
+    })
+
+    it('needs the POS session', async () => {
+      requirePosAuth.mockResolvedValue(NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }))
+      expect((await patch('sale-bea', { serveLineIds: ['americano__hot'] })).status).toBe(401)
+      expect(store.doc('sale-bea')!.items).toEqual(beas.items)
+    })
+
+    it('answers 500 and logs why when the tick can’t be saved', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      sanity.client = { ...store.client, getDocument: () => Promise.reject(new Error('Sanity is down')) }
+      const res = await patch('sale-bea', { serveLineIds: ['americano__hot'] })
+      expect(res.status).toBe(500)
+      expect(await res.json()).toEqual({ success: false, error: 'Failed to update the order.' })
+      expect(error).toHaveBeenCalledWith('Items could not be ticked or unticked', expect.objectContaining({ id: 'sale-bea' }), expect.any(Error))
+    })
+  })
+
+  describe('PATCH /api/sales/[id] { unserveLineIds }', () => {
+    it('unticks an item: it goes back to be served, and a completed order reopens', async () => {
+      store.touch('sale-bea', { isCompleted: true, items: [out(spanish), oat, out(americano), out(nachos), out(fries)] })
+      const res = await patch('sale-bea', { unserveLineIds: ['classic-fries__fixed'] })
+      expect(await res.json()).toEqual({ success: true, isCompleted: false, servedAt: null })
+      expect(store.doc('sale-bea')!.isCompleted).toBe(false)
+      expect(store.doc('sale-bea')!.items).toEqual([out(spanish), oat, out(americano), out(nachos), fries])
+    })
+
+    it('keeps the other items of an order completed before ticking out, as of when it was last saved', async () => {
+      const SAVED = '2026-11-20T10:15:00Z'
+      store.touch('sale-bea', { isCompleted: true, _updatedAt: SAVED })
+      const res = await patch('sale-bea', { unserveLineIds: ['classic-fries__fixed'] })
+      expect(await res.json()).toEqual({ success: true, isCompleted: false, servedAt: null })
+      expect(store.doc('sale-bea')!.items).toEqual([out(spanish, SAVED), oat, out(americano, SAVED), out(nachos, SAVED), fries])
+    })
+
+    it('times them by the server’s clock when the order carries no save time', async () => {
+      store.touch('sale-bea', { isCompleted: true })
+      await patch('sale-bea', { unserveLineIds: ['classic-fries__fixed'] })
+      expect(store.doc('sale-bea')!.items).toEqual([out(spanish, NOW), oat, out(americano, NOW), out(nachos, NOW), fries])
+    })
+
+    it('writes nothing when the item was not out', async () => {
+      const before = store.doc('sale-bea')
+      const res = await patch('sale-bea', { unserveLineIds: ['classic-fries__fixed'] })
+      expect(await res.json()).toEqual({ success: true, isCompleted: false, servedAt: null })
+      expect(store.doc('sale-bea')).toEqual(before)
+    })
+
+    it('keeps a tick made on another device between its read and its write', async () => {
+      store.touch('sale-bea', { items: [out(spanish), oat, americano, nachos, out(fries)] })
+      changeAfterRead(1, id => store.touch(id, { items: [out(spanish), oat, americano, out(nachos), out(fries)] }))
+      expect((await patch('sale-bea', { unserveLineIds: ['classic-fries__fixed'] })).status).toBe(200)
+      expect(store.doc('sale-bea')!.items).toEqual([out(spanish), oat, americano, out(nachos), fries])
+    })
+
+    it('refuses an add-on: it goes back with its item', async () => {
+      store.touch('sale-bea', { isCompleted: true, items: [out(spanish), oat, out(americano), out(nachos), out(fries)] })
+      const res = await patch('sale-bea', { unserveLineIds: ['addon__oat-milk__spanish-latte__ice'] })
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({ success: false, error: CHANGED })
+      expect(store.doc('sale-bea')!.isCompleted).toBe(true)
+    })
+
+    it('still unticks when another device completes the order between its read and its write', async () => {
+      store.touch('sale-bea', { items: [out(spanish), oat, americano, nachos, out(fries)] })
+      // Another device taps Complete: the Americano and the nachos go out at its time.
+      const COMPLETED = '2026-11-24T11:50:00.000Z'
+      changeAfterRead(1, id =>
+        store.touch(id, { isCompleted: true, items: [out(spanish), oat, out(americano, COMPLETED), out(nachos, COMPLETED), out(fries)] }))
+      const res = await patch('sale-bea', { unserveLineIds: ['classic-fries__fixed'] })
+      expect(await res.json()).toEqual({ success: true, isCompleted: false, servedAt: null })
+      expect(store.doc('sale-bea')!.items).toEqual([out(spanish), oat, out(americano, COMPLETED), out(nachos, COMPLETED), fries])
+    })
+
+    it('gives up after three tries when the order keeps changing, writing nothing of its own', async () => {
+      const partly = [spanish, oat, out(americano), nachos, fries]
+      store.touch('sale-bea', { items: partly })
+      const reads = changeAfterRead(Infinity, id => store.touch(id, { notes: 'Bea B.' }))
+      const res = await patch('sale-bea', { unserveLineIds: ['americano__hot'] })
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({ success: false, error: CHANGED })
+      expect(reads()).toBe(3)
+      expect(store.doc('sale-bea')!.items).toEqual(partly)
+    })
+
+    it('answers 404 for an order that is gone, even when it goes between the read and the write', async () => {
+      expect((await patch('sale-gone', { unserveLineIds: ['americano__hot'] })).status).toBe(404)
+      store.touch('sale-bea', { items: [spanish, oat, out(americano), nachos, fries] })
+      changeAfterRead(1, id => void store.client.delete(id))
+      expect((await patch('sale-bea', { unserveLineIds: ['americano__hot'] })).status).toBe(404)
+    })
+
+    it('answers 422 for an order whose lines it can’t read', async () => {
+      store.touch('sale-bea', { items: 'Americano, fries' })
+      expect((await patch('sale-bea', { unserveLineIds: ['americano__hot'] })).status).toBe(422)
+    })
+
+    it('answers 500 and logs why when the untick can’t be saved', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      sanity.client = { ...store.client, getDocument: () => Promise.reject(new Error('Sanity is down')) }
+      const res = await patch('sale-bea', { unserveLineIds: ['americano__hot'] })
+      expect(res.status).toBe(500)
+      expect(await res.json()).toEqual({ success: false, error: 'Failed to update the order.' })
+      expect(error).toHaveBeenCalledWith('Items could not be ticked or unticked', { id: 'sale-bea', serve: false, lineIds: ['americano__hot'] }, expect.any(Error))
+    })
+  })
+
+  describe('PATCH /api/sales/[id] { serveLineIds | unserveLineIds }, the body', () => {
+    it('refuses both keys in one body, a list that is empty or longer than 102, and ids that are not ids', async () => {
+      const before = store.doc('sale-bea')
+      const bodies = [
+        { serveLineIds: ['americano__hot'], unserveLineIds: ['classic-fries__fixed'] },
+        { serveLineIds: [] },
+        { unserveLineIds: 'classic-fries__fixed' },
+        { serveLineIds: null },
+        { serveLineIds: Array.from({ length: 103 }, () => 'americano__hot') },
+        { serveLineIds: ['americano__hot"]'] },
+        { serveLineIds: ['x'.repeat(101)] },
+        { unserveLineIds: [42] },
+      ]
+      for (const body of bodies) {
+        const res = await patch('sale-bea', body)
+        expect(res.status, JSON.stringify(body).slice(0, 80)).toBe(400)
+        expect((await res.json()).success).toBe(false)
+      }
+      expect(store.doc('sale-bea')).toEqual(before)
+    })
+
+    it('takes up to 102 ids of up to 100 characters each', async () => {
+      expect((await patch('sale-bea', { serveLineIds: Array.from({ length: 102 }, () => 'americano__hot') })).status).toBe(200)
+      // A well-formed id that is not on the order is a change on another device, not a bad body.
+      expect((await patch('sale-bea', { serveLineIds: ['x'.repeat(100)] })).status).toBe(409)
+    })
+  })
+
+  describe('PATCH /api/sales/[id] { markCompleted }, items ticked one by one', () => {
+    it('ticks every item still to serve at the server’s time, keeps the times already there, and completes the order', async () => {
+      store.touch('sale-bea', { items: [out(spanish), oat, americano, out(nachos), fries] })
+      const res = await patch('sale-bea', { markCompleted: true })
+      expect(await res.json()).toEqual({ success: true })
+      expect(store.doc('sale-bea')!.isCompleted).toBe(true)
+      expect(store.doc('sale-bea')!.items).toEqual([out(spanish), oat, out(americano, NOW), out(nachos), out(fries, NOW)])
+    })
+
+    it('completes an order left with add-ons only, which has no item to tick', async () => {
+      store.touch('sale-bea', { items: [oat] })
+      expect((await patch('sale-bea', { markCompleted: true })).status).toBe(200)
+      expect(store.doc('sale-bea')).toMatchObject({ isCompleted: true, items: [oat] })
+    })
+
+    it('leaves a completed order as it was: no times are made up for one completed before ticking', async () => {
+      store.touch('sale-bea', { isCompleted: true })
+      const before = store.doc('sale-bea')
+      expect(await (await patch('sale-bea', { markCompleted: true })).json()).toEqual({ success: true })
+      expect(store.doc('sale-bea')).toEqual(before)
+    })
+
+    it('keeps a tick made on another device between its read and its write, at its own time', async () => {
+      changeAfterRead(1, id => store.touch(id, { items: [spanish, oat, americano, out(nachos), fries] }))
+      expect((await patch('sale-bea', { markCompleted: true })).status).toBe(200)
+      expect(store.doc('sale-bea')!.items).toEqual([out(spanish, NOW), oat, out(americano, NOW), out(nachos), out(fries, NOW)])
+    })
+
+    it('gives up after three tries when the order keeps changing, saying so, and completes nothing', async () => {
+      const reads = changeAfterRead(Infinity, id => store.touch(id, { notes: 'Bea B.' }))
+      const res = await patch('sale-bea', { markCompleted: true })
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({ success: false, error: CHANGED })
+      expect(reads()).toBe(3)
+      expect(store.doc('sale-bea')!.isCompleted).toBeUndefined()
+    })
+
+    it('answers 404 for an order that is gone, even when it goes between the read and the write', async () => {
+      expect((await patch('sale-gone', { markCompleted: true })).status).toBe(404)
+      changeAfterRead(1, id => void store.client.delete(id))
+      expect((await patch('sale-bea', { markCompleted: true })).status).toBe(404)
+    })
+
+    it('answers 422 for an order whose lines it can’t read, and 500 with the reason logged when Sanity fails', async () => {
+      store.touch('sale-bea', { items: 'Americano, fries' })
+      expect((await patch('sale-bea', { markCompleted: true })).status).toBe(422)
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      sanity.client = { ...store.client, getDocument: () => Promise.reject(new Error('Sanity is down')) }
+      const res = await patch('sale-bea', { markCompleted: true })
+      expect(res.status).toBe(500)
+      expect(await res.json()).toEqual({ success: false, error: 'Failed to complete order.' })
+      expect(error).toHaveBeenCalledWith('Order could not be completed', { id: 'sale-bea' }, expect.any(Error))
+    })
+  })
+
+  describe('PATCH /api/sales/[id] { removeLineId }, items ticked one by one', () => {
+    it('completes the order when the item taken off was the last one still to serve', async () => {
+      store.touch('sale-bea', { items: [out(spanish), oat, out(americano), out(nachos), fries] })
+      expect(await (await patch('sale-bea', { removeLineId: 'classic-fries__fixed' })).json()).toEqual({ success: true, orderDeleted: false })
+      expect(store.doc('sale-bea')!.isCompleted).toBe(true)
+      expect(store.doc('sale-bea')!.items).toEqual([out(spanish), oat, out(americano), out(nachos)])
+    })
+
+    it('keeps the order open while items are still to serve', async () => {
+      store.touch('sale-bea', { items: [out(spanish), oat, americano, out(nachos), fries] })
+      await patch('sale-bea', { removeLineId: 'classic-fries__fixed' })
+      expect(store.doc('sale-bea')).not.toHaveProperty('isCompleted')
+    })
+
+    it('never reopens a completed order', async () => {
+      // Completed before items were ticked one by one: no item has a time.
+      store.touch('sale-bea', { isCompleted: true })
+      await patch('sale-bea', { removeLineId: 'classic-fries__fixed' })
+      expect(store.doc('sale-bea')!.isCompleted).toBe(true)
+    })
   })
 })

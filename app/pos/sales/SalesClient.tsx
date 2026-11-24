@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import type { Sale, SalesSummary } from '../types'
+import type { Sale } from '../types'
 import { computeDateRange, isDetailedPeriod, isPeriod, periodLabel, type Period } from './dateRange'
 import PeriodFilter, { type PeriodUpdates } from './PeriodFilter'
 import KpiStrip from './KpiStrip'
@@ -11,8 +11,11 @@ import OrdersView, { type OrderActions } from './OrdersView'
 import TopItemsView from './TopItemsView'
 import TopCustomersView from './TopCustomersView'
 import TallyView from './TallyView'
+import UndoToast from './UndoToast'
 import { sendRename } from './sendRename'
 import { sendMethodChange } from './sendMethodChange'
+import { showsReload } from './serving'
+import { useServing, type SalesList } from './useServing'
 import { ErrorBanner } from './ui'
 import type { PaymentMethod } from '@/lib/sales/payments'
 
@@ -55,9 +58,16 @@ export default function SalesClient() {
   // than showing a tab that isn't in the bar (the raw `view` state is left untouched,
   // so switching back to Today/Yesterday restores whichever tab was picked there).
   const activeView: View = detailed || view === 'summary' || view === 'names' || view === 'tally' ? view : 'summary'
-  const [summary, setSummary] = useState<SalesSummary | null>(null)
-  // Scoped to the active tab's status (pending/completed) — not "every order on the page 1 of the whole period".
-  const [orders, setOrders] = useState<Sale[]>([])
+  // The period's summary, and the orders scoped to the active tab's status (pending/completed),
+  // not "every order on page 1 of the whole period". Ticks change both on screen before the server answers.
+  const [list, setList] = useState<SalesList>({ orders: [], summary: null })
+  const { orders, summary } = list
+  // The list on screen now, for replies that land after a render: kept with every change of it.
+  const listRef = useRef(list)
+  const showList = useCallback((next: SalesList) => {
+    listRef.current = next
+    setList(next)
+  }, [])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -74,8 +84,16 @@ export default function SalesClient() {
   const [confirmAll, setConfirmAll] = useState(false)
   const [deletingAll, setDeletingAll] = useState(false)
 
-  // Complete order
-  const [completingId, setCompletingId] = useState<string | null>(null)
+  // ── Ticks: items served one by one, Complete, and Undo ─────────────────────
+  // Each shows at once, then goes to the server; the list reloads quietly (no skeleton) once all are in.
+  const serving = useServing({
+    read: () => listRef.current,
+    write: showList,
+    where: `${activeView}|${period}|${customFrom}|${customTo}|${page}`,
+    onError: setError,
+    onSettled: () => refreshQuietly(),
+  })
+  const { busy: servingBusy, version: servingVersion } = serving
 
   // ── URL navigation helper ──────────────────────────────────────────────────
   function navigate(updates: NavigateUpdates) {
@@ -116,9 +134,25 @@ export default function SalesClient() {
   // statuses happened to land on the newest 20 sales overall, regardless of period.
   // For a long period (`!detailed`) orders aren't fetched at all — Top Items/Customers
   // is the only view shown, so there's no list to paginate through in the first place.
-  const load = useCallback(async (from: string, to: string, currentView: View, pg: number, detailed: boolean, signal: AbortSignal) => {
-    setLoading(true)
-    setError(null)
+  // A quiet load (after a tick, or another tab's sale) keeps the list on screen instead of the skeleton.
+  // Only the latest load shows, and a quiet one only if every tick on screen is in it (see showsReload).
+  const loadSeq = useRef(0)
+  // Set while the skeleton waits for a list: a quiet load then ends the wait, or says why it failed.
+  const awaitingList = useRef(false)
+  const load = useCallback(async (from: string, to: string, currentView: View, pg: number, detailed: boolean, signal: AbortSignal, quiet = false) => {
+    const seq = ++loadSeq.current
+    const version = servingVersion()
+    if (!quiet) {
+      awaitingList.current = true
+      setLoading(true)
+      setError(null)
+    }
+    const superseded = () => signal.aborted || seq !== loadSeq.current
+    function fail(message: string) {
+      if (!quiet || awaitingList.current) setError(message)
+      awaitingList.current = false
+      setLoading(false)
+    }
     try {
       const status: OrderStatus = currentView === 'completed' ? 'completed' : 'pending'
       const wantsOrders = detailed && currentView !== 'summary' && currentView !== 'names' && currentView !== 'tally'
@@ -126,21 +160,18 @@ export default function SalesClient() {
         fetchSummary(from, to, detailed, signal),
         wantsOrders ? fetchOrders(from, to, status, pg, signal) : null,
       ])
-      if (signal.aborted) return
-      if (!summaryJson.success || (ordersJson && !ordersJson.success)) {
-        setError('Failed to load sales data.')
-        return
-      }
-      setSummary(summaryJson.data)
-      setOrders(ordersJson ? ordersJson.data : [])
+      if (superseded()) return
+      if (!summaryJson.success || (ordersJson && !ordersJson.success)) return fail('Failed to load sales data.')
+      if (!showsReload({ waiting: awaitingList.current, busy: servingBusy(), changed: servingVersion() !== version })) return
+      showList({ orders: ordersJson ? ordersJson.data : [], summary: summaryJson.data })
       setTotal(ordersJson ? ordersJson.total ?? 0 : 0)
+      awaitingList.current = false
+      setLoading(false)
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return
-      setError('Network error. Check your connection.')
-    } finally {
-      if (!signal.aborted) setLoading(false)
+      if ((err instanceof DOMException && err.name === 'AbortError') || superseded()) return
+      fail('Network error. Check your connection.')
     }
-  }, [])
+  }, [servingBusy, servingVersion, showList])
 
   // Re-fetch when the period, page, or active tab changes
   useEffect(() => {
@@ -157,14 +188,21 @@ export default function SalesClient() {
     fetchParamsRef.current = { period, page, customFrom, customTo, view: activeView, detailed }
   })
 
+  // Reloads the list where it is now without the skeleton: after ticks, or a sale from another tab.
+  function refreshQuietly() {
+    const { period: p, page: pg, customFrom: cf, customTo: ct, view: v, detailed: d } = fetchParamsRef.current
+    const range = computeDateRange(p, cf, ct)
+    if (!range) return
+    load(range.from, range.to, v, pg, d, new AbortController().signal, true)
+  }
+
   // BroadcastChannel (same-browser live update) + bfcache restore
   useEffect(() => {
     function refresh() {
       const { period: p, page: pg, customFrom: cf, customTo: ct, view: v, detailed: d } = fetchParamsRef.current
       const range = computeDateRange(p, cf, ct)
       if (!range) return
-      const controller = new AbortController()
-      load(range.from, range.to, v, pg, d, controller.signal)
+      load(range.from, range.to, v, pg, d, new AbortController().signal, true)
     }
     const bc = new BroadcastChannel('pos-sales-update')
     bc.onmessage = refresh
@@ -178,9 +216,9 @@ export default function SalesClient() {
     }
   }, [load])
 
-  // Every mutation below re-fetches rather than hand-patching local state: orders are
-  // now scoped by status, so e.g. completing an order must actually leave the "recent"
-  // list, and the KPI/badge counts must stay in sync with whichever page we land on.
+  // Deleting, removing a line, renaming and moving a payment re-fetch rather than hand-patching
+  // local state: orders are scoped by status, and the KPI/badge counts must stay in sync with
+  // whichever page we land on. (Ticks show at once instead: see useServing.)
   function refreshCurrent() {
     const range = computeDateRange(period, customFrom, customTo)
     if (!range) return
@@ -259,28 +297,6 @@ export default function SalesClient() {
     }
   }
 
-  // ── Complete order ─────────────────────────────────────────────────────────
-  async function completeOrder(id: string) {
-    setCompletingId(id)
-    try {
-      const res = await fetch(`/api/sales/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markCompleted: true }),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) {
-        setError(data.error ?? 'Failed to complete order.')
-        return
-      }
-      refreshCurrent()
-    } catch {
-      setError('Network error. Could not complete order.')
-    } finally {
-      setCompletingId(null)
-    }
-  }
-
   // ── Name the order ─────────────────────────────────────────────────────────
   // Resolves to null when done, else to why the name wasn't saved: the card shows it by the field.
   async function renameOrder(id: string, name: string): Promise<string | null> {
@@ -328,14 +344,16 @@ export default function SalesClient() {
     deletingId,
     confirmItemKey,
     deletingItemKey,
-    completingId,
     onRequestDeleteOrder: requestDeleteOrder,
     onCancelDeleteOrder: () => setConfirmId(null),
     onConfirmDeleteOrder: deleteOrder,
     onRequestDeleteItem: requestDeleteItem,
     onCancelDeleteItem: () => setConfirmItemKey(null),
     onConfirmDeleteItem: removeItem,
-    onCompleteOrder: completeOrder,
+    onCompleteOrder: serving.complete,
+    onServeLine: serving.serveLine,
+    onUnserveLine: serving.unserveLine,
+    onOpenTab: changeView,
     // A full page load, like the POS link: /pos reads the order on the server with the menu.
     onAddItems: (id: string) => window.location.assign(`/pos?edit=${encodeURIComponent(id)}`),
     onRenameOrder: renameOrder,
@@ -377,9 +395,12 @@ export default function SalesClient() {
           onChange={changeView}
           pendingCount={summary?.pendingCount ?? 0}
           completedCount={summary?.completedCount ?? 0}
+          partlyServedCount={summary?.partlyServedCount ?? 0}
           loading={loading}
           detailed={detailed}
         />
+
+        <UndoToast bar={serving.undoBar} />
 
         {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
@@ -394,7 +415,7 @@ export default function SalesClient() {
             {...sharedOrdersProps}
             mode={activeView === 'completed' ? 'completed' : 'recent'}
             orders={orders}
-            onConfirmDeleteAll={() => deleteOrderList(orders)}
+            onConfirmDeleteAll={deleteOrderList}
           />
         )}
       </main>

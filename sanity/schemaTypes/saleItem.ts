@@ -21,5 +21,12 @@ export const saleItem = defineType({
       type: 'datetime',
       readOnly: true,
     }),
+    defineField({
+      name: 'servedAt',
+      title: 'Went out to the customer',
+      description: 'When this item was ticked as served on Sales. Empty while it is still to serve, and on add-ons: they go out with their item.',
+      type: 'datetime',
+      readOnly: true,
+    }),
   ],
 })
