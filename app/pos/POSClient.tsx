@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, memo, Fragment, useEffect, type DragEvent, type ReactNode } from 'react'
+import { useState, useMemo, useCallback, memo, Fragment, useEffect, useRef, type DragEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import { variantClass, groupOrderItems, addonLineId } from './utils'
 import type {
@@ -56,6 +56,8 @@ import { postAddItems } from './postAddItems'
 import { leaveFor, openPosPage } from './navigation'
 import { AddingBanner, OpenOrderNotice } from './AddingBanner'
 import SavedOrderLines from './SavedOrderLines'
+import { EMPTY_KEPT_ORDER, findKeptOrder, forgetKeptOrder, keepOrder, readKeptOrder, type KeptOrder } from './orderDraft'
+import { KeptOrderNotice, type KeptNotice } from './KeptOrderNotice'
 
 interface POSClientProps {
   /** The live menu, read on the server for this page load; null when it could not be read (the POS shows its fallback). */
@@ -93,6 +95,8 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   const [addRefused, setAddRefused]             = useState(false)
   // A receipt printed after adding items: closing it starts a new order.
   const [newOrderAfterReceipt, setNewOrderAfterReceipt] = useState(false)
+  // A reload came in the middle of a save, so the order on screen may be saved already.
+  const [keptNotice, setKeptNotice]             = useState<KeptNotice | null>(null)
   const [notes, setNotes]                       = useState(initialOpenOrder?.name ?? '')
   const [selectedLineId, setSelectedLineId]     = useState<string | null>(null)
   // Loyalty: the card holders (null when they could not be loaded; kept in step after each
@@ -128,6 +132,22 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   // With no live menu there is nothing saved to edit, so it never opens unlocked.
   const [managerUnlocked, setManagerUnlocked]   = useState(initialMenuEditing && initialMenu !== null)
   const menuEditable = canEditMenu(managerUnlocked, initialMenu)
+  // The order on screen is kept on this tablet (orderDraft.ts) and comes back after a reload.
+  // Changes are kept only once the kept order was looked for: the first, empty paint would wipe it.
+  const keptLooked = useRef(false)
+  // The last change was kept, so leaving the POS loses nothing.
+  const orderKept = useRef(false)
+
+  // Puts a kept order on screen. A saved order being added to keeps its own card.
+  const bringBack = useCallback((order: KeptOrder) => {
+    setOrderItems(order.items)
+    setNotes(order.name)
+    if (!order.addingTo) setLinkedHolderId(order.cardHolderId)
+    setLoyaltyPicked(order.rewards)
+    setOrderType(order.orderType)
+    setLineSuffix(order.lineSuffix)
+    setKeptNotice(order.sending ? 'maybe-saved' : null)
+  }, [])
 
   // Locking also closes any menu form left open, so it cannot be saved by someone else.
   const lockManager = useCallback(() => {
@@ -158,6 +178,41 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
       setShowingSavedMenu(true)
     })
   }, [initialMenu])
+
+  // After the first paint (the server rendered an empty cart), the order kept on this tablet comes
+  // back, or word that its lines were saved onto the order just before the reload.
+  useEffect(() => {
+    let current = true
+    void Promise.resolve().then(() => {
+      if (!current || keptLooked.current) return
+      const found = findKeptOrder(initialOpenOrder, readKeptOrder(initialOpenOrder ? 'adding' : 'new'))
+      if (found.kind === 'order') bringBack(found.order)
+      if (found.kind === 'already-added') {
+        forgetKeptOrder('adding')
+        setKeptNotice('already-added')
+      }
+      keptLooked.current = true
+    })
+    return () => {
+      current = false
+    }
+  }, [initialOpenOrder, bringBack])
+
+  // Every change is kept: a new order under its key, lines being added to a saved order under
+  // theirs. An empty cart removes it: Complete, Clear, the last line gone, or the added lines saved.
+  useEffect(() => {
+    if (!keptLooked.current) return
+    orderKept.current = keepOrder({
+      items: openOrder && newOrderAfterReceipt ? [] : orderItems,
+      name: notes,
+      cardHolderId: openOrder ? null : linkedHolderId,
+      rewards: loyaltyPicked,
+      orderType,
+      lineSuffix,
+      sending: saving || keptNotice === 'maybe-saved',
+      addingTo: openOrder ? { id: openOrder.id, name: openOrder.name } : null,
+    })
+  }, [orderItems, notes, linkedHolderId, loyaltyPicked, orderType, lineSuffix, saving, keptNotice, openOrder, newOrderAfterReceipt])
 
   // Who is on shift, for the count on the header's Time clock.
   useEffect(() => {
@@ -339,6 +394,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
     setSubmitError(null)
     setSelectedLineId(null)
     setItemModal(null)
+    setKeptNotice(null)
     unlinkCardHolder()
     // Adding to a saved order clears only the new lines: its name and card stay.
     setNotes(openOrder?.name ?? '')
@@ -465,6 +521,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   // The order can no longer take items: the cart, with the customer's name and card, is
   // charged as a new order instead.
   function makeNewOrder() {
+    forgetKeptOrder('adding')
     setOpenOrder(null)
     setAddRefused(false)
     setSubmitError(null)
@@ -472,20 +529,19 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
   }
 
   // After items were added to a saved order and its receipt printed, the POS goes on to a new
-  // order where it is: a page load here could cut short the print just handed to RawBT.
+  // order where it is: a page load here could cut short the print just handed to RawBT. A new
+  // order kept on this tablet (rung up before Add items) comes back; else the cart starts empty.
   function closeReceipt() {
     setSalePrints(null)
     if (!newOrderAfterReceipt) return
     setNewOrderAfterReceipt(false)
     setOpenOrder(null)
-    setOrderItems([])
-    setOrderType('dine-in')
     setPay(NO_PAYMENT)
     setSubmitError(null)
     setSelectedLineId(null)
     setItemModal(null)
-    setNotes('')
     unlinkCardHolder()
+    bringBack(readKeptOrder('new') ?? EMPTY_KEPT_ORDER)
     window.history.replaceState(null, '', '/pos')
     void refetchCardHolders().then(holders => { if (holders) setCardHolders(holders) })
   }
@@ -742,9 +798,10 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
         <Link href="/" className="font-logo text-xl max-[380px]:text-lg sm:text-2xl whitespace-nowrap lowercase tracking-tight text-cream hover:text-cream/70 transition-colors">unwnd. pos</Link>
         {/* Tighter on phones, where Time clock, Manager and Loyalty show as icons beside the Order button. */}
         <div className="flex items-center sm:gap-4">
-          {/* Time clock and Manager open their own pages, asking first when an order is on screen. */}
+          {/* Time clock and Manager open their own pages. The order on screen is kept on the tablet and
+              comes back; they ask first only when it couldn't be kept (storage refused). */}
           <button
-            onClick={() => openPosPage('/pos/timeclock', itemCount)}
+            onClick={() => openPosPage('/pos/timeclock', orderKept.current ? 0 : itemCount)}
             aria-label={onShiftCount > 0 ? `Time clock, ${onShiftCount} on shift` : 'Time clock'}
             title="Time clock: clock in or out with your PIN"
             className="h-9 px-1.5 min-[390px]:px-2.5 sm:px-3 flex items-center gap-1 sm:gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
@@ -771,7 +828,7 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
             </button>
           ) : (
             <button
-              onClick={() => openPosPage('/pos/manager', itemCount)}
+              onClick={() => openPosPage('/pos/manager', orderKept.current ? 0 : itemCount)}
               aria-label="Manager"
               title="Manager: hours, staff and PINs, menu editing"
               className="h-9 px-1.5 min-[390px]:px-2.5 sm:px-3 flex items-center gap-2 rounded-full text-xs uppercase tracking-[0.2em] text-cream/55 hover:text-cream/85 hover:bg-cream/10 transition-colors"
@@ -812,8 +869,9 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
       </header>
 
       {/* ── Adding to a saved order ("Add items" on Sales), or why that order could not be opened ── */}
-      {openOrder && <AddingBanner order={openOrder} newItems={itemCount} onCancel={() => leaveFor('/pos/sales')} />}
+      {openOrder && <AddingBanner order={openOrder} newItems={itemCount} onCancel={() => { forgetKeptOrder('adding'); leaveFor('/pos/sales') }} />}
       {!openOrder && openProblem && <OpenOrderNotice problem={openProblem} onDismiss={() => setOpenProblem(null)} />}
+      {keptNotice && <KeptOrderNotice notice={keptNotice} onDismiss={() => setKeptNotice(null)} />}
 
       {/* ── Body ── */}
       <div className="flex flex-1 overflow-hidden">
@@ -831,7 +889,8 @@ export default function POSClient({ initialMenu, initialCardHolders, initialOpen
               </span>
               <button
                 onClick={() => {
-                  if (orderItems.length === 0 || window.confirm('Reload the POS? The order in progress will be cleared.')) window.location.reload()
+                  // A kept order comes back after the reload; one that couldn't be kept would be lost.
+                  if (orderItems.length === 0 || orderKept.current || window.confirm('Reload the POS? The order in progress will be cleared.')) window.location.reload()
                 }}
                 className="h-9 px-3 shrink-0 rounded-sm border border-amber-300 text-[11px] font-bold uppercase tracking-widest text-amber-800 hover:bg-amber-100 transition-colors"
               >
