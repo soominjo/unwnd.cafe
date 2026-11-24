@@ -47,7 +47,7 @@ function manilaMonthStart(ms: number, monthsAway: number): number {
   return fromWall(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth() + monthsAway, 1))
 }
 
-/** The shifts Records shows for a period: those whose time in falls inside it. */
+/** The shifts My records and the Manager page's Hours show for a period: those whose time in falls inside it. */
 export function periodRange(period: TimeclockPeriod, now: number): IsoRange {
   const week = manilaWeekStart(now)
   switch (period) {
@@ -74,7 +74,7 @@ function format(at: Instant, options: Intl.DateTimeFormatOptions): string {
 /** "9:58 AM" */
 export const formatClock = (at: Instant): string => format(at, { hour: 'numeric', minute: '2-digit' })
 
-/** "9:58:12 AM": the clock at the top of the Staff tab. */
+/** "9:58:12 AM": the clock at the top of Clock in or out, on the Time clock page. */
 export const formatClockSeconds = (at: Instant): string => format(at, { hour: 'numeric', minute: '2-digit', second: '2-digit' })
 
 /** "Thu, Oct 15" */

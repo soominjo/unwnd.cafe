@@ -28,7 +28,7 @@ export interface GroupedOrderItems {
 }
 
 // Splits a flat OrderItem[] into orderable lines and their attached add-ons.
-// Add-on lines carry the load-bearing 'addon__' lineId prefix (see constants.ts);
+// Add-on lines carry the load-bearing 'addon__' lineId prefix (see isAddonLine);
 // an add-on with no parentLineId was added standalone (no line selected) and is
 // its own order line rather than a nested attachment.
 export function groupOrderItems(items: OrderItem[]): GroupedOrderItems {
@@ -60,7 +60,7 @@ export interface GroupedSaleItems {
 // that's missing (sales saved before it was tracked, or an add-on whose parent
 // line wasn't selected at the time) it falls back to nesting under whichever
 // non-addon line came just before it — add-ons are always saved with the
-// load-bearing 'addon__' lineId prefix (see constants.ts), so that's still a
+// load-bearing 'addon__' lineId prefix (see isAddonLine), so that's still a
 // reliable way to tell an add-on apart from a real order line either way. Only
 // an add-on with nothing ordered before it at all stays on its own top-level line.
 export function groupSaleItems(items: SaleItem[]): GroupedSaleItems {

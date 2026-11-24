@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, type CSSProperties } from 'react'
+import { PauseIcon, PlayIcon } from '@/components/PlayPauseIcons'
 import type { ShownReview } from '@/lib/googleReviews'
 import Stars from './Stars'
 import { SECONDS_PER_CARD, fillLoop, splitIntoRows } from './marquee'
@@ -114,22 +115,5 @@ function ReviewCard({ review }: { review: ShownReview }) {
         {review.month && ` · ${review.month}`}
       </figcaption>
     </figure>
-  )
-}
-
-function PauseIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
-      <rect x="1" width="3" height="10" />
-      <rect x="6" width="3" height="10" />
-    </svg>
-  )
-}
-
-function PlayIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
-      <path d="M1 0l9 5-9 5z" />
-    </svg>
   )
 }
